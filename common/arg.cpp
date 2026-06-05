@@ -4639,6 +4639,20 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.triattention_log = true;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
+    add_opt(common_arg(
+        {"--triattention-hard-prefix"}, "N",
+        string_format("V3: protect first N tokens from eviction (default: %d)", params.triattention_hard_prefix),
+        [](common_params & params, int value) {
+            params.triattention_hard_prefix = value;
+        }
+    ).set_env("LLAMA_ARG_TRIATTENTION_HARD_PREFIX").set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
+    add_opt(common_arg(
+        {"--triattention-buckets"}, "N",
+        string_format("V3: number of position buckets for per-segment eviction (default: %d)", params.triattention_buckets),
+        [](common_params & params, int value) {
+            params.triattention_buckets = value;
+        }
+    ).set_env("LLAMA_ARG_TRIATTENTION_BUCKETS").set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
 
     return ctx_arg;
 }

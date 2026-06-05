@@ -1135,9 +1135,11 @@ int32_t triattention_prune_impl(
     for (uint32_t i = 0; i < n_occupied; i++) {
         const bool is_prefix = cfg.protect_prefill &&
                                occupied_positions[i] < (int32_t)state->prefix_length;
+        const bool is_hard_prefix = cfg.hard_prefix > 0 &&
+                                    occupied_positions[i] < (int32_t)cfg.hard_prefix;
         const bool is_recent = occupied_positions[i] >= recent_threshold;
 
-        if (is_prefix || is_recent) {
+        if (is_prefix || is_hard_prefix || is_recent) {
             n_protected++;
         } else {
             decode_local_idx.push_back(i);

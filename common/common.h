@@ -868,6 +868,8 @@ struct common_params {
     bool        triattention_disable_mlr  = false;  // ablation: disable MLR weighting
     bool        triattention_disable_trig = false;  // ablation: norm-only scoring
     bool        triattention_log          = false;  // log pruning events to stderr
+    int32_t     triattention_hard_prefix  = 128;    // V3: protect first N tokens
+    int32_t     triattention_buckets      = 8;        // V3: position buckets for eviction
 };
 
 // call once at the start of a program if it uses libcommon

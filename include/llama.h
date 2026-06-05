@@ -860,7 +860,9 @@ extern "C" {
                             bool   protect_prefill,
                             bool   disable_mlr,
                             bool   disable_trig,
-                            bool   enable_logging);
+                            bool   enable_logging,
+                         int32_t   hard_prefix,
+                         int32_t   buckets);
 
     //
     // State / sessions

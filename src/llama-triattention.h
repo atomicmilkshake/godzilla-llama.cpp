@@ -143,6 +143,9 @@ struct triattention_config {
     bool enable_logging;          // Log pruning events to stderr (default: false)
 
     int32_t seed;                 // RNG seed for tie-breaking noise (-1 = disabled, default: 0)
+
+    uint32_t hard_prefix;         // V3: protect first N token positions from eviction (0 = off)
+    uint32_t buckets;             // V3: position buckets (reserved; default 8)
 };
 
 // Runtime state — one per KV cache instance
