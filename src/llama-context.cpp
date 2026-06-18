@@ -8657,7 +8657,7 @@ llama_context * llama_init_from_model(
 
     if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_k)) {
         const uint32_t blck_size = ggml_blck_size(params.type_k);
-        for (uint32_t il = 0; il < model->hparams.n_layer(); ++il) {
+        for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
             if (model->hparams.n_embd_head_k(il) % blck_size != 0) {
                 LLAMA_LOG_ERROR("%s: K cache type %s with block size %u does not divide n_embd_head_k=%u\n",
                     __func__, ggml_type_name(params.type_k), blck_size, model->hparams.n_embd_head_k(il));
@@ -8668,7 +8668,7 @@ llama_context * llama_init_from_model(
 
     if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_v)) {
         const uint32_t blck_size = ggml_blck_size(params.type_v);
-        for (uint32_t il = 0; il < model->hparams.n_layer(); ++il) {
+        for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
             if (model->hparams.n_embd_head_v(il) % blck_size != 0) {
                 LLAMA_LOG_ERROR("%s: V cache type %s with block size %u does not divide n_embd_head_v=%u\n",
                     __func__, ggml_type_name(params.type_v), blck_size, model->hparams.n_embd_head_v(il));
@@ -9944,13 +9944,13 @@ int32_t llama_triattention_init(
     if (!kv) {
         auto * iswa = dynamic_cast<llama_kv_cache_iswa *>(mem);
         if (iswa) {
-            kv = iswa->get_base();
+            kv = dynamic_cast<llama_kv_cache *>(iswa->get_base());
         }
     }
     if (!kv) {
         auto * hybrid = dynamic_cast<llama_memory_hybrid *>(mem);
         if (hybrid) {
-            kv = hybrid->get_mem_attn();
+            kv = dynamic_cast<llama_kv_cache *>(hybrid->get_mem_attn());
         }
     }
     if (!kv) {
