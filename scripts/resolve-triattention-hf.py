@@ -11,7 +11,8 @@ from pathlib import Path
 # Filename / metadata token -> HF repo (extend as presets are added)
 KNOWN_HF_MODELS: list[tuple[tuple[str, ...], str]] = [
     (("vibethinker-3b", "vibethinker3b"), "WeiboAI/VibeThinker-3B"),
-    (("qwen3.5-4b", "qwen3-4b", "qwopus3.5-4b"), "Qwen/Qwen3-4B-Instruct-2507"),
+    (("qwen3.5-4b", "qwen3-4b", "qwopus3.5-4b", "qwopus", "qwen35-4b-coder"), "Qwen/Qwen3-4B-Instruct-2507"),
+    (("qwen3.5-4b-coder", "qwen35-4b-coder", "4b-coder"), "Qwen/Qwen3.5-4B"),
     (("qwen3.5-9b", "qwen35-9b"), "Qwen/Qwen3.5-9B"),
     (("qwen3.6-27b",), "Qwen/Qwen3.6-27B-Instruct"),
     (("qwen3-coder-30b", "coder-30b-a3b"), "Qwen/Qwen3-Coder-30B-A3B-Instruct"),
