@@ -48,6 +48,7 @@ struct llama_hparams {
 
     uint32_t n_ctx_train; // context size the model was trained on
     uint32_t n_embd;
+    uint32_t n_layer; // effective transformer layers (excludes nextn); legacy call sites use this field
     uint32_t n_layer_all;
     uint32_t n_layer_nextn = 0;
     uint32_t n_expert = 0;
@@ -348,9 +349,6 @@ struct llama_hparams {
     uint32_t n_embd_head_v_mla() const;
 
     bool has_kv(uint32_t il) const;
-
-    // number of effective layers (excludes nextn layers)
-    uint32_t n_layer() const;
 
     // number of layers for which has_kv() returns true
     uint32_t n_layer_kv() const;
