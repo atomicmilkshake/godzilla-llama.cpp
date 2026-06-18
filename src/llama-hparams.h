@@ -51,6 +51,8 @@ struct llama_hparams {
     uint32_t n_layer; // effective transformer layers (excludes nextn); legacy call sites use this field
     uint32_t n_layer_all;
     uint32_t n_layer_nextn = 0;
+    uint32_t nextn_predict_layers = 0;
+    bool kv_only_nextn = false; // if true, only the last nextn_predict_layers blocks have a KV cache (MTP head arches)
     uint32_t n_expert = 0;
     uint32_t n_expert_used = 0;
     uint32_t n_rel_attn_bkts = 0;
@@ -147,9 +149,12 @@ struct llama_hparams {
     // by default, all layers are dense
     // note: using uint32_t type for compatibility reason
     std::array<uint32_t, LLAMA_MAX_LAYERS> is_swa_impl;
+    // legacy alias used by model loader (kept in sync with is_swa_impl where applicable)
+    std::array<uint32_t, LLAMA_MAX_LAYERS> swa_layers;
 
     // for hybrid state space models
     std::array<uint32_t, LLAMA_MAX_LAYERS> is_recr_impl;
+    std::array<bool, LLAMA_MAX_LAYERS> recurrent_layer_arr;
 
     // for State Space Models
     uint32_t ssm_d_conv  = 0;
@@ -298,6 +303,7 @@ struct llama_hparams {
 
     // whether or not the given layer is recurrent (for hybrid models)
     bool is_recr(uint32_t il) const;
+    bool is_recurrent(uint32_t il) const { return is_recr(il); }
 
     uint32_t n_head(uint32_t il = 0) const;
 

@@ -219,7 +219,7 @@ uint32_t llama_hparams::n_embd_s() const {
 
 bool llama_hparams::is_recr(uint32_t il) const {
     if (il < n_layer_all) {
-        return is_recr_impl[il];
+        return is_recr_impl[il] || recurrent_layer_arr[il];
     }
 
     GGML_ABORT("%s: il (%u) out of bounds (n_layer_all: %u)\n", __func__, il, n_layer_all);
@@ -231,7 +231,7 @@ uint32_t llama_hparams::n_pos_per_embd() const {
 
 bool llama_hparams::is_swa(uint32_t il) const {
     if (il < n_layer_all) {
-        return is_swa_impl[il];
+        return is_swa_impl[il] || swa_layers[il];
     }
 
     GGML_ABORT("%s: il (%u) out of bounds (n_layer_all: %u)\n", __func__, il, n_layer_all);
