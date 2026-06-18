@@ -437,7 +437,13 @@ extern "C" {
         GGML_TYPE_TQ3_1S  = 47, // TurboQuant 3-bit weight: WHT-rotated 8-level Lloyd-Max, block_size=32
         GGML_TYPE_TQ4_1S  = 48, // TurboQuant 4-bit weight: WHT-rotated 16-level Lloyd-Max, block_size=32
         GGML_TYPE_Q6_0    = 49,
-        GGML_TYPE_COUNT   = 50,
+        GGML_TYPE_Q6_1    = 50,
+        GGML_TYPE_Q3_0    = 51,
+        GGML_TYPE_Q3_1    = 52,
+        GGML_TYPE_Q2_0    = 53,
+        GGML_TYPE_Q2_1    = 54,
+        GGML_TYPE_TURBO4_TCQ = 55, // TurboQuant 4-bit KV cache: TCQ (k=4, L=10, 1024 states)
+        GGML_TYPE_COUNT   = 56,
     };
 
     // precision
@@ -543,6 +549,7 @@ extern "C" {
         GGML_OP_IM2COL,
         GGML_OP_IM2COL_BACK,
         GGML_OP_IM2COL_3D,
+        GGML_OP_COL2IM_1D,
         GGML_OP_CONV_2D,
         GGML_OP_CONV_3D,
         GGML_OP_CONV_2D_DW,
@@ -578,6 +585,8 @@ extern "C" {
         GGML_OP_GATED_DELTA_NET_TREE,
         GGML_OP_SSM_CONV_TREE,
         GGML_OP_TURBO_WHT,
+        GGML_OP_KVARN_STORE,
+        GGML_OP_KVARN_MATERIALIZE,
 
         GGML_OP_UNARY,
 
@@ -2038,6 +2047,16 @@ extern "C" {
         int                   d1, // dilation dimension 1
         bool                  is_2D);
 
+    // col2im_1d: scatter-add GEMM columns back to 1D signal
+    // a: [K*OC, T_in]  (columns from matmul, K = a->ne[0]/OC)
+    // result: [T_out, OC]  where T_out = (T_in - 1)*s0 + K - 2*p0
+    GGML_API struct ggml_tensor * ggml_col2im_1d(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * a,   // columns [K*OC, T_in]
+        int                   s0,  // stride
+        int                   oc,  // output channels
+        int                   p0); // padding to crop from both sides
+
     GGML_API struct ggml_tensor * ggml_conv_1d(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,   // convolution kernel
@@ -2614,6 +2633,29 @@ extern "C" {
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
             int                   direction);
+
+    // KVarN structured KV-cache operations. These are fork-specific and intentionally
+    // separate from ggml_type because KVarN records span complete 128-token tiles.
+    GGML_API struct ggml_tensor * ggml_kvarn_store(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * current,
+            struct ggml_tensor  * indices,
+            struct ggml_tensor  * stage,
+            struct ggml_tensor  * records,
+            int                   bits,
+            int                   sinkhorn_iters,
+            bool                  value);
+
+    GGML_API struct ggml_tensor * ggml_kvarn_materialize(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * records,
+            struct ggml_tensor  * stage_after_store,
+            struct ggml_tensor  * indices,
+            int                   n_kv,
+            int                   stream_start,
+            int                   n_stream,
+            int                   bits,
+            bool                  value);
 
     // custom operators
 

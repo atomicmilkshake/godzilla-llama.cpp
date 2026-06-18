@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include <vector>
 
 struct llama_ubatch;
 
@@ -24,6 +25,11 @@ struct llama_memory_params {
     bool swa_full;
 
     llama_context_type ctx_type;
+
+    // fork-specific structured KVarN cache; disabled leaves upstream memory selection unchanged
+    llama_kvarn_params kvarn;
+
+    llama_memory_t mem_other;
 };
 
 enum llama_memory_status {
@@ -91,6 +97,8 @@ struct llama_memory_i {
     // return negative value to indicate that the layer il should not reuse memory
     using layer_reuse_cb = std::function<int32_t(int32_t il)>;
 
+    using layer_share_cb = std::function<int32_t(int32_t il)>;
+
     virtual ~llama_memory_i() = default;
 
     // split the input batch into a set of ubatches and verify that they can fit into the cache
@@ -118,6 +126,13 @@ struct llama_memory_i {
     // if data == true, the data buffers will also be cleared together with the metadata
     virtual void clear(bool data) = 0;
 
+    virtual bool can_seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) const {
+        GGML_UNUSED(seq_id);
+        GGML_UNUSED(p0);
+        GGML_UNUSED(p1);
+        return true;
+    }
+
     virtual bool seq_rm  (llama_seq_id seq_id,                              llama_pos p0, llama_pos p1) = 0;
     virtual bool seq_rm_cell(llama_seq_id seq_id, uint32_t cell_idx) = 0;
 
@@ -132,6 +147,12 @@ struct llama_memory_i {
     // where KV backup is unnecessary — flat mode rollback trims rejected positions
     // without needing a full KV restore.
     virtual void seq_cp_recurrent(llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1) = 0;
+    virtual bool seq_rm_recurrent(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+        GGML_UNUSED(seq_id);
+        GGML_UNUSED(p0);
+        GGML_UNUSED(p1);
+        return true;
+    }
     virtual void recurrent_copy_profile_reset() {}
     virtual llama_memory_recurrent_copy_profile recurrent_copy_profile() const { return {}; }
     virtual void seq_keep(llama_seq_id seq_id) = 0;
@@ -147,12 +168,27 @@ struct llama_memory_i {
     // state write/read
     //
 
+    // Some compact attention memories cannot be recovered from a later live state
+    // by trimming arbitrary suffixes, so composite memories must include them
+    // even when LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY is requested.
+    virtual bool requires_state_for_partial_restore() const { return false; }
+
+    // Some structured shared-stream memories cannot restore a per-sequence state
+    // without rewriting physical stream data that may also belong to other sequences.
+    virtual bool state_seq_restore_requires_exclusive_kv_stream() const { return false; }
+
     virtual void state_write(llama_io_write_i & io, llama_seq_id seq_id = -1, llama_state_seq_flags flags = 0) const = 0;
     virtual void state_read (llama_io_read_i  & io, llama_seq_id seq_id = -1, llama_state_seq_flags flags = 0) = 0;
 
     // DFlash: force per-seq ubatch splits so each ubatch carries exactly one slot's tokens.
     // Default no-op; hybrid memories override.
     virtual void set_force_split_seq(bool /*v*/) {}
+
+    // KV-cache-compatible hooks used by composite memories such as hybrid and iSWA.
+    // Non-KV memory types keep the defaults and should not be used as attention memory.
+    virtual uint32_t get_kv_n_stream() const { return 0; }
+    virtual uint32_t get_kv_size() const { return 0; }
+    virtual llama_memory_context_ptr init_kv_batch(const std::vector<llama_ubatch> & /* ubatches */) { return nullptr; }
 };
 
 using llama_memory_ptr = std::unique_ptr<llama_memory_i>;

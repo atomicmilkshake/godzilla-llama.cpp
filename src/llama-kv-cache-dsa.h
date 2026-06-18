@@ -48,6 +48,7 @@ public:
 
     void clear(bool data) override;
 
+    bool can_seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) const override;
     bool seq_rm  (llama_seq_id seq_id,                              llama_pos p0, llama_pos p1) override;
     bool seq_rm_cell(llama_seq_id seq_id, uint32_t cell_idx) override;
 
@@ -66,6 +67,7 @@ public:
 
     // state write/load
 
+    bool requires_state_for_partial_restore() const override;
     void state_write(llama_io_write_i & io, llama_seq_id seq_id = -1, llama_state_seq_flags flags = 0) const override;
     void state_read (llama_io_read_i  & io, llama_seq_id seq_id = -1, llama_state_seq_flags flags = 0) override;
 

@@ -9,12 +9,14 @@
 #include "llama-kv-cache.h"
 #include "llama-kv-cache-iswa.h"
 #include "llama-kv-cache-dsa.h"
+#include "llama-kv-cache-kvarn.h"
 #include "llama-memory-hybrid.h"
 #include "llama-memory-hybrid-iswa.h"
 #include "llama-memory-recurrent.h"
 
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <numeric>
 #include <sstream>
@@ -58,6 +60,14 @@ static bool can_reuse_kq_mask(
     res &= (kq_mask->ne[3] == n_stream);
 
     return res;
+}
+
+static bool kvarn_force_materialize_enabled() {
+    static const bool enabled = [] {
+        const char * env = std::getenv("GGML_KVARN_FORCE_MATERIALIZE");
+        return env != nullptr && env[0] != '\0' && std::atoi(env) != 0;
+    }();
+    return enabled;
 }
 
 // impl
@@ -398,7 +408,7 @@ static void print_mask(const T * data, int64_t n_tokens, int64_t n_kv, int64_t n
         case LLAMA_SWA_TYPE_SYMMETRIC: swa_type_str = "LLAMA_SWA_TYPE_SYMMETRIC"; break;
     };
 
-    LLAMA_LOG_DEBUG("%s: n_swa : %d, n_kv: %d, swq_type: %s\n", __func__, (int)n_swa, (int)n_kv, swa_type_str);
+    LLAMA_LOG_DEBUG("%s: n_swa : %d, n_kv: %d, swa_type: %s\n", __func__, (int)n_swa, (int)n_kv, swa_type_str);
     LLAMA_LOG_DEBUG("%s: '0' = can attend, '∞' = masked\n", __func__);
     LLAMA_LOG_DEBUG("%s: Rows = query tokens, Columns = key/value tokens\n\n", __func__);
 
@@ -517,6 +527,12 @@ void llm_graph_input_attn_kv::set_input(const llama_ubatch * ubatch) {
     if (self_v_rot) {
         mctx->set_input_v_rot(self_v_rot);
     }
+
+    if (self_kvarn_rot) {
+        const auto * kvarn = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx);
+        GGML_ASSERT(kvarn != nullptr);
+        kvarn->set_input_kvarn_rot(self_kvarn_rot);
+    }
 }
 
 bool llm_graph_input_attn_kv::can_reuse(const llm_graph_params & params) {
@@ -587,7 +603,10 @@ void llm_graph_input_attn_kv_iswa::set_input(const llama_ubatch * ubatch) {
     if (self_k_idxs && self_k_idxs->buffer) {
         mctx->get_base()->set_input_k_idxs(self_k_idxs, ubatch);
         mctx->get_base()->set_input_v_idxs(self_v_idxs, ubatch);
+    }
 
+    // the kq mask guards on its own buffer: shared cells leave idxs unbacked while the mask stays live
+    if (self_kq_mask && self_kq_mask->buffer) {
         mctx->get_base()->set_input_kq_mask(self_kq_mask, ubatch, cparams.causal_attn);
     }
 
@@ -595,7 +614,9 @@ void llm_graph_input_attn_kv_iswa::set_input(const llama_ubatch * ubatch) {
     if (self_k_idxs_swa && self_k_idxs_swa->buffer) {
         mctx->get_swa()->set_input_k_idxs(self_k_idxs_swa, ubatch);
         mctx->get_swa()->set_input_v_idxs(self_v_idxs_swa, ubatch);
+    }
 
+    if (self_kq_mask_swa && self_kq_mask_swa->buffer) {
         mctx->get_swa()->set_input_kq_mask(self_kq_mask_swa, ubatch, cparams.causal_attn);
     }
 
@@ -605,6 +626,18 @@ void llm_graph_input_attn_kv_iswa::set_input(const llama_ubatch * ubatch) {
 
     if (self_v_rot) {
         mctx->get_base()->set_input_v_rot(self_v_rot);
+    }
+
+    if (self_kvarn_rot) {
+        const auto * kvarn = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx->get_base());
+        GGML_ASSERT(kvarn != nullptr);
+        kvarn->set_input_kvarn_rot(self_kvarn_rot);
+    }
+
+    if (self_kvarn_mat_idxs_swa && self_kvarn_mat_idxs_swa->buffer) {
+        const auto * kvarn_swa = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx->get_swa());
+        GGML_ASSERT(kvarn_swa != nullptr);
+        kvarn_swa->set_input_kvarn_mat_idxs(self_kvarn_mat_idxs_swa);
     }
 
     if (self_k_rot_swa) {
@@ -627,7 +660,9 @@ bool llm_graph_input_attn_kv_iswa::can_reuse(const llm_graph_params & params) {
     if (self_k_idxs && self_k_idxs->buffer) {
         res &= self_k_idxs->ne[0] == params.ubatch.n_tokens;
       //res &= self_v_idxs->ne[0] == params.ubatch.n_tokens; // TODO: need to move this to the unified cache and check there
+    }
 
+    if (self_kq_mask && self_kq_mask->buffer) {
         res &= can_reuse_kq_mask(self_kq_mask, mctx->get_base(), params.ubatch, params.cparams);
     }
 
@@ -635,8 +670,17 @@ bool llm_graph_input_attn_kv_iswa::can_reuse(const llm_graph_params & params) {
     if (self_k_idxs_swa && self_k_idxs_swa->buffer) {
         res &= self_k_idxs_swa->ne[0] == params.ubatch.n_tokens;
       //res &= self_v_idxs_swa->ne[0] == params.ubatch.n_tokens; // TODO: need to move this to the unified cache and check there
+    }
 
+    if (self_kq_mask_swa && self_kq_mask_swa->buffer) {
         res &= can_reuse_kq_mask(self_kq_mask_swa, mctx->get_swa(), params.ubatch, params.cparams);
+    }
+
+    // re-bind the SWA KVarN materialize indices to the (possibly new) SWA context
+    if (self_kvarn_mat_idxs_swa && self_kvarn_mat_idxs_swa->buffer) {
+        if (const auto * kvarn_swa = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx->get_swa())) {
+            const_cast<llama_kv_cache_kvarn_context *>(kvarn_swa)->set_mat_idxs(self_kvarn_mat_idxs_swa);
+        }
     }
 
     return res;
@@ -778,7 +822,9 @@ void llm_graph_input_mem_hybrid_iswa::set_input(const llama_ubatch * ubatch) {
     if (inp_attn->self_k_idxs && inp_attn->self_k_idxs->buffer) {
         attn_ctx->get_base()->set_input_k_idxs(inp_attn->self_k_idxs, ubatch);
         attn_ctx->get_base()->set_input_v_idxs(inp_attn->self_v_idxs, ubatch);
+    }
 
+    if (inp_attn->self_kq_mask && inp_attn->self_kq_mask->buffer) {
         attn_ctx->get_base()->set_input_kq_mask(inp_attn->self_kq_mask, ubatch, cparams.causal_attn);
     }
 
@@ -786,7 +832,9 @@ void llm_graph_input_mem_hybrid_iswa::set_input(const llama_ubatch * ubatch) {
     if (inp_attn->self_k_idxs_swa && inp_attn->self_k_idxs_swa->buffer) {
         attn_ctx->get_swa()->set_input_k_idxs(inp_attn->self_k_idxs_swa, ubatch);
         attn_ctx->get_swa()->set_input_v_idxs(inp_attn->self_v_idxs_swa, ubatch);
+    }
 
+    if (inp_attn->self_kq_mask_swa && inp_attn->self_kq_mask_swa->buffer) {
         attn_ctx->get_swa()->set_input_kq_mask(inp_attn->self_kq_mask_swa, ubatch, cparams.causal_attn);
     }
 
@@ -832,17 +880,17 @@ bool llm_graph_input_mem_hybrid_iswa::can_reuse(const llm_graph_params & params)
     if (inp_attn->self_k_idxs && inp_attn->self_k_idxs->buffer) {
         res &= inp_attn->self_k_idxs->ne[0] == params.ubatch.n_tokens;
       //res &= inp_attn->self_v_idxs->ne[0] == params.ubatch.n_tokens; // TODO: need to move this to the unified cache and check there
-
-        res &= can_reuse_kq_mask(inp_attn->self_kq_mask, attn_ctx->get_base(), params.ubatch, params.cparams);
     }
+
+    res &= can_reuse_kq_mask(inp_attn->self_kq_mask, attn_ctx->get_base(), params.ubatch, params.cparams);
 
     // swa tensors may not be allocated if there are no SWA attention layers
     if (inp_attn->self_k_idxs_swa && inp_attn->self_k_idxs_swa->buffer) {
         res &= inp_attn->self_k_idxs_swa->ne[0] == params.ubatch.n_tokens;
       //res &= inp_attn->self_v_idxs_swa->ne[0] == params.ubatch.n_tokens; // TODO: need to move this to the unified cache and check there
-
-        res &= can_reuse_kq_mask(inp_attn->self_kq_mask_swa, attn_ctx->get_swa(), params.ubatch, params.cparams);
     }
+
+    res &= can_reuse_kq_mask(inp_attn->self_kq_mask_swa, attn_ctx->get_swa(), params.ubatch, params.cparams);
 
     res &= inp_rs->s_copy->ne[0] == mctx->get_recr()->get_n_rs();
 
@@ -1035,7 +1083,8 @@ llm_graph_context::llm_graph_context(const llm_graph_params & params) :
     cparams          (params.cparams),
     ubatch           (params.ubatch),
     n_embd           (hparams.n_embd),
-    n_layer          (hparams.n_layer),
+    n_layer          (hparams.n_layer()),
+    n_layer_nextn    (hparams.n_layer_nextn),
     n_rot            (hparams.n_rot()),
     n_ctx            (cparams.n_ctx),
     n_head           (hparams.n_head()),
@@ -1893,7 +1942,12 @@ ggml_tensor * llm_graph_context::build_inp_embd(ggml_tensor * tok_embd) const {
     res->t_inp_embd = cur;
 
     // For Granite architecture
-    if (hparams.f_embedding_scale != 0.0f) {
+    // NOTE: For deepstack models, only apply scale to token inputs (ie text-only input).
+    //  Raw embeddings are assumed to be multimodal inputs that should not be scaled.
+    if (hparams.f_embedding_scale != 0.0f && (ubatch.token || hparams.n_deepstack_layers == 0)) {
+        if (!ggml_is_contiguous(cur)) {
+            cur = ggml_cont(ctx0, cur);
+        }
         cur = ggml_scale(ctx0, cur, hparams.f_embedding_scale);
     }
 
@@ -2295,6 +2349,11 @@ static std::unique_ptr<llm_graph_input_attn_kv> build_attn_inp_kv_impl(
 
     inp->self_k_rot = mctx_cur->build_input_k_rot(ctx0);
     inp->self_v_rot = mctx_cur->build_input_v_rot(ctx0);
+    if (!kvarn_force_materialize_enabled()) {
+        if (const auto * kvarn = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx_cur)) {
+            inp->self_kvarn_rot = kvarn->build_input_kvarn_rot(ctx0);
+        }
+    }
 
     return inp;
 }
@@ -2322,6 +2381,17 @@ ggml_tensor * llm_graph_context::build_attn(
             int       il) const {
     GGML_ASSERT(v_mla == nullptr);
 
+    const auto * mctx_cur = inp->mctx;
+    const auto * kvarn_ctx =
+        (!kvarn_force_materialize_enabled() && inp->self_kvarn_rot) ?
+            dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx_cur) : nullptr;
+    const bool use_kvarn_rotated = kvarn_ctx != nullptr && q_cur->ne[0] % 128 == 0;
+
+    if (use_kvarn_rotated) {
+        GGML_ASSERT(inp->self_k_rot == nullptr);
+        GGML_ASSERT(inp->self_v_rot == nullptr);
+    }
+
     if (inp->self_k_rot) {
         q_cur = ggml_mul_mat_aux(ctx0, q_cur, inp->self_k_rot);
         k_cur = ggml_mul_mat_aux(ctx0, k_cur, inp->self_k_rot);
@@ -2338,8 +2408,6 @@ ggml_tensor * llm_graph_context::build_attn(
     ggml_build_forward_expand(gf, v_cur);
     ggml_build_forward_expand(gf, k_cur);
 
-    const auto * mctx_cur = inp->mctx;
-
     // store to KV cache
     {
         const auto & k_idxs = inp->get_k_idxs();
@@ -2352,8 +2420,13 @@ ggml_tensor * llm_graph_context::build_attn(
     const auto & kq_mask = inp->get_kq_mask();
 
     ggml_tensor * q = q_cur;
-    ggml_tensor * k = mctx_cur->get_k(ctx0, il);
-    ggml_tensor * v = mctx_cur->get_v(ctx0, il);
+    ggml_tensor * k = use_kvarn_rotated ? kvarn_ctx->get_k_rotated(ctx0, il) : mctx_cur->get_k(ctx0, il);
+    ggml_tensor * v = use_kvarn_rotated ? kvarn_ctx->get_v_rotated(ctx0, il) : mctx_cur->get_v(ctx0, il);
+
+    if (use_kvarn_rotated) {
+        GGML_ASSERT(q->type == GGML_TYPE_F32);
+        q = ggml_mul_mat_aux(ctx0, q, inp->self_kvarn_rot);
+    }
 
     // TurboQuant Q pre-rotation is handled inline in CUDA FA kernels:
     // - Vec kernel: shared memory FWHT (fattn-vec.cuh)
@@ -2370,7 +2443,11 @@ ggml_tensor * llm_graph_context::build_attn(
     cb(cur, "kqv_out", il);
 
     // TurboQuant V un-rotation at graph level (CUDA graph compatible)
-    if (v->type == GGML_TYPE_TURBO2_0 || v->type == GGML_TYPE_TURBO3_0 || v->type == GGML_TYPE_TURBO4_0 || v->type == GGML_TYPE_TURBO3_TCQ || v->type == GGML_TYPE_TURBO2_TCQ) {
+    if (use_kvarn_rotated) {
+        GGML_ASSERT(cur->type == GGML_TYPE_F32);
+        cur = ggml_cont(ctx0, cur);
+        cur = ggml_mul_mat_aux(ctx0, cur, inp->self_kvarn_rot);
+    } else if (v->type == GGML_TYPE_TURBO2_0 || v->type == GGML_TYPE_TURBO3_0 || v->type == GGML_TYPE_TURBO4_0 || v->type == GGML_TYPE_TURBO4_TCQ || v->type == GGML_TYPE_TURBO3_TCQ || v->type == GGML_TYPE_TURBO2_TCQ) {
         if (cur->ne[0] % 128 == 0) {
             cur = ggml_cont(ctx0, cur);  // force copy to break potential aliasing
             cur = ggml_turbo_wht(ctx0, cur, 1);  // 1 = inverse
@@ -2594,6 +2671,23 @@ ggml_tensor * llm_graph_context::build_attn(
     auto * k_rot = is_swa ? inp->self_k_rot_swa : inp->self_k_rot;
     auto * v_rot = is_swa ? inp->self_v_rot_swa : inp->self_v_rot;
 
+    const auto * mctx_iswa = inp->mctx;
+    const auto * mctx_cur = is_swa ? mctx_iswa->get_swa() : mctx_iswa->get_base();
+    // KVarN rotated-domain attention: available on both non-SWA (full-context) and
+    // SWA (sliding-window ring) layers when the cache is a KVarN cache, the rotation
+    // matrix input is present, Flash Attention is enabled, and the head dim is a
+    // multiple of 128 (the KVarN tile/Hadamard dimension). SWA KVarN layers carry their
+    // own per-cell position index for materialize; the KQ mask still enforces the window.
+    const auto * kvarn_ctx =
+        (!kvarn_force_materialize_enabled() && inp->self_kvarn_rot) ?
+            dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx_cur) : nullptr;
+    const bool use_kvarn_rotated = kvarn_ctx != nullptr && q_cur->ne[0] % 128 == 0;
+
+    if (use_kvarn_rotated) {
+        GGML_ASSERT(k_rot == nullptr);
+        GGML_ASSERT(v_rot == nullptr);
+    }
+
     if (k_rot) {
         q_cur = ggml_mul_mat_aux(ctx0, q_cur, k_rot);
         if (k_cur) {
@@ -2618,10 +2712,6 @@ ggml_tensor * llm_graph_context::build_attn(
         ggml_build_forward_expand(gf, v_cur);
     }
 
-    const auto * mctx_iswa = inp->mctx;
-
-    const auto * mctx_cur = is_swa ? mctx_iswa->get_swa() : mctx_iswa->get_base();
-
     // optionally store to KV cache
     if (k_cur) {
         const auto & k_idxs = is_swa ? inp->get_k_idxs_swa() : inp->get_k_idxs();
@@ -2638,14 +2728,23 @@ ggml_tensor * llm_graph_context::build_attn(
     const auto & kq_mask = is_swa ? inp->get_kq_mask_swa() : inp->get_kq_mask();
 
     ggml_tensor * q = q_cur;
-    ggml_tensor * k = mctx_cur->get_k(ctx0, il);
-    ggml_tensor * v = mctx_cur->get_v(ctx0, il);
+    ggml_tensor * k = use_kvarn_rotated ? kvarn_ctx->get_k_rotated(ctx0, il) : mctx_cur->get_k(ctx0, il);
+    ggml_tensor * v = use_kvarn_rotated ? kvarn_ctx->get_v_rotated(ctx0, il) : mctx_cur->get_v(ctx0, il);
+
+    if (use_kvarn_rotated) {
+        GGML_ASSERT(q->type == GGML_TYPE_F32);
+        q = ggml_mul_mat_aux(ctx0, q, inp->self_kvarn_rot);
+    }
 
     ggml_tensor * cur = build_attn_mha(q, k, v, kq_b, kq_mask, sinks, v_mla, kq_scale, il);
     cb(cur, "kqv_out", il);
 
     // TurboQuant V un-rotation at graph level (CUDA graph compatible)
-    if (v->type == GGML_TYPE_TURBO2_0 || v->type == GGML_TYPE_TURBO3_0 || v->type == GGML_TYPE_TURBO4_0 || v->type == GGML_TYPE_TURBO3_TCQ || v->type == GGML_TYPE_TURBO2_TCQ) {
+    if (use_kvarn_rotated) {
+        GGML_ASSERT(cur->type == GGML_TYPE_F32);
+        cur = ggml_cont(ctx0, cur);
+        cur = ggml_mul_mat_aux(ctx0, cur, inp->self_kvarn_rot);
+    } else if (v->type == GGML_TYPE_TURBO2_0 || v->type == GGML_TYPE_TURBO3_0 || v->type == GGML_TYPE_TURBO4_0 || v->type == GGML_TYPE_TURBO4_TCQ || v->type == GGML_TYPE_TURBO3_TCQ || v->type == GGML_TYPE_TURBO2_TCQ) {
         if (cur->ne[0] % 128 == 0) {
             cur = ggml_cont(ctx0, cur);
             cur = ggml_turbo_wht(ctx0, cur, 1);  // 1 = inverse
@@ -2784,9 +2883,24 @@ llm_graph_input_attn_kv_iswa * llm_graph_context::build_attn_inp_kv_iswa() const
 
     inp->self_k_rot = mctx_cur->get_base()->build_input_k_rot(ctx0);
     inp->self_v_rot = mctx_cur->get_base()->build_input_v_rot(ctx0);
+    if (!kvarn_force_materialize_enabled()) {
+        if (const auto * kvarn = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx_cur->get_base())) {
+            inp->self_kvarn_rot = kvarn->build_input_kvarn_rot(ctx0);
+        }
+    }
 
     inp->self_k_rot_swa = mctx_cur->get_swa()->build_input_k_rot(ctx0);
     inp->self_v_rot_swa = mctx_cur->get_swa()->build_input_v_rot(ctx0);
+    // SWA KVarN materialize needs per-cell positions on BOTH the rotated and the
+    // force-materialize (non-rotated) paths, so build them whenever the SWA cache
+    // is a KVarN cache — independent of kvarn_force_materialize_enabled(). Omitting
+    // them under force-materialize left mat_idxs null and crashed in materialize().
+    if (const auto * kvarn_swa = dynamic_cast<const llama_kv_cache_kvarn_context *>(mctx_cur->get_swa())) {
+        inp->self_kvarn_mat_idxs_swa = kvarn_swa->build_input_kvarn_mat_idxs(ctx0);
+        // make the materialize indices available to the context at graph build time
+        // (get_k/get_v/materialize run during build, before set_input populates them)
+        const_cast<llama_kv_cache_kvarn_context *>(kvarn_swa)->set_mat_idxs(inp->self_kvarn_mat_idxs_swa);
+    }
 
     return (llm_graph_input_attn_kv_iswa *) res->add_input(std::move(inp));
 }

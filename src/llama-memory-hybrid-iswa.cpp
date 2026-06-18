@@ -29,7 +29,8 @@ llama_memory_hybrid_iswa::llama_memory_hybrid_iswa(
                      bool   unified,
                             /* layer filters */
     const layer_filter_cb & filter_attn,
-    const layer_filter_cb & filter_recr) :
+    const layer_filter_cb & filter_recr,
+          llama_kvarn_params kvarn) :
     hparams(model.hparams),
     mem_attn(new llama_kv_cache_iswa(
         model,
@@ -43,10 +44,13 @@ llama_memory_hybrid_iswa::llama_memory_hybrid_iswa(
         n_seq_max,
         n_ubatch,
         n_pad,
+        nullptr,
         filter_attn == nullptr ?
-            [&](int32_t il) { return !hparams.is_recurrent(il); }
+            [&](int32_t il) { return !hparams.is_recr(il); }
             : filter_attn,
-        nullptr
+        nullptr,
+        nullptr,
+        kvarn
     )),
     mem_recr(new llama_memory_recurrent(
         model,
@@ -57,7 +61,7 @@ llama_memory_hybrid_iswa::llama_memory_hybrid_iswa(
         n_seq_max,
         n_rs_seq,
         filter_recr == nullptr ?
-            [&](int32_t il) { return hparams.is_recurrent(il); }
+            [&](int32_t il) { return hparams.is_recr(il); }
             : filter_recr
     )) {}
 
@@ -84,7 +88,7 @@ llama_memory_context_ptr llama_memory_hybrid_iswa::init_batch(llama_batch_allocr
                     ubatch = balloc.split_seq(n_ubatch);
                 } else {
                     // Use non-sequential split when KV cache is unified (needed for hellaswag/winogrande/multiple-choice)
-                    const bool unified = (mem_attn->get_base()->get_n_stream() == 1);
+                    const bool unified = (mem_attn->get_kv_n_stream() == 1);
                     ubatch = balloc.split_equal(n_ubatch, !unified);
                 }
             }
@@ -108,21 +112,14 @@ llama_memory_context_ptr llama_memory_hybrid_iswa::init_batch(llama_batch_allocr
             return std::make_unique<llama_memory_hybrid_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
         }
 
-        // prepare the attention cache (iswa version returns both base and swa slot infos)
-        auto sinfos_base = mem_attn->get_base()->prepare(ubatches);
-        if (sinfos_base.empty()) {
-            LLAMA_LOG_ERROR("%s: failed to prepare attention base ubatches\n", __func__);
-            return std::make_unique<llama_memory_hybrid_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
-        }
-
-        auto sinfos_swa = mem_attn->get_swa()->prepare(ubatches);
-        if (sinfos_swa.empty()) {
-            LLAMA_LOG_ERROR("%s: failed to prepare attention swa ubatches\n", __func__);
+        auto ctx_attn = mem_attn->init_kv_batch(ubatches);
+        if (!ctx_attn || llama_memory_status_is_fail(ctx_attn->get_status())) {
+            LLAMA_LOG_ERROR("%s: failed to prepare attention ubatches\n", __func__);
             return std::make_unique<llama_memory_hybrid_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
         }
 
         return std::make_unique<llama_memory_hybrid_iswa_context>(
-                this, std::move(sinfos_base), std::move(sinfos_swa), std::move(ubatches));
+                this, std::move(ctx_attn), std::move(ubatches));
     } while(false);
 
     return std::make_unique<llama_memory_hybrid_iswa_context>(LLAMA_MEMORY_STATUS_FAILED_PREPARE);
@@ -146,9 +143,16 @@ void llama_memory_hybrid_iswa::clear(bool data) {
     mem_recr->clear(data);
 }
 
+bool llama_memory_hybrid_iswa::can_seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) const {
+    return mem_recr->can_seq_rm(seq_id, p0, p1) &&
+           mem_attn->can_seq_rm(seq_id, p0, p1);
+}
+
 bool llama_memory_hybrid_iswa::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
-    // Try removing from the recurrent cache first since it may fail. If it does
-    // fail, the cache will not have been mutated.
+    if (!can_seq_rm(seq_id, p0, p1)) {
+        return false;
+    }
+
     if (!mem_recr->seq_rm(seq_id, p0, p1)) {
         return false;
     }
@@ -170,6 +174,10 @@ void llama_memory_hybrid_iswa::seq_cp(llama_seq_id seq_id_src, llama_seq_id seq_
 
 void llama_memory_hybrid_iswa::seq_cp_recurrent(llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1) {
     mem_recr->seq_cp(seq_id_src, seq_id_dst, p0, p1);
+}
+
+bool llama_memory_hybrid_iswa::seq_rm_recurrent(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+    return mem_recr->seq_rm(seq_id, p0, p1);
 }
 
 void llama_memory_hybrid_iswa::recurrent_copy_profile_reset() {
@@ -213,6 +221,16 @@ std::map<ggml_backend_buffer_type_t, size_t> llama_memory_hybrid_iswa::memory_br
     return mb;
 }
 
+bool llama_memory_hybrid_iswa::requires_state_for_partial_restore() const {
+    return mem_attn->requires_state_for_partial_restore() ||
+           mem_recr->requires_state_for_partial_restore();
+}
+
+bool llama_memory_hybrid_iswa::state_seq_restore_requires_exclusive_kv_stream() const {
+    return mem_attn->state_seq_restore_requires_exclusive_kv_stream() ||
+           mem_recr->state_seq_restore_requires_exclusive_kv_stream();
+}
+
 void llama_memory_hybrid_iswa::state_write(llama_io_write_i & io, llama_seq_id seq_id, llama_state_seq_flags flags) const {
     mem_attn->state_write(io, seq_id, flags);
     mem_recr->state_write(io, seq_id, flags);
@@ -254,12 +272,10 @@ llama_memory_hybrid_iswa_context::llama_memory_hybrid_iswa_context(
 
 llama_memory_hybrid_iswa_context::llama_memory_hybrid_iswa_context(
            llama_memory_hybrid_iswa * mem,
-                    slot_info_vec_t   sinfos_base,
-                    slot_info_vec_t   sinfos_swa,
+        llama_memory_context_ptr   ctx_attn_in,
           std::vector<llama_ubatch>   ubatches) :
     ubatches(std::move(ubatches)),
-    // note: here we copy the ubatches. not sure if this is ideal
-    ctx_attn(new llama_kv_cache_iswa_context(mem->get_mem_attn(), std::move(sinfos_base), std::move(sinfos_swa), this->ubatches)),
+    ctx_attn(std::move(ctx_attn_in)),
     ctx_recr(new llama_memory_recurrent_context(mem->get_mem_recr(), this->ubatches)),
     status(llama_memory_status_combine(ctx_attn->get_status(), ctx_recr->get_status())) {
 }

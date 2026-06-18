@@ -1182,6 +1182,65 @@ struct common_init_result::impl {
     std::vector<llama_sampler_seq_config> samplers_seq_config;
 };
 
+// Auto-generate .triattention calibration when --triattention-stats points to a missing file.
+static bool common_ensure_triattention_stats(const std::string & gguf_path, std::string & stats_path) {
+    namespace fs = std::filesystem;
+
+    if (stats_path.empty()) {
+        return false;
+    }
+
+    std::error_code ec;
+    if (fs::exists(stats_path, ec)) {
+        return true;
+    }
+
+    if (gguf_path.empty()) {
+        LOG_WRN("%s: TriAttention stats missing (%s) and no model path for auto-calibration\n",
+                __func__, stats_path.c_str());
+        return false;
+    }
+
+    const char * script_env = std::getenv("LLAMA_ENSURE_TRIATTENTION_SCRIPT");
+    const std::string script = script_env ? script_env
+        : "J:\\LLM\\godzilla-llama.cpp\\scripts\\ensure-triattention.ps1";
+
+    if (!fs::exists(script, ec)) {
+        LOG_WRN("%s: TriAttention stats missing (%s); ensure script not found (%s)\n",
+                __func__, stats_path.c_str(), script.c_str());
+        return false;
+    }
+
+    LOG_WRN("%s: TriAttention stats missing at %s — running auto-calibration\n",
+            __func__, stats_path.c_str());
+
+    std::ostringstream cmd;
+#ifdef _WIN32
+    auto quote = [](const std::string & s) {
+        std::string out = "\"";
+        for (char c : s) {
+            if (c == '"') {
+                out += "\\\"";
+            } else {
+                out += c;
+            }
+        }
+        out += "\"";
+        return out;
+    };
+    cmd << "powershell -NoProfile -ExecutionPolicy Bypass -File "
+        << quote(script)
+        << " -Gguf " << quote(gguf_path)
+        << " -Output " << quote(stats_path);
+#else
+    LOG_WRN("%s: auto TriAttention calibration is only wired for Windows in this fork\n", __func__);
+    return false;
+#endif
+
+    const int rc = std::system(cmd.str().c_str());
+    return rc == 0 && fs::exists(stats_path, ec);
+}
+
 common_init_result::common_init_result(common_params & params, bool model_only) :
     pimpl(new impl{}) {
     auto mparams = common_model_params_to_llama(params);
@@ -1286,6 +1345,10 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
 
     // Initialize TriAttention KV cache eviction if calibration stats provided
     if (!params.triattention_stats.empty()) {
+        if (!common_ensure_triattention_stats(params.model.path, params.triattention_stats)) {
+            LOG_WRN("%s: TriAttention calibration unavailable at %s\n",
+                    __func__, params.triattention_stats.c_str());
+        }
         int32_t spec_protect_extra = 0;
         if (params.speculative.type() != COMMON_SPECULATIVE_TYPE_NONE || !params.speculative.types.empty()) {
             spec_protect_extra = common_speculative_n_max(&params.speculative);
@@ -1628,6 +1691,7 @@ struct llama_context_params common_context_params_to_llama(const common_params &
 
     cparams.type_k = params.cache_type_k;
     cparams.type_v = params.cache_type_v;
+    cparams.kvarn  = params.kvarn;
 
     cparams.dflash_cross_ctx = params.speculative.dflash_cross_ctx;
 

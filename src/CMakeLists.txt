@@ -22,11 +22,13 @@ add_library(llama
             llama-hparams.cpp
             llama-impl.cpp
             llama-io.cpp
+            llama-kvarn.cpp
             llama-kv-cache.cpp
+            llama-kv-cache-kvarn.cpp
             llama-kv-cache-iswa.cpp
             llama-kv-cache-dsa.cpp
-            llama-memory.cpp
             llama-triattention.cpp
+            llama-memory.cpp
             llama-memory-hybrid.cpp
             llama-memory-hybrid-iswa.cpp
             llama-memory-recurrent.cpp

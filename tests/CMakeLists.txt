@@ -123,6 +123,16 @@ if (Python3_Interpreter_FOUND)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-turbo-mma-fused-static.py)
     set_property(TEST test-turbo-mma-fused-static PROPERTY LABELS cuda)
+    add_test(
+        NAME test-issue41-regressions-static
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-issue41-regressions-static.py)
+    set_property(TEST test-issue41-regressions-static PROPERTY LABELS cuda)
+    add_test(
+        NAME test-hip-shuffle-compat-static
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-hip-shuffle-compat-static.py)
+    set_property(TEST test-hip-shuffle-compat-static PROPERTY LABELS hip)
 endif()
 
 # build test-tokenizer-0 target once and add many tests
@@ -258,9 +268,22 @@ llama_build_and_test(test-thread-safety.cpp ARGS -m "${MODEL_DEST}" -ngl 99 -p "
 set_tests_properties(test-thread-safety PROPERTIES FIXTURES_REQUIRED test-download-model)
 
 llama_build_and_test(test-arg-parser.cpp)
+add_executable(test-kvarn test-kvarn.cpp ../src/llama-kvarn.cpp)
+target_include_directories(test-kvarn PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+target_compile_features(test-kvarn PRIVATE cxx_std_17)
+target_link_libraries(test-kvarn PRIVATE ggml)
+if (LLAMA_TESTS_INSTALL)
+    install(TARGETS test-kvarn RUNTIME)
+endif()
+add_test(NAME test-kvarn WORKING_DIRECTORY . COMMAND $<TARGET_FILE:test-kvarn>)
+set_property(TEST test-kvarn PROPERTY LABELS main)
 llama_build_and_test(test-adaptive-dm.cpp)
 llama_build_and_test(test-server-prompt-checkpoint.cpp)
 target_include_directories(test-server-prompt-checkpoint PRIVATE ${PROJECT_SOURCE_DIR}/tools/server ${PROJECT_SOURCE_DIR}/tools/mtmd)
+target_link_libraries(test-server-prompt-checkpoint PRIVATE server-context)
+llama_build_and_test(test-server-context.cpp)
+target_include_directories(test-server-context PRIVATE ${PROJECT_SOURCE_DIR}/tools/server ${PROJECT_SOURCE_DIR}/tools/mtmd)
+target_link_libraries(test-server-context PRIVATE server-context)
 llama_build_and_test(test-dflash-ring.cpp)
 llama_build_and_test(test-cpu-out-prod.cpp)
 llama_build_and_test(test-cpu-fattn-support.cpp)
@@ -268,6 +291,8 @@ llama_build_and_test(test-dflash-plumbing.cpp ARGS ${PROJECT_SOURCE_DIR})
 target_include_directories(test-dflash-plumbing PRIVATE ${PROJECT_SOURCE_DIR}/src)
 llama_build_and_test(test-mtmd-plumbing.cpp ARGS ${PROJECT_SOURCE_DIR})
 llama_build_and_test(test-perplexity-plumbing.cpp ARGS ${PROJECT_SOURCE_DIR})
+llama_build_and_test(test-cuda-fattn-route-policy.cpp ARGS ${PROJECT_SOURCE_DIR})
+llama_build_and_test(test-cuda-fattn-vec-policy.cpp ARGS ${PROJECT_SOURCE_DIR})
 
 if (NOT LLAMA_SANITIZE_ADDRESS AND NOT GGML_SCHED_NO_REALLOC)
   # TODO: repair known memory leaks
@@ -299,6 +324,7 @@ if (NOT GGML_BACKEND_DL)
     llama_build_and_test(test-quantize-perf.cpp)
     llama_build_and_test(test-turbo-quant.c)
     llama_build_and_test(test-rope.cpp)
+    llama_build_and_test(test-col2im-1d.cpp)
 endif()
 
 # libmtmd

@@ -193,6 +193,75 @@ extern "C" {
 
     LLAMA_API const char * llama_flash_attn_type_name(enum llama_flash_attn_type flash_attn_type);
 
+    enum llama_kvarn_type {
+        LLAMA_KVARN_TYPE_INVALID  = -1,
+        LLAMA_KVARN_TYPE_DISABLED = 0,
+
+        LLAMA_KVARN_K2V2_G128,
+        LLAMA_KVARN_K2V3_G128,
+        LLAMA_KVARN_K2V4_G128,
+
+        LLAMA_KVARN_K3V2_G128,
+        LLAMA_KVARN_K3V3_G128,
+        LLAMA_KVARN_K3V4_G128,
+
+        LLAMA_KVARN_K4V2_G128,
+        LLAMA_KVARN_K4V3_G128,
+        LLAMA_KVARN_K4V4_G128,
+
+        LLAMA_KVARN_K2V5_G128,
+        LLAMA_KVARN_K2V6_G128,
+        LLAMA_KVARN_K2V8_G128,
+
+        LLAMA_KVARN_K3V5_G128,
+        LLAMA_KVARN_K3V6_G128,
+        LLAMA_KVARN_K3V8_G128,
+
+        LLAMA_KVARN_K4V5_G128,
+        LLAMA_KVARN_K4V6_G128,
+        LLAMA_KVARN_K4V8_G128,
+
+        LLAMA_KVARN_K5V2_G128,
+        LLAMA_KVARN_K5V3_G128,
+        LLAMA_KVARN_K5V4_G128,
+        LLAMA_KVARN_K5V5_G128,
+        LLAMA_KVARN_K5V6_G128,
+        LLAMA_KVARN_K5V8_G128,
+
+        LLAMA_KVARN_K6V2_G128,
+        LLAMA_KVARN_K6V3_G128,
+        LLAMA_KVARN_K6V4_G128,
+        LLAMA_KVARN_K6V5_G128,
+        LLAMA_KVARN_K6V6_G128,
+        LLAMA_KVARN_K6V8_G128,
+
+        LLAMA_KVARN_K8V2_G128,
+        LLAMA_KVARN_K8V3_G128,
+        LLAMA_KVARN_K8V4_G128,
+        LLAMA_KVARN_K8V5_G128,
+        LLAMA_KVARN_K8V6_G128,
+        LLAMA_KVARN_K8V8_G128,
+
+        LLAMA_KVARN_TYPE_COUNT,
+    };
+
+    struct llama_kvarn_params {
+        enum llama_kvarn_type type;
+
+        int32_t key_bits;
+        int32_t value_bits;
+        int32_t group;
+        int32_t sinkhorn_iters;
+        int32_t sink_tokens;
+
+        bool  fail_if_unsupported;
+    };
+
+    LLAMA_API const char *             llama_kvarn_type_name       (enum llama_kvarn_type type);
+    LLAMA_API enum llama_kvarn_type    llama_kvarn_type_from_name  (const char * name);
+    LLAMA_API struct llama_kvarn_params llama_kvarn_default_params (void);
+    LLAMA_API struct llama_kvarn_params llama_kvarn_params_for_type(enum llama_kvarn_type type);
+
     enum llama_split_mode {
         LLAMA_SPLIT_MODE_NONE   = 0, // single GPU
         LLAMA_SPLIT_MODE_LAYER  = 1, // split layers and KV across GPUs
@@ -404,6 +473,14 @@ extern "C" {
         // DFlash drafter: cross-attention window in tokens.
         // How many target hidden states the drafter sees (default: 512).
         int32_t dflash_cross_ctx;
+
+        // BeeLlama fork-specific structured KVarN KV cache configuration.
+        // Kept separate from type_k/type_v because KVarN stores joint 128-token K/V tiles.
+        struct llama_kvarn_params kvarn;
+
+        // a source/target/parent context
+        // can be utilized in various ways, for example by sharing results or llama_memory between 2 contexts
+        struct llama_context * ctx_other;
     };
 
     struct llama_model_tensor_override {
@@ -740,6 +817,14 @@ extern "C" {
                  llama_pos p0,
                  llama_pos p1);
 
+    // Check if llama_memory_seq_rm() can remove this range from the current memory state
+    // without mutating the memory.
+    LLAMA_API bool llama_memory_can_seq_rm(
+            llama_memory_t mem,
+              llama_seq_id seq_id,
+                 llama_pos p0,
+                 llama_pos p1);
+
     // Remove seq_id from a specific cell by index (not position range).
     // Used for selective tree-branch KV cleanup without affecting main-path cells
     // at the same position. Returns true if the cell becomes empty.
@@ -773,6 +858,13 @@ extern "C" {
             llama_memory_t mem,
               llama_seq_id seq_id_src,
               llama_seq_id seq_id_dst,
+                 llama_pos p0,
+                 llama_pos p1);
+
+    // Remove only recurrent state (skip KV/attention) for a sequence.
+    LLAMA_API bool llama_memory_seq_rm_recurrent(
+            llama_memory_t mem,
+              llama_seq_id seq_id,
                  llama_pos p0,
                  llama_pos p1);
 
@@ -818,6 +910,17 @@ extern "C" {
 
     // Check if the memory supports shifting
     LLAMA_API bool llama_memory_can_shift(llama_memory_t mem);
+
+    // Returns the actual number of physical KV attention streams used by the memory object.
+    // A value of 1 means all sequences share one physical KV stream.
+    LLAMA_API uint32_t llama_memory_kv_n_stream(llama_memory_t mem);
+
+    // Convenience query for a context. Returns 0 if the context has no KV attention memory.
+    LLAMA_API uint32_t llama_context_kv_n_stream(const struct llama_context * ctx);
+
+    // Returns true when restoring a per-sequence state can overwrite physical KV data
+    // that may also contain cells for other sequences in the same stream.
+    LLAMA_API bool llama_memory_state_seq_restore_requires_exclusive_kv_stream(llama_memory_t mem);
 
     // Expand the recurrent state to new_n_seq_max cells (for deferred backup allocation).
     // Returns true on success. No-op if the memory is already large enough or has no recurrent component.

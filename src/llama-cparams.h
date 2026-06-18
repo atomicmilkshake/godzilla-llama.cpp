@@ -39,6 +39,7 @@ struct llama_cparams {
     bool offload_kqv;
     bool flash_attn;
     bool auto_fa;
+    bool flash_attn_required;
     bool fused_gdn_ar;       // use fused gated delta net (autoregressive)
     bool fused_gdn_ch;       // use fused gated delta net (chunked)
     bool auto_fgdn;
@@ -50,6 +51,16 @@ struct llama_cparams {
 
     enum llama_context_type ctx_type;
     enum llama_pooling_type pooling_type;
+
+    llama_kvarn_params kvarn = {
+        /*.type                =*/ LLAMA_KVARN_TYPE_DISABLED,
+        /*.key_bits            =*/ 0,
+        /*.value_bits          =*/ 0,
+        /*.group               =*/ 128,
+        /*.sinkhorn_iters      =*/ 16,
+        /*.sink_tokens         =*/ 128,
+        /*.fail_if_unsupported =*/ true,
+    };
 
     // DFlash: target layer indices to capture hidden states from (empty = disabled)
     std::vector<int> dflash_capture_layers;
@@ -111,4 +122,6 @@ struct llama_cparams {
 
     ggml_backend_sched_eval_callback cb_eval;
     void * cb_eval_user_data;
+
+    llama_context * ctx_other;
 };

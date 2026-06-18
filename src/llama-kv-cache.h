@@ -100,7 +100,7 @@ public:
     //       likely through `struct llama_memory_params`
     llama_kv_cache(
             const llama_model & model,
-            const llama_hparams & hparams,
+          const llama_hparams & hparams,
                     ggml_type   type_k,
                     ggml_type   type_v,
                          bool   v_trans,
@@ -111,8 +111,10 @@ public:
                      uint32_t   n_pad,
                      uint32_t   n_swa,
                llama_swa_type   swa_type,
+               llama_memory_t   mem_other,
         const layer_filter_cb & filter,
-        const  layer_reuse_cb & reuse);
+        const  layer_reuse_cb & reuse,
+        const  layer_share_cb & share);
 
     ~llama_kv_cache();
 
@@ -128,6 +130,10 @@ public:
     llama_memory_context_ptr init_full() override;
 
     llama_memory_context_ptr init_update(llama_context * lctx, bool optimize) override;
+
+    uint32_t get_kv_n_stream() const override;
+    uint32_t get_kv_size() const override;
+    llama_memory_context_ptr init_kv_batch(const std::vector<llama_ubatch> & ubatches) override;
 
     bool get_can_shift() const override;
 
@@ -160,6 +166,7 @@ public:
 
     uint32_t get_size()     const;
     uint32_t get_n_stream() const;
+    uint32_t get_stream_for_seq(llama_seq_id seq_id) const;
 
     // return all cell indices for seq_id at the given position
     std::vector<uint32_t> cells_at(llama_seq_id seq_id, llama_pos p) const;
@@ -232,6 +239,9 @@ public:
     void set_input_k_rot_backend(ggml_tensor * dst) const;
     void set_input_v_rot_backend(ggml_tensor * dst) const;
 
+    // read-only access to the KV cell metadata for a given stream
+    const llama_kv_cells & get_cells(uint32_t stream) const { return v_cells[stream]; }
+
     //
     // TriAttention KV cache eviction
     //
@@ -300,7 +310,12 @@ private:
     // note: this is not part of the KV state and it's only used to speed-up the find_slot() method
     std::vector<uint32_t> v_heads;
 
-    std::vector<llama_kv_cells> v_cells;
+    // TODO: temporary until we refactor to be able to share the same cells between 2 kv caches [TAG_KV_CACHE_SHARE_CELLS]
+    llama_kv_cache * other;
+
+    std::shared_ptr<llama_kv_cells_vec> v_cells_impl;
+
+    llama_kv_cells_vec & v_cells;
 
     // maps from a sequence id to a stream id
     std::vector<uint32_t> seq_to_stream;
@@ -395,20 +410,20 @@ public:
     // llama_kv_cache_context specific API
     //
 
-    uint32_t get_n_kv() const;
-    llama_kv_cache * get_kv() const;
-    const llama_kv_cache::slot_info & current_sinfo() const;
+    virtual uint32_t get_n_kv() const;
+    virtual llama_kv_cache * get_kv() const;
+    virtual const llama_kv_cache::slot_info & current_sinfo() const;
 
-    ggml_type type_k() const;
-    ggml_type type_v() const;
+    virtual ggml_type type_k() const;
+    virtual ggml_type type_v() const;
 
     // get views of the current state of the cache
-    ggml_tensor * get_k(ggml_context * ctx, int32_t il) const;
-    ggml_tensor * get_v(ggml_context * ctx, int32_t il) const;
+    virtual ggml_tensor * get_k(ggml_context * ctx, int32_t il) const;
+    virtual ggml_tensor * get_v(ggml_context * ctx, int32_t il) const;
 
     // TurboQuant rotation accessors
-    ggml_tensor * get_turbo_rotation() const;
-    ggml_tensor * get_turbo_rotation_inv() const;
+    virtual ggml_tensor * get_turbo_rotation() const;
+    virtual ggml_tensor * get_turbo_rotation_inv() const;
 
     // Override virtual methods from llama_memory_context_i
     ggml_tensor * get_turbo_rot_forward() const override;
@@ -420,31 +435,31 @@ public:
     //   - k_idxs [n_tokens]
     //   - v_cur  [n_embd_head_v, n_head_v, n_tokens]
     //   - v_idxs [n_tokens] or [n_tokens*n_embd_v_gqa] depending if V cache is transposed
-    ggml_tensor * cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il) const;
-    ggml_tensor * cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggml_tensor * v_idxs, int32_t il) const;
+    virtual ggml_tensor * cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il) const;
+    virtual ggml_tensor * cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggml_tensor * v_idxs, int32_t il) const;
 
     // create destination indices for each head of the current batch for where it would be written in the KV cache
     // the indices address the global KV cache (not per stream) - this is not relevant for the user of this API, but
     //   helps understand the implementation logic of cpy_k and cpy_v
-    ggml_tensor * build_input_k_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const;
-    ggml_tensor * build_input_v_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const;
+    virtual ggml_tensor * build_input_k_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const;
+    virtual ggml_tensor * build_input_v_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const;
 
-    ggml_tensor * build_input_k_rot(ggml_context * ctx) const;
-    ggml_tensor * build_input_v_rot(ggml_context * ctx) const;
+    virtual ggml_tensor * build_input_k_rot(ggml_context * ctx) const;
+    virtual ggml_tensor * build_input_v_rot(ggml_context * ctx) const;
 
-    void set_input_k_idxs(ggml_tensor * dst, const llama_ubatch * ubatch) const;
-    void set_input_v_idxs(ggml_tensor * dst, const llama_ubatch * ubatch) const;
-    void set_input_k_idxs_backend(ggml_tensor * dst, const llama_ubatch * ubatch) const;
-    void set_input_v_idxs_backend(ggml_tensor * dst, const llama_ubatch * ubatch) const;
+    virtual void set_input_k_idxs(ggml_tensor * dst, const llama_ubatch * ubatch) const;
+    virtual void set_input_v_idxs(ggml_tensor * dst, const llama_ubatch * ubatch) const;
+    virtual void set_input_k_idxs_backend(ggml_tensor * dst, const llama_ubatch * ubatch) const;
+    virtual void set_input_v_idxs_backend(ggml_tensor * dst, const llama_ubatch * ubatch) const;
 
-    void set_input_k_shift   (ggml_tensor * dst) const;
-    void set_input_kq_mask   (ggml_tensor * dst, const llama_ubatch * ubatch, bool causal_attn) const;
-    void set_input_pos_bucket(ggml_tensor * dst, const llama_ubatch * ubatch) const;
+    virtual void set_input_k_shift   (ggml_tensor * dst) const;
+    virtual void set_input_kq_mask   (ggml_tensor * dst, const llama_ubatch * ubatch, bool causal_attn) const;
+    virtual void set_input_pos_bucket(ggml_tensor * dst, const llama_ubatch * ubatch) const;
 
-    void set_input_k_rot(ggml_tensor * dst) const;
-    void set_input_v_rot(ggml_tensor * dst) const;
-    void set_input_k_rot_backend(ggml_tensor * dst) const;
-    void set_input_v_rot_backend(ggml_tensor * dst) const;
+    virtual void set_input_k_rot(ggml_tensor * dst) const;
+    virtual void set_input_v_rot(ggml_tensor * dst) const;
+    virtual void set_input_k_rot_backend(ggml_tensor * dst) const;
+    virtual void set_input_v_rot_backend(ggml_tensor * dst) const;
 
 private:
     llama_memory_status status;

@@ -39,7 +39,8 @@ public:
                      bool   unified,
                             /* layer filters */
     const layer_filter_cb & filter_attn = nullptr,
-    const layer_filter_cb & filter_recr = nullptr);
+    const layer_filter_cb & filter_recr = nullptr,
+          llama_kvarn_params kvarn = llama_kvarn_default_params());
 
     ~llama_memory_hybrid_iswa() = default;
 
@@ -60,6 +61,7 @@ public:
 
     void clear(bool data) override;
 
+    bool can_seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) const override;
     bool seq_rm  (llama_seq_id seq_id,                              llama_pos p0, llama_pos p1) override;
     bool seq_rm_cell(llama_seq_id seq_id, uint32_t cell_idx) override;
 
@@ -67,6 +69,7 @@ public:
 
     void seq_cp  (llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1) override;
     void seq_cp_recurrent(llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1) override;
+    bool seq_rm_recurrent(llama_seq_id seq_id, llama_pos p0, llama_pos p1) override;
     void recurrent_copy_profile_reset() override;
     llama_memory_recurrent_copy_profile recurrent_copy_profile() const override;
     void seq_keep(llama_seq_id seq_id)                                                          override;
@@ -80,6 +83,8 @@ public:
 
     // state write/load
 
+    bool requires_state_for_partial_restore() const override;
+    bool state_seq_restore_requires_exclusive_kv_stream() const override;
     void state_write(llama_io_write_i & io, llama_seq_id seq_id = -1, llama_state_seq_flags flags = 0) const override;
     void state_read (llama_io_read_i  & io, llama_seq_id seq_id = -1, llama_state_seq_flags flags = 0)       override;
 
@@ -120,8 +125,7 @@ public:
     // init success
     llama_memory_hybrid_iswa_context(
            llama_memory_hybrid_iswa * mem,
-                    slot_info_vec_t   sinfos_base,
-                    slot_info_vec_t   sinfos_swa,
+        llama_memory_context_ptr   ctx_attn_in,
           std::vector<llama_ubatch>   ubatches);
 
     ~llama_memory_hybrid_iswa_context() = default;
