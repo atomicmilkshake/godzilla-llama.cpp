@@ -1979,3 +1979,23 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
 bool ggml_cuda_flash_attn_ext_supported(int device, const ggml_tensor * dst) {
     return ggml_cuda_get_best_fattn_kernel(device, dst) != BEST_FATTN_KERNEL_NONE;
 }
+
+const char * ggml_cuda_fa_build_policy() {
+#if defined(GGML_CUDA_FA_ALL_QUANTS)
+    return "all";
+#elif defined(GGML_CUDA_FA_HALF_QUANTS)
+    return "half";
+#else
+    return "default";
+#endif
+}
+
+bool ggml_cuda_fa_pair_compiled(ggml_type type_K, ggml_type type_V) {
+#if defined(GGML_CUDA_FA_ALL_QUANTS)
+    GGML_UNUSED(type_K);
+    GGML_UNUSED(type_V);
+    return true;
+#else
+    return type_K == GGML_TYPE_F16 && type_V == GGML_TYPE_F16;
+#endif
+}
