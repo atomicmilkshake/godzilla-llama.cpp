@@ -862,7 +862,8 @@ extern "C" {
                             bool   disable_trig,
                             bool   enable_logging,
                          int32_t   hard_prefix,
-                         int32_t   buckets);
+                         int32_t   buckets,
+                         int32_t   spec_protect_extra);
 
     //
     // State / sessions

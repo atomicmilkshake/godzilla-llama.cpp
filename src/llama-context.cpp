@@ -9308,7 +9308,8 @@ int32_t llama_triattention_init(
                         bool   disable_trig,
                         bool   enable_logging,
                      int32_t   hard_prefix,
-                     int32_t   buckets) {
+                     int32_t   buckets,
+                     int32_t   spec_protect_extra) {
     if (!ctx || !stats_path || stats_path[0] == '\0') {
         return -1;
     }
@@ -9350,8 +9351,9 @@ int32_t llama_triattention_init(
     cfg.disable_mlr      = disable_mlr;
     cfg.disable_trig     = disable_trig;
     cfg.enable_logging   = enable_logging;
-    cfg.hard_prefix      = (uint32_t)hard_prefix;
-    cfg.buckets          = (uint32_t)buckets;
+    cfg.hard_prefix         = (uint32_t)hard_prefix;
+    cfg.buckets             = (uint32_t)buckets;
+    cfg.spec_protect_extra  = (uint32_t)std::max(0, spec_protect_extra);
 
     kv->init_triattention(stats_path, &cfg);
     return kv->has_triattention() ? 0 : -1;

@@ -146,6 +146,7 @@ struct triattention_config {
 
     uint32_t hard_prefix;         // V3: protect first N token positions from eviction (0 = off)
     uint32_t buckets;             // V3: position buckets (reserved; default 8)
+    uint32_t spec_protect_extra;  // Extra recent positions to retain for speculative draft-verify
 };
 
 // Runtime state — one per KV cache instance

@@ -1286,6 +1286,14 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
 
     // Initialize TriAttention KV cache eviction if calibration stats provided
     if (!params.triattention_stats.empty()) {
+        int32_t spec_protect_extra = 0;
+        if (params.speculative.type() != COMMON_SPECULATIVE_TYPE_NONE || !params.speculative.types.empty()) {
+            spec_protect_extra = common_speculative_n_max(&params.speculative);
+            if (params.speculative.has_type(COMMON_SPECULATIVE_TYPE_DFLASH)) {
+                // DFlash verify batches can span n_max drafts plus the sampled bonus token.
+                spec_protect_extra += 2;
+            }
+        }
         int32_t rc = llama_triattention_init(lctx,
             params.triattention_stats.c_str(),
             params.triattention_budget,
@@ -1301,7 +1309,8 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
             params.triattention_disable_trig,
             params.triattention_log,
             params.triattention_hard_prefix,
-            params.triattention_buckets);
+            params.triattention_buckets,
+            spec_protect_extra);
         if (rc != 0) {
             LOG_WRN("%s: TriAttention initialization failed (stats=%s) — continuing without eviction\n",
                     __func__, params.triattention_stats.c_str());

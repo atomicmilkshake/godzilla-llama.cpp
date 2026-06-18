@@ -20,6 +20,10 @@ Maximum quality reference; highest VRAM.
 
 Optional InnerQ calibration (spiritbuun path): set env `TURBO_INNERQ=1` during first prefill window.
 
+When speculative decoding is enabled alongside TriAttention, Godzilla extends the recent-token
+protection window by `common_speculative_n_max()` (+2 for DFlash) so draft-verify KV cells are
+not pruned mid-cycle.
+
 ## Profile: `turbo-tcq`
 
 Trellis-coded KV; better precision at ~2–3 bit effective.

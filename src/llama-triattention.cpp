@@ -1125,7 +1125,8 @@ int32_t triattention_prune_impl(
         }
     }
 
-    const int32_t recent_threshold = max_pos - (int32_t)cfg.divide_length + 1;
+    const uint32_t recent_window = cfg.divide_length + cfg.spec_protect_extra;
+    const int32_t recent_threshold = max_pos - (int32_t)recent_window + 1;
 
     std::vector<uint32_t> decode_local_idx;   // index into occupied_indices
     std::vector<uint32_t> decode_cell_idx;    // actual cell indices
@@ -1451,7 +1452,7 @@ int32_t triattention_prune_impl(
         fprintf(stderr, "[TriAttention] Pruned: %u → %u tokens (%u evicted, %u protected [prefix=%lld, recent=%d]), "
                 "%.2f ms [%s], pos=%lld\n",
                 n_occupied, n_occupied - n_evicted, n_evicted, n_protected,
-                (long long)state->prefix_length, (int)cfg.divide_length,
+                (long long)state->prefix_length, (int)recent_window,
                 state->last_prune_time_ms, state->use_gpu ? "GPU" : "CPU",
                 (long long)state->absolute_position);
     }
