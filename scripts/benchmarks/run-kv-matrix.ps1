@@ -40,7 +40,7 @@ if (-not (Test-Path $WikiFile)) {
 from datasets import load_dataset
 from pathlib import Path
 out = Path(r"$WikiFile")
-ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test", trust_remote_code=True)
+    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
 text = "\n".join(ds["text"])
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(text, encoding="utf-8")
@@ -53,11 +53,8 @@ if (-not (Test-Path $WikiFile)) { throw "wikitext missing: $WikiFile" }
 $configs = [System.Collections.Generic.List[hashtable]]::new()
 $configs.Add(@{ Label = "f16/f16 baseline"; K = "f16"; V = "f16"; Tri = $false })
 $configs.Add(@{ Label = "turbo3/turbo4"; K = "turbo3"; V = "turbo4"; Tri = $false })
-$configs.Add(@{ Label = "turbo3/turbo4asym"; K = "turbo3"; V = "turbo4asym"; Tri = $false })
 $configs.Add(@{ Label = "turbo2_tcq/turbo3_tcq"; K = "turbo2_tcq"; V = "turbo3_tcq"; Tri = $false })
-if ($TriStats -and (Test-Path $TriStats)) {
-    $configs.Add(@{ Label = "turbo3/turbo4 + TriAttention"; K = "turbo3"; V = "turbo4"; Tri = $true })
-}
+# TriAttention is server-only (llama-perplexity has no --triattention-stats); use run-launch-smoke.ps1.
 
 function Invoke-PplRow {
     param($Cfg)
