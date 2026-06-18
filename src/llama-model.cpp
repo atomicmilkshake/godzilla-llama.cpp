@@ -2153,8 +2153,10 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 cparams.n_seq_max,
                                 cparams.n_ubatch,
                                 1,
+                                nullptr,
                                 filter,
-                                reuse);
+                                reuse,
+                                nullptr);
                     } else {
                         GGML_ASSERT(!hparams.is_swa_any());
 
@@ -2171,7 +2173,9 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 1,
                                 hparams.n_swa,
                                 hparams.swa_type,
+                                nullptr,
                                 filter,
+                                nullptr,
                                 nullptr);
                     }
                 }
