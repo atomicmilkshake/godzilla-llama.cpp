@@ -8,6 +8,7 @@
 #include <cuda_fp16.h>
 #endif
 #include "ggml-common.h"
+#include <mutex>
 
 // === InnerQ per-channel equalization ===
 // Scale K channels before L2 norm + FWHT to reduce quantization error on anisotropic distributions.
@@ -45,6 +46,8 @@ static float * h_extract_gpu_buf = nullptr;
 static int   * h_extract_gpu_pos = nullptr;
 static int     h_extract_max = 0;
 static int     h_extract_state = 0;  // 0=uninit, 1=collecting, 2=done
+static std::once_flag h_extract_init_flag;
+static std::mutex     h_extract_check_mutex;
 
 static void turbo_extract_init(int max_samples) {
 	int cur_device;
@@ -60,6 +63,9 @@ static void turbo_extract_init(int max_samples) {
 		cudaMemcpyToSymbol(d_extract_buf_ptr, &h_extract_gpu_buf, sizeof(float *));
 		cudaMemcpyToSymbol(d_extract_pos_ptr, &h_extract_gpu_pos, sizeof(int *));
 		cudaMemcpyToSymbol(d_extract_max_val, &max_samples, sizeof(int));
+		if (id != cur_device) {
+			cudaDeviceEnablePeerAccess(cur_device, 0);
+		}
 	}
 	cudaSetDevice(cur_device);
 	h_extract_max = max_samples;
@@ -485,7 +491,7 @@ void dequantize_turbo3_0(const void * vx, const int64_t ib, const int iqs, float
       const uint8_t low2 = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       const uint8_t hi1  = (x[ib].signs[j/8] >> (j%8)) & 0x1;
       v.x = d_turbo_centroids_3bit[low2 | (hi1 << 2)] * norm; }
-    { const int j = iqs + QK_TURBO3 / 2;
+    { const int j = iqs + 16;
       const uint8_t low2 = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       const uint8_t hi1  = (x[ib].signs[j/8] >> (j%8)) & 0x1;
       v.y = d_turbo_centroids_3bit[low2 | (hi1 << 2)] * norm; }
@@ -609,7 +615,7 @@ void dequantize_turbo2_0(const void * vx, const int64_t ib, const int iqs, float
     { const int j = iqs;
       const uint8_t idx = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       v.x = d_turbo_centroids_2bit[idx] * norm; }
-    { const int j = iqs + QK_TURBO2 / 2;
+    { const int j = iqs + 16;
       const uint8_t idx = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       v.y = d_turbo_centroids_2bit[idx] * norm; }
 }

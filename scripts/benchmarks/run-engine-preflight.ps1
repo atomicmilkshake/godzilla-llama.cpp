@@ -15,7 +15,9 @@ if (-not (Test-Path $Binary)) {
 }
 
 $help = & $Binary --help 2>&1 | Out-String
-$verLine = ($help -split "`n" | Where-Object { $_ -match "version:" } | Select-Object -First 1)
+$verOut = & $Binary --version 2>&1 | Out-String
+$verLine = ($verOut -split "`n" | Where-Object { $_ -match "version:" } | Select-Object -First 1)
+if (-not $verLine) { $verLine = ($verOut -split "`n" | Select-Object -First 1) }
 $bin = Get-Item $Binary
 $impl = Join-Path (Split-Path $Binary) "llama-server-impl.dll"
 $sizeMb = if ((Test-Path $impl) -and $bin.Length -lt 100000) {
@@ -36,7 +38,7 @@ $report = [ordered]@{
     branch        = (git -C $RepoRoot rev-parse --abbrev-ref HEAD 2>$null)
     commit        = (git -C $RepoRoot rev-parse --short HEAD 2>$null)
     binary_path   = $Binary
-    version_line  = $verLine.Trim()
+    version_line  = if ($verLine) { $verLine.Trim() } else { "" }
     binary_size_mb = $sizeMb
     binary_mtime_utc = $bin.LastWriteTimeUtc.ToString("o")
     cuda_dll_present = $cudaDll
