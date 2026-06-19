@@ -8,7 +8,8 @@ param(
     [string]$WikiFile = "",
     [int]$CtxSize = 512,
     [int]$TriBudget = 2048,
-    [int]$TriWindow = 128
+    [int]$TriWindow = 128,
+    [switch]$IncludeKvarn
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,6 +55,10 @@ $configs = [System.Collections.Generic.List[hashtable]]::new()
 $configs.Add(@{ Label = "f16/f16 baseline"; K = "f16"; V = "f16"; Tri = $false })
 $configs.Add(@{ Label = "turbo3/turbo4"; K = "turbo3"; V = "turbo4"; Tri = $false })
 $configs.Add(@{ Label = "turbo2_tcq/turbo3_tcq"; K = "turbo2_tcq"; V = "turbo3_tcq"; Tri = $false })
+if ($IncludeKvarn) {
+    $configs.Add(@{ Label = "kvarn3/kvarn3"; K = "kvarn3"; V = "kvarn3"; Tri = $false })
+    $configs.Add(@{ Label = "kvarn4/kvarn4"; K = "kvarn4"; V = "kvarn4"; Tri = $false })
+}
 # TriAttention is server-only (llama-perplexity has no --triattention-stats); use run-launch-smoke.ps1.
 
 function Invoke-PplRow {
