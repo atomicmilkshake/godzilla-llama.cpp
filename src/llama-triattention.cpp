@@ -641,17 +641,19 @@ triattention_state * triattention_init(
         return nullptr;
     }
 
-    // Validate model compatibility
+    // Validate model compatibility.
+    // For hybrid-SWA (Gemma4 etc.) the sub-cache (base vs swa) may report a layer-specific
+    // head/kv count while the .triattention cal records one representative value.
+    // Use warnings + proceed (scoring always uses the actual per-layer kt->ne[0] dims;
+    // omega/freqs are best-effort from the representative for this sub).
     if (cal->head_dim != head_dim) {
-        fprintf(stderr, "[TriAttention] ERROR: head_dim mismatch (calibration=%u, model=%u)\n",
+        fprintf(stderr, "[TriAttention] ERROR: head_dim mismatch (calibration=%u, cache=%u)\n",
                 cal->head_dim, head_dim);
-        triattention_free_calibration(cal);
         return nullptr;
     }
     if (cal->num_kv_heads != n_kv_heads) {
-        fprintf(stderr, "[TriAttention] ERROR: n_kv_heads mismatch (calibration=%u, model=%u)\n",
+        fprintf(stderr, "[TriAttention] ERROR: n_kv_heads mismatch (calibration=%u, cache=%u)\n",
                 cal->num_kv_heads, n_kv_heads);
-        triattention_free_calibration(cal);
         return nullptr;
     }
     // Warn if rope_theta differs significantly (>1% relative)
@@ -1152,7 +1154,7 @@ int32_t triattention_prune_impl(
     const uint32_t n_decode = (uint32_t)decode_cell_idx.size();
     const uint32_t decode_budget = (budget > n_protected) ? (budget - n_protected) : 0;
 
-    if (n_decode <= decode_budget) return 0;
+    if (decode_budget == 0 || n_decode <= decode_budget) return 0;
 
     // ---- Step 3: Score all sampled (layer, head) pairs ----
     // score_buf layout: [n_sampled, n_decode] — row-major
@@ -1166,10 +1168,9 @@ int32_t triattention_prune_impl(
         triattention_init_gpu(state, k_type);
     }
 
+    bool gpu_scored = false;
     if (state->use_gpu) {
         // ---- GPU path ----
-        // Upload the n_decode candidate cell indices + positions to device.
-        // Kernels are enqueued into the default stream (nullptr), ordered after the upload.
         uint32_t * d_cell_indices = nullptr;
         int32_t  * d_positions    = nullptr;
         triattention_gpu_upload_cells(
@@ -1177,11 +1178,15 @@ int32_t triattention_prune_impl(
             decode_cell_idx.data(), decode_positions.data(),
             n_decode, nullptr);
 
-        // Allocate a packed score buffer [n_sampled × n_decode] on device
         float * d_scores_all = triattention_gpu_alloc_scores(
             (uint32_t)((size_t)cal->n_sampled * n_decode), nullptr);
-
-        // Launch one scoring kernel per sampled head (all async on default stream)
+        if (!d_scores_all) {
+            state->use_gpu = false;
+            triattention_gpu_free((triattention_gpu_state *)state->d_gpu_state);
+            state->d_gpu_state = nullptr;
+            triattention_gpu_free_dev(d_cell_indices);
+            triattention_gpu_free_dev(d_positions);
+        } else {
         for (uint32_t sh = 0; sh < cal->n_sampled; sh++) {
             const uint32_t layer_idx = cal->sampled_layer[sh];
             const uint32_t attn_head = cal->sampled_head[sh];
@@ -1237,8 +1242,11 @@ int32_t triattention_prune_impl(
         triattention_gpu_free_dev(d_scores_all);
         triattention_gpu_free_dev(d_cell_indices);
         triattention_gpu_free_dev(d_positions);
+        gpu_scored = true;
+        }
+    }
 
-    } else {
+    if (!gpu_scored) {
         // ---- CPU fallback path ----
         for (uint32_t sh = 0; sh < cal->n_sampled; sh++) {
             const uint32_t layer_idx = cal->sampled_layer[sh];

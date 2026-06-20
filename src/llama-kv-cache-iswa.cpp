@@ -66,6 +66,9 @@ llama_kv_cache_iswa::llama_kv_cache_iswa(
         LLAMA_LOG_INFO("%s: KVarN enabled for all layers (non-SWA full-context and SWA sliding-window ring)\n", __func__);
     }
 
+    // Note: TriAttention wiring for hybrid ISWA happens in llama_triattention_init (inits both base + swa subs
+    // when they are plain kv_cache). KVarN subs intentionally skip tri (different storage).
+
     auto make_cache = [&](uint32_t size, uint32_t n_swa, llama_swa_type swa_type, const layer_filter_cb & layer_filter, llama_memory_t cache_mem_other, bool enable_kvarn) -> std::unique_ptr<llama_memory_i> {
         // SWA KVarN ring requires a unified (single-stream) cache; fall back to the
         // normal quantized KV cache for SWA layers when multi-stream is in use.

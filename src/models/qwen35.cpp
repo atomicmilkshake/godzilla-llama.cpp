@@ -59,14 +59,16 @@ void llama_model_qwen35::load_arch_tensors(llama_model_loader & ml) {
     auto load_block_trunk = [&](int il, int flags) {
         auto & layer = layers[il];
 
-        // Calculate dimensions from hyperparameters
-        const int64_t head_k_dim = hparams.ssm_d_state;
-        const int64_t head_v_dim = hparams.ssm_d_state;
+        // Calculate dimensions from hyperparameters (must match graph::build_layer_attn_linear)
         const int64_t n_k_heads  = hparams.ssm_n_group;
         const int64_t n_v_heads  = hparams.ssm_dt_rank;
+        GGML_ASSERT(hparams.ssm_d_state * hparams.ssm_dt_rank == hparams.ssm_d_inner);
+        const int64_t head_k_dim = hparams.ssm_d_state;
+        const int64_t head_v_dim = hparams.ssm_d_inner / n_v_heads;
         const int64_t key_dim    = head_k_dim * n_k_heads;
         const int64_t value_dim  = head_v_dim * n_v_heads;
         const int64_t conv_dim   = key_dim * 2 + value_dim;
+        const int64_t qkvz_dim   = 2 * head_k_dim + 2 * head_v_dim * (n_v_heads / n_k_heads);
 
         layer.attn_norm      = create_tensor(tn(LLM_TENSOR_ATTN_NORM,      "weight", il), { n_embd }, flags);
         layer.attn_post_norm = create_tensor(tn(LLM_TENSOR_ATTN_POST_NORM, "weight", il), { n_embd }, flags);
@@ -82,6 +84,7 @@ void llama_model_qwen35::load_arch_tensors(llama_model_loader & ml) {
         } else {
             // Linear attention (gated delta net) specific tensors
             // Create tensors with calculated dimensions
+            layer.ssm_in         = create_tensor(tn(LLM_TENSOR_SSM_IN,         "weight", il), { n_embd, qkvz_dim }, TENSOR_NOT_REQUIRED);
             layer.wqkv           = create_tensor(tn(LLM_TENSOR_ATTN_QKV,       "weight", il), { n_embd, key_dim * 2 + value_dim }, TENSOR_NOT_REQUIRED);
             layer.wqkv_gate      = create_tensor(tn(LLM_TENSOR_ATTN_GATE,      "weight", il), { n_embd, value_dim }, TENSOR_NOT_REQUIRED);
             layer.ssm_conv1d     = create_tensor(tn(LLM_TENSOR_SSM_CONV1D,     "weight", il), { hparams.ssm_d_conv, conv_dim }, flags);
@@ -328,15 +331,65 @@ llama_model_qwen35::graph::graph(const llama_model & model, const llm_graph_para
 std::pair<ggml_tensor *, ggml_tensor *> llama_model_qwen35::graph::build_qkvz(
                 ggml_tensor * input,
                         int   il) {
+    const int64_t d_inner      = hparams.ssm_d_inner;
     const int64_t n_seqs       = ubatch.n_seqs;
     const int64_t n_seq_tokens = ubatch.n_seq_tokens;
+    const int64_t head_k_dim   = hparams.ssm_d_state;
+    const int64_t num_k_heads  = hparams.ssm_n_group;
+    const int64_t num_v_heads  = hparams.ssm_dt_rank;
+    const int64_t head_v_dim   = d_inner / num_v_heads;
 
-    ggml_tensor * qkv_mixed = build_lora_mm(model.layers[il].wqkv, input, model.layers[il].wqkv_s);
-    qkv_mixed = ggml_reshape_3d(ctx0, qkv_mixed, qkv_mixed->ne[0], n_seq_tokens, n_seqs);
-    cb(qkv_mixed, "linear_attn_qkv_mixed", il);
+    if (model.layers[il].wqkv) {
+        ggml_tensor * qkv_mixed = build_lora_mm(model.layers[il].wqkv, input, model.layers[il].wqkv_s);
+        qkv_mixed = ggml_reshape_3d(ctx0, qkv_mixed, qkv_mixed->ne[0], n_seq_tokens, n_seqs);
+        cb(qkv_mixed, "linear_attn_qkv_mixed", il);
 
-    ggml_tensor * z = build_lora_mm(model.layers[il].wqkv_gate, input, model.layers[il].wqkv_gate_s);
+        ggml_tensor * z = build_lora_mm(model.layers[il].wqkv_gate, input, model.layers[il].wqkv_gate_s);
+        cb(z, "z", il);
+
+        return { qkv_mixed, z };
+    }
+
+    ggml_tensor * mixed_qkvz = build_lora_mm(model.layers[il].ssm_in, input, model.layers[il].ssm_in_s);
+    cb(mixed_qkvz, "linear_attn_mixed_qkvz", il);
+
+    const int64_t qkvz_new_dim = 2 * head_k_dim + 2 * head_v_dim * (num_v_heads / num_k_heads);
+    ggml_tensor * mixed_qkvz_reshaped = ggml_reshape_4d(ctx0, mixed_qkvz, qkvz_new_dim, num_k_heads, n_seq_tokens, n_seqs);
+
+    const int64_t split_sizes_qkvz[4] = {
+        head_k_dim,
+        head_k_dim,
+        head_v_dim * num_v_heads / num_k_heads,
+        head_v_dim * num_v_heads / num_k_heads,
+    };
+
+    ggml_tensor * query = ggml_view_4d(ctx0, mixed_qkvz_reshaped, split_sizes_qkvz[0], num_k_heads, n_seq_tokens, n_seqs,
+            mixed_qkvz_reshaped->nb[1], mixed_qkvz_reshaped->nb[2], mixed_qkvz_reshaped->nb[3], 0);
+    cb(query, "q", il);
+
+    ggml_tensor * key = ggml_view_4d(ctx0, mixed_qkvz_reshaped, split_sizes_qkvz[1], num_k_heads, n_seq_tokens, n_seqs,
+            mixed_qkvz_reshaped->nb[1], mixed_qkvz_reshaped->nb[2], mixed_qkvz_reshaped->nb[3],
+            split_sizes_qkvz[0] * ggml_element_size(mixed_qkvz_reshaped));
+    cb(key, "k", il);
+
+    ggml_tensor * value = ggml_view_4d(ctx0, mixed_qkvz_reshaped, split_sizes_qkvz[2], num_k_heads, n_seq_tokens, n_seqs,
+            mixed_qkvz_reshaped->nb[1], mixed_qkvz_reshaped->nb[2], mixed_qkvz_reshaped->nb[3],
+            (split_sizes_qkvz[0] + split_sizes_qkvz[1]) * ggml_element_size(mixed_qkvz_reshaped));
+    cb(value, "v", il);
+
+    ggml_tensor * z = ggml_view_4d(ctx0, mixed_qkvz_reshaped, split_sizes_qkvz[3], num_k_heads, n_seq_tokens, n_seqs,
+            mixed_qkvz_reshaped->nb[1], mixed_qkvz_reshaped->nb[2], mixed_qkvz_reshaped->nb[3],
+            (split_sizes_qkvz[0] + split_sizes_qkvz[1] + split_sizes_qkvz[2]) * ggml_element_size(mixed_qkvz_reshaped));
+    z = ggml_cont(ctx0, z);
     cb(z, "z", il);
+
+    ggml_tensor * query_flat = ggml_cont_3d(ctx0, query, head_k_dim * num_k_heads, n_seq_tokens, n_seqs);
+    ggml_tensor * key_flat   = ggml_cont_3d(ctx0, key,   head_k_dim * num_k_heads, n_seq_tokens, n_seqs);
+    ggml_tensor * value_flat = ggml_cont_3d(ctx0, value, head_v_dim * num_v_heads, n_seq_tokens, n_seqs);
+
+    ggml_tensor * qkv_mixed = ggml_concat(ctx0, query_flat, key_flat, 0);
+    qkv_mixed = ggml_concat(ctx0, qkv_mixed, value_flat, 0);
+    cb(qkv_mixed, "qkv_mixed", il);
 
     return { qkv_mixed, z };
 }

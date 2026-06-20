@@ -12,6 +12,12 @@ void llama_model_lfm2moe::load_arch_hparams(llama_model_loader & ml) {
     for (uint32_t il = 0; il < hparams.n_layer; ++il) {
         hparams.recurrent_layer_arr[il] = hparams.n_head_kv(il) == 0;
     }
+    if (const auto is_swa = ml.get_key(LLM_KV_ATTENTION_SLIDING_WINDOW, hparams.n_swa, false); is_swa && hparams.n_swa > 0) {
+        hparams.swa_type = LLAMA_SWA_TYPE_STANDARD;
+        for (uint32_t il = 0; il < hparams.n_layer; ++il) {
+            hparams.swa_layers[il] = !hparams.recurrent_layer_arr[il];
+        }
+    }
 
     switch (hparams.n_layer) {
         case 24: type = LLM_TYPE_8B_A1B;  break;

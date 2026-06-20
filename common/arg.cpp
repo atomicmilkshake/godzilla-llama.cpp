@@ -60,6 +60,7 @@ static std::initializer_list<enum llama_example> mmproj_examples = {
 };
 
 static void common_params_kvarn_normalize(common_params & params);
+static void common_params_triattention_normalize(common_params & params);
 static void common_params_speculative_normalize(common_params & params);
 
 static std::string read_file(const std::string & fname) {
@@ -718,6 +719,7 @@ static bool common_params_parse_ex(int argc, char ** argv, common_params_context
     postprocess_cpu_params(params.speculative.draft.cpuparams,       &params.cpuparams);
     postprocess_cpu_params(params.speculative.draft.cpuparams_batch, &params.cpuparams_batch);
     common_params_kvarn_normalize(params);
+    common_params_triattention_normalize(params);
     common_params_speculative_normalize(params);
 
     if (params.prompt_cache_all && (params.interactive || params.interactive_first)) {
@@ -1059,6 +1061,48 @@ static void common_params_kvarn_normalize(common_params & params) {
 
     if (params.grp_attn_n != 1) {
         throw std::invalid_argument("KVarN does not support Self-Extend/group attention; use --grp-attn-n 1");
+    }
+}
+
+static void common_params_triattention_normalize(common_params & params) {
+    const bool tri_tuned =
+        params.triattention_budget != 2048 ||
+        params.triattention_window != 128 ||
+        params.triattention_offset_max != 65536 ||
+        params.triattention_mode != 0 ||
+        params.triattention_trigger != 0 ||
+        params.triattention_agg != 0 ||
+        params.triattention_seed != 0 ||
+        params.triattention_normalize ||
+        !params.triattention_protect_prefill ||
+        params.triattention_disable_mlr ||
+        params.triattention_disable_trig ||
+        params.triattention_log ||
+        params.triattention_hard_prefix != 128 ||
+        params.triattention_buckets != 8;
+
+    if (tri_tuned && params.triattention_stats.empty()) {
+        throw std::invalid_argument(
+            "TriAttention tuning flags require --triattention-stats <path.triattention>");
+    }
+
+    if (!params.triattention_stats.empty()) {
+        if (params.triattention_hard_prefix > params.triattention_budget) {
+            LOG_WRN("warning: --triattention-hard-prefix (%d) > --triattention-budget (%d); clamping\n",
+                    params.triattention_hard_prefix, params.triattention_budget);
+            params.triattention_hard_prefix = params.triattention_budget;
+        }
+        if (params.triattention_budget < 1) {
+            throw std::invalid_argument("--triattention-budget must be >= 1");
+        }
+        if (params.triattention_window < 1) {
+            throw std::invalid_argument("--triattention-window must be >= 1");
+        }
+    }
+
+    if (!params.triattention_stats.empty() &&
+            (params.cache_kvarn_bits_k > 0 || params.cache_kvarn_bits_v > 0)) {
+        LOG_WRN("warning: TriAttention + KVarN is experimental; eviction may be disabled on KVarN sub-caches\n");
     }
 }
 

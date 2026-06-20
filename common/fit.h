@@ -36,6 +36,9 @@ void common_fit_print(
 
 void common_memory_breakdown_print(const struct llama_context * ctx);
 
+// Peek GGUF metadata (no tensor alloc) to detect hybrid-SWA models (Gemma4 etc.).
+bool common_model_has_hybrid_swa(const char * path_model);
+
 // Load a model + context with no_alloc and return the per-device memory breakdown.
 std::vector<llama_device_memory_data> common_get_device_memory_data(
                                   const char   * path_model,

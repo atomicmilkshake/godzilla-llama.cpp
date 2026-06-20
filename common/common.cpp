@@ -1246,15 +1246,24 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
     auto mparams = common_model_params_to_llama(params);
     auto cparams = common_context_params_to_llama(params);
 
+    // Autodetect hybrid-SWA models (Gemma4 etc. with per-layer sliding window) and skip
+    // the problematic auto-fit step entirely. This makes launch seamless: no hang,
+    // no "fitting params" spam, command-line -ngl/-c etc. are respected as-is.
+    const bool skip_fit = params.fit_params && common_model_has_hybrid_swa(params.model.path.c_str());
+
     if (params.fit_params) {
-        LOG_INF("%s: fitting params to device memory ...\n", __func__);
-        LOG_INF("%s: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n", __func__);
-        common_fit_params(params.model.path.c_str(), &mparams, &cparams,
-            params.tensor_split,
-            params.tensor_buft_overrides.data(),
-            params.fit_params_target.data(),
-            params.fit_params_min_ctx,
-            params.verbosity >= LOG_LEVEL_DEBUG ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_ERROR);
+        if (skip_fit) {
+            LOG_INF("%s: hybrid-SWA model detected (e.g. Gemma4); skipping auto-fit for seamless run (use explicit -ngl etc. if needed).\n", __func__);
+        } else {
+            LOG_INF("%s: fitting params to device memory ...\n", __func__);
+            LOG_INF("%s: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n", __func__);
+            common_fit_params(params.model.path.c_str(), &mparams, &cparams,
+                params.tensor_split,
+                params.tensor_buft_overrides.data(),
+                params.fit_params_target.data(),
+                params.fit_params_min_ctx,
+                params.verbosity >= LOG_LEVEL_DEBUG ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_ERROR);
+        }
     }
 
     llama_model * model = llama_model_load_from_file(params.model.path.c_str(), mparams);
@@ -1346,8 +1355,9 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
     // Initialize TriAttention KV cache eviction if calibration stats provided
     if (!params.triattention_stats.empty()) {
         if (!common_ensure_triattention_stats(params.model.path, params.triattention_stats)) {
-            LOG_WRN("%s: TriAttention calibration unavailable at %s\n",
+            LOG_ERR("%s: TriAttention calibration unavailable at %s — aborting init\n",
                     __func__, params.triattention_stats.c_str());
+            return;
         }
         int32_t spec_protect_extra = 0;
         if (params.speculative.type() != COMMON_SPECULATIVE_TYPE_NONE || !params.speculative.types.empty()) {
@@ -1375,8 +1385,10 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
             params.triattention_buckets,
             spec_protect_extra);
         if (rc != 0) {
-            LOG_WRN("%s: TriAttention initialization failed (stats=%s) — continuing without eviction\n",
+            LOG_ERR("%s: TriAttention initialization failed (stats=%s) — aborting init\n",
                     __func__, params.triattention_stats.c_str());
+            llama_free(lctx);
+            return;
         }
     }
 

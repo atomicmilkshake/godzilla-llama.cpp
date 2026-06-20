@@ -39,7 +39,8 @@ void llama_hparams::set_recr_pattern(uint32_t n_pattern, bool dense_first) {
 
 bool llama_hparams::is_swa_any() const {
     for (uint32_t il = 0; il < n_layer_all; ++il) {
-        if (is_swa_impl[il]) {
+        // Keep in sync with is_swa(): some arch loaders (e.g. gemma4) populate swa_layers only.
+        if (is_swa_impl[il] || swa_layers[il]) {
             return true;
         }
     }

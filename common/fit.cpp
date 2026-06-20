@@ -3,9 +3,11 @@
 #include "log.h"
 
 #include "../src/llama-ext.h"
+#include "../ggml/include/gguf.h"
 
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <stdexcept>
 #include <cinttypes>
 #include <set>
@@ -26,6 +28,45 @@ class common_params_fit_exception : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+// Cheap GGUF peek (no tensor alloc) to detect hybrid-SWA models (Gemma4 etc.).
+// These have complex per-layer KV sizes + separate SWA cache; their fit probes
+// are known to stall/hang or hit asserts. We skip auto-fit and rely on explicit -ngl.
+bool common_model_has_hybrid_swa(const char * path_model) {
+    if (!path_model || !*path_model) return false;
+    gguf_init_params params = { /*.no_alloc = */ true, /*.ctx = */ nullptr };
+    struct gguf_context * ctx = gguf_init_from_file(path_model, params);
+    if (!ctx) return false;
+
+    auto has_key = [&](const char * k) { return gguf_find_key(ctx, k) >= 0; };
+
+    bool has = false;
+    const int arch_id = gguf_find_key(ctx, "general.architecture");
+    if (arch_id >= 0) {
+        const char * arch = gguf_get_val_str(ctx, arch_id);
+        if (arch && arch[0]) {
+            const std::string prefix = std::string(arch) + ".attention.";
+            has = has_key((prefix + "sliding_window_pattern").c_str());
+            // Per-layer hybrid pattern only — not bare sliding_window (Gemma2/3 periodic SWA).
+        }
+    }
+    if (!has) {
+        for (int64_t i = 0, n = gguf_get_n_kv(ctx); i < n; ++i) {
+            const char * k = gguf_get_key(ctx, i);
+            if (k && strstr(k, ".attention.sliding_window_pattern")) {
+                has = true;
+                break;
+            }
+        }
+    }
+    // Legacy bare keys from pre-arch-prefix converters
+    if (!has) {
+        has = has_key("attention.sliding_window_pattern");
+    }
+
+    gguf_free(ctx);
+    return has;
+}
+
 std::vector<llama_device_memory_data> common_get_device_memory_data(
         const char * path_model,
         const llama_model_params * mparams,
@@ -35,6 +76,10 @@ std::vector<llama_device_memory_data> common_get_device_memory_data(
         uint32_t & hp_n_ctx_train,
         uint32_t & hp_n_expert,
         ggml_log_level log_level) {
+    if (common_model_has_hybrid_swa(path_model)) {
+        throw std::runtime_error("hybrid-SWA model: auto-fit memory probe skipped (use explicit -ngl/-c or -fit off)");
+    }
+
     struct user_data_t {
         struct {
             ggml_log_callback callback;
@@ -154,6 +199,10 @@ static void common_params_fit_impl(
         const char * path_model, struct llama_model_params * mparams, struct llama_context_params * cparams,
         float * tensor_split, struct llama_model_tensor_buft_override * tensor_buft_overrides,
         size_t * margins_s, uint32_t n_ctx_min, enum ggml_log_level log_level) {
+    if (common_model_has_hybrid_swa(path_model)) {
+        LOG_INF("%s: model uses hybrid SWA (e.g. Gemma4-ISWA); skipping auto-fit to avoid known init stalls/asserts. Rely on explicit -ngl/-c from preset or caller.\n", __func__);
+        return;
+    }
     if (mparams->split_mode == LLAMA_SPLIT_MODE_TENSOR) {
         throw common_params_fit_exception("llama_params_fit is not implemented for SPLIT_MODE_TENSOR, abort");
     }

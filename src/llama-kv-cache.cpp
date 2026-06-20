@@ -2935,8 +2935,16 @@ void llama_kv_cache::init_triattention(const char * stats_path, const triattenti
 
     const uint32_t kv_size = v_cells.empty() ? 0 : (uint32_t)v_cells[0].size();
     const double rope_theta = (double)hparams.rope_freq_base_train;
-    const uint32_t head_dim = hparams.n_embd_head_k(0);
-    const uint32_t n_kv_heads = hparams.n_head_kv(0);
+
+    // Use first managed layer's dims when available (critical for ISWA/hybrid subs:
+    // swa sub-caches only contain SWA layers which may have different n_embd_head_* and n_head_kv).
+    uint32_t head_dim = hparams.n_embd_head_k(0);
+    uint32_t n_kv_heads = hparams.n_head_kv(0);
+    if (!layers.empty()) {
+        uint32_t il0 = layers[0].il;
+        head_dim = hparams.n_embd_head_k(il0);
+        n_kv_heads = hparams.n_head_kv(il0);
+    }
 
     triattention_st = triattention_init(stats_path, cfg, kv_size, rope_theta, head_dim, n_kv_heads);
     if (!triattention_st) {

@@ -84,6 +84,15 @@ static bool llama_cache_type_is_turbo(ggml_type type) {
            type == GGML_TYPE_TURBO4_TCQ;
 }
 
+// Match llama_kv_cache turbo head padding: FWHT kernels use block-aligned head dims.
+static uint32_t llama_cache_effective_head_dim(uint32_t head_dim, ggml_type type) {
+    if (!llama_cache_type_is_turbo(type)) {
+        return head_dim;
+    }
+    const uint32_t blck_size = ggml_blck_size(type);
+    return ((head_dim + blck_size - 1) / blck_size) * blck_size;
+}
+
 struct llama_cuda_fa_pair_diag {
     bool available = false;
     bool pair_compiled = true;
@@ -8658,9 +8667,11 @@ llama_context * llama_init_from_model(
     if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_k)) {
         const uint32_t blck_size = ggml_blck_size(params.type_k);
         for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
-            if (model->hparams.n_embd_head_k(il) % blck_size != 0) {
-                LLAMA_LOG_ERROR("%s: K cache type %s with block size %u does not divide n_embd_head_k=%u\n",
-                    __func__, ggml_type_name(params.type_k), blck_size, model->hparams.n_embd_head_k(il));
+            const uint32_t head_k = model->hparams.n_embd_head_k(il);
+            const uint32_t eff_k  = llama_cache_effective_head_dim(head_k, params.type_k);
+            if (eff_k % blck_size != 0) {
+                LLAMA_LOG_ERROR("%s: K cache type %s with block size %u does not divide n_embd_head_k=%u (effective=%u)\n",
+                    __func__, ggml_type_name(params.type_k), blck_size, head_k, eff_k);
                 return nullptr;
             }
         }
@@ -8669,9 +8680,11 @@ llama_context * llama_init_from_model(
     if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_v)) {
         const uint32_t blck_size = ggml_blck_size(params.type_v);
         for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
-            if (model->hparams.n_embd_head_v(il) % blck_size != 0) {
-                LLAMA_LOG_ERROR("%s: V cache type %s with block size %u does not divide n_embd_head_v=%u\n",
-                    __func__, ggml_type_name(params.type_v), blck_size, model->hparams.n_embd_head_v(il));
+            const uint32_t head_v = model->hparams.n_embd_head_v(il);
+            const uint32_t eff_v  = llama_cache_effective_head_dim(head_v, params.type_v);
+            if (eff_v % blck_size != 0) {
+                LLAMA_LOG_ERROR("%s: V cache type %s with block size %u does not divide n_embd_head_v=%u (effective=%u)\n",
+                    __func__, ggml_type_name(params.type_v), blck_size, head_v, eff_v);
                 return nullptr;
             }
         }
@@ -9941,10 +9954,20 @@ int32_t llama_triattention_init(
     }
 
     auto * kv = dynamic_cast<llama_kv_cache *>(mem);
+    llama_kv_cache_iswa * iswa = nullptr;
     if (!kv) {
-        auto * iswa = dynamic_cast<llama_kv_cache_iswa *>(mem);
+        iswa = dynamic_cast<llama_kv_cache_iswa *>(mem);
         if (iswa) {
             kv = dynamic_cast<llama_kv_cache *>(iswa->get_base());
+        }
+    }
+    if (!kv) {
+        auto * hybrid_iswa = dynamic_cast<llama_memory_hybrid_iswa *>(mem);
+        if (hybrid_iswa) {
+            iswa = hybrid_iswa->get_mem_attn();
+            if (iswa) {
+                kv = dynamic_cast<llama_kv_cache *>(iswa->get_base());
+            }
         }
     }
     if (!kv) {
@@ -9975,6 +9998,23 @@ int32_t llama_triattention_init(
     cfg.buckets             = (uint32_t)buckets;
     cfg.spec_protect_extra  = (uint32_t)std::max(0, spec_protect_extra);
 
+    // Wire TriAttention to base (non-SWA) always.
     kv->init_triattention(stats_path, &cfg);
-    return kv->has_triattention() ? 0 : -1;
+    const bool base_ok = kv->has_triattention();
+
+    // Fully wire for hybrid-SWA (Gemma4 etc.): also init on the SWA sub-cache if present.
+    bool swa_ok = true;
+    if (iswa) {
+        if (auto * swa_kv = dynamic_cast<llama_kv_cache *>(iswa->get_swa())) {
+            swa_kv->init_triattention(stats_path, &cfg);
+            swa_ok = swa_kv->has_triattention();
+        }
+    }
+
+    if (!base_ok || !swa_ok) {
+        LLAMA_LOG_ERROR("%s: TriAttention init incomplete (base=%s swa=%s)\n",
+                __func__, base_ok ? "ok" : "fail", swa_ok ? "ok" : "fail");
+        return -1;
+    }
+    return 0;
 }

@@ -2098,7 +2098,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* offload           */ cparams.offload_kqv,
                             /* unified           */ cparams.kv_unified,
                             /* filter_attn       */ std::move(filter_attn),
-                            /* filter_recr       */ std::move(filter_recr));
+                            /* filter_recr       */ std::move(filter_recr),
+                            /* kvarn             */ params.kvarn);
                     } else {
                         res = new llama_memory_hybrid(
                             /* model             */ *this,
@@ -2153,10 +2154,11 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 cparams.n_seq_max,
                                 cparams.n_ubatch,
                                 1,
-                                nullptr,
+                                params.mem_other,
                                 filter,
                                 reuse,
-                                nullptr);
+                                nullptr,
+                                params.kvarn);
                     } else {
                         GGML_ASSERT(!hparams.is_swa_any());
 
@@ -2173,7 +2175,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 1,
                                 hparams.n_swa,
                                 hparams.swa_type,
-                                nullptr,
+                                params.mem_other,
                                 filter,
                                 nullptr,
                                 nullptr);
