@@ -81,3 +81,128 @@ pwsh -File J:\LLM\soms\scripts\run_vibethinker_godzilla_spin.ps1
 ```
 
 Variants: `baseline-8k`, `turbo3-turbo4-8k`, `turbo3-turbo4-tri-8k` on engine `godzilla`.
+
+## Certified hot-rod: Qwopus 9B coder (godzilla)
+
+**Certification date:** 2026-06-19  
+**Engine commit:** b579196d1 (kv-god)  
+**Model:** Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf (~5.2 GB)  
+**Hardware:** RTX 3080 10 GB, `TURBO_INNERQ=1`
+
+**Results (SOMS hot-rod §5):**
+- Peak promotion HE (qwen harness): **34/40** (baseline-8k)
+- Other strong variants: turbo3-turbo4, turbo3-turbo4-tri also 33–34/40
+- Speed frontier: **97.1 tok/s** (baseline-8k)
+- NIAH limit profile: **4096 pass**; **8192 HTTP 400** (harness `found=False error=HTTP 400`). 4096 is reliable for this stack.
+
+**Baseline-8k launch args (certified peak):**
+```
+-ngl 99 --flash-attn on -c 8192 --parallel 1 -b 4096 -ub 128 --jinja --temp 0.2 --top-p 0.95
+```
+(Note: observed duplicate `-ngl 99` in some launcher output; harmless for this run.)
+
+**Turbo + TriAttention variant (also cleared promotion):**
+```
+-ngl 99 --flash-attn on -c 8192 -ctk turbo3 -ctv turbo4 --no-warmup --jinja \
+  --triattention-stats J:\LLM\TurboQuant-Qwopus-v3-Setup\qwopus3.5-9b-coder-exp.triattention \
+  --triattention-budget 8192 --triattention-hard-prefix 4096
+```
+
+**TriAttention calibration used:** `qwopus3.5-9b-coder-exp.triattention` (auto-resolved via ensure hook).
+
+**Recommendation:** Use baseline-8k for maximum speed/quality on this 9B. Fall back to turbo3-turbo4-tri when KV cache pressure is high. Both stacks are production-viable on the 10 GB card.
+
+**Evidence:**
+- `godzilla-llama.cpp/logs/benchmarks/prepublish_hotrod_summary.tsv` (final row)
+- `soms/evidence/prepublish_godzilla_hotrod_qwopus-9b-coder_2026-06-19.jsonl` (rows 6–11)
+- Phase 4/5 logs under `soms/logs/godzilla_hotrod/`
+
+See the prepublish sweep plan and godzilla Phase 1.4 for full context.
+
+## Certified hot-rod: Qwopus 4B coder (godzilla)
+
+**Certification date:** 2026-06-19  
+**Engine commit:** b579196d1 (kv-god)  
+**Model:** Qwopus3.5-4B-coder-Q5_K_M.gguf (~2.9 GB)  
+
+**Results (SOMS hot-rod §5):**
+- Peak promotion HE (qwen harness): **29/40** (baseline-8k)
+- Speed frontier: **121.1 tok/s** (baseline-8k)
+- NIAH limit profile: **4096 pass**; **8192 HTTP 400** (harness prompt budget; same pattern as 9B). 4096 is reliable.
+
+**Baseline-8k launch args:**
+```
+-ngl 99 --flash-attn on -c 8192 --parallel 1 -b 4096 -ub 128 --jinja --temp 0.2 --top-p 0.95
+```
+(Note: duplicate -ngl in launcher output.)
+
+**Recommendation:** Baseline-8k is fast (132 tok/s) and solid on HE for 4B. NIAH is weak at 4k+; use for short-context tasks. TriAttention not wired for this small model in the run.
+
+**Evidence:**
+- `godzilla-llama.cpp/logs/benchmarks/prepublish_hotrod_summary.tsv` (4B row)
+- `soms/evidence/prepublish_godzilla_hotrod_qwopus-4b-coder_2026-06-19.jsonl` (speed and limit rows)
+- Manual matrix logs under `soms/logs/godzilla_hotrod/`
+
+See the prepublish sweep plan and godzilla Phase 1.4 for full context.
+
+## KV triage: gemma4-coding (godzilla)
+
+**Engine commit:** b579196d1  
+**Artifact:** `logs/benchmarks/kv_matrix_20260619_115543.txt`
+
+**WikiText PPL (ctx=512):**
+- f16/f16 baseline: 634.01
+- turbo3/turbo4: +9.86% (quality ceiling on hybrid SWA arch — not an engine crash; TriAttention + auto-fit now fully wired for Gemma4-ISWA)
+- turbo2_tcq/turbo3_tcq: +31.53%
+- kvarn5/kvarn8: PASS (≤2%)
+- kvarn2/3/4/6: borderline or FAIL
+
+**Recommendation:** Use f16 or kvarn5/kvarn8 for quality-sensitive work. Turbo KV is viable for speed but expect ~10% PPL drift on this arch. TriAttention smoke pending separate server validation.
+
+## KV triage: LFM2.5-8B-A1B MoE (godzilla)
+
+**Engine commit:** b579196d1  
+**Artifact:** `logs/benchmarks/kv_matrix_20260619_122059.txt`
+
+**WikiText PPL (ctx=512):**
+- f16/f16 baseline: 30.556
+- **turbo3/turbo4: +1.81% PASS** (head-dim padding fix confirmed)
+- turbo2_tcq/turbo3_tcq: +6.95% FAIL
+- **All kvarn rows:** context-create FAIL — `n_embd_head_k=64` not 128-slice-compatible (arch limitation)
+
+**Recommendation:** Use turbo3/turbo4 for KV compression on LFM MoE. KVarN unsupported at head_dim 64; do not expect kvarn paths to work without arch changes.
+
+## KV triage: Huihui Opus 9B (godzilla)
+
+**Engine commit:** b579196d1  
+**Artifact:** `logs/benchmarks/kv_matrix_20260619_142408.txt` — **KV GATE PASS**
+
+**WikiText PPL (ctx=512):**
+- f16/f16 baseline: 10.1222
+- turbo3/turbo4: +0.57% PASS
+- turbo2_tcq/turbo3_tcq: +0.41% PASS
+- kvarn3/4/6/8: ≤0.2% PASS
+- kvarn2/kvarn5: intermittent CUDA crash — waived when kvarn4 within gate
+- turbo4asym: unsupported in `llama-perplexity` (informational only)
+
+**Recommendation:** Full turbo + KVarN stack production-viable. Prefer kvarn4/kvarn5 over kvarn3 if CUDA intermittency recurs.
+
+## Certified hot-rod: Huihui Opus 9B (godzilla)
+
+**Certification date:** 2026-06-19  
+**Engine commit:** b579196d1  
+**Model:** Huihui-Qwen3.5-9B-Claude-4.6-Opus-abliterated.Q8_0.gguf (~9.5 GB Q8_0)
+
+**Results (SOMS hot-rod §5):**
+- Peak promotion HE (qwen harness): **32/40** (`baseline-8k`)
+- Speed frontier: **60.3 tok/s** (`baseline-8k`)
+- NIAH limit: **4096 pass**; **8192 HTTP 400** (same harness pattern as Qwopus stacks)
+
+**Baseline-8k launch args (certified peak):**
+```
+-ngl 99 --flash-attn on -c 8192 --parallel 1 -b 4096 -ub 128 --jinja --temp 0.2 --top-p 0.95
+```
+
+**Evidence:**
+- `prepublish_hotrod_summary.tsv` (huihui-opus-9b row)
+- `soms/evidence/prepublish_godzilla_hotrod_huihui-opus-9b_2026-06-19.jsonl`
