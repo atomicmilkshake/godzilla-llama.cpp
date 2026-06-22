@@ -1383,7 +1383,8 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
             params.triattention_log,
             params.triattention_hard_prefix,
             params.triattention_buckets,
-            spec_protect_extra);
+            spec_protect_extra,
+            params.triattention_projection);
         if (rc != 0) {
             LOG_ERR("%s: TriAttention initialization failed (stats=%s) — aborting init\n",
                     __func__, params.triattention_stats.c_str());
@@ -1708,6 +1709,43 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.dflash_cross_ctx = params.speculative.dflash_cross_ctx;
 
     return cparams;
+}
+
+static bool common_cache_type_is_turbo_kv(ggml_type type) {
+    return type == GGML_TYPE_TURBO2_0 ||
+           type == GGML_TYPE_TURBO3_0 ||
+           type == GGML_TYPE_TURBO4_0 ||
+           type == GGML_TYPE_TURBO2_TCQ ||
+           type == GGML_TYPE_TURBO3_TCQ ||
+           type == GGML_TYPE_TURBO4_TCQ;
+}
+
+void common_params_apply_kv_ram(common_params & params) {
+    params.no_kv_offload = true;
+
+    if (common_cache_type_is_turbo_kv(params.cache_type_k)) {
+        LOG_WRN("%s: downgrading cache-type-k from %s to f16 (turbo KV requires GPU; host RAM uses f16)\n",
+                __func__, ggml_type_name(params.cache_type_k));
+        params.cache_type_k       = GGML_TYPE_F16;
+        params.cache_kvarn_bits_k = 0;
+    }
+    if (common_cache_type_is_turbo_kv(params.cache_type_v)) {
+        LOG_WRN("%s: downgrading cache-type-v from %s to f16 (turbo KV requires GPU; host RAM uses f16)\n",
+                __func__, ggml_type_name(params.cache_type_v));
+        params.cache_type_v       = GGML_TYPE_F16;
+        params.cache_kvarn_bits_v = 0;
+    }
+
+    if (common_cache_type_is_turbo_kv(params.speculative.draft.cache_type_k)) {
+        LOG_WRN("%s: downgrading draft cache-type-k from %s to f16\n",
+                __func__, ggml_type_name(params.speculative.draft.cache_type_k));
+        params.speculative.draft.cache_type_k = GGML_TYPE_F16;
+    }
+    if (common_cache_type_is_turbo_kv(params.speculative.draft.cache_type_v)) {
+        LOG_WRN("%s: downgrading draft cache-type-v from %s to f16\n",
+                __func__, ggml_type_name(params.speculative.draft.cache_type_v));
+        params.speculative.draft.cache_type_v = GGML_TYPE_F16;
+    }
 }
 
 struct ggml_threadpool_params ggml_threadpool_params_from_cpu_params(const common_cpu_params & params) {

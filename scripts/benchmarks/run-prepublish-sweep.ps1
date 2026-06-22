@@ -1,5 +1,7 @@
 #!/usr/bin/env pwsh
 # Godzilla pre-publish model sweep: KV matrix gate, then §5 hot-rod cert (HE sweep + speed + NIAH).
+# "Hot rod" = the best a model can be on this specific machine (MEMORY-ALPHA, RTX 3080 10GB).
+# Use only viable configurations for each model; do not force incompatible features.
 param(
     [string]$RepoRoot = "J:\LLM\godzilla-llama.cpp",
     [int]$CtxSize = 512,
@@ -10,7 +12,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$env:TURBO_INNERQ = "1"
+. (Join-Path $PSScriptRoot "godzilla-env.ps1")
 
 function Resolve-ModelOnlyFilter {
     param([string[]]$Only)
@@ -49,6 +51,15 @@ $Models = @(
         Path = "J:\MOODLES\VibeThinker-3B.i1-Q4_K_M.gguf"
         Tri = "J:\LLM\VibeThinker\vibethinker-3b.triattention"
         PresetRef = "VibeThinker-3B (Q4_K_M)"
+        # Note: turbo variants cause catastrophic PPL collapse on this model (+850%+ vs f16 baseline on KV matrix 20260620_105529).
+        # Hot-rod / sweep for godzilla uses baseline only (turbo not viable for quality gate).
+        Variant = "baseline-8k"; HeHarness = "qwen"; Coding = $true; Done = $false
+    },
+    @{
+        Id = "qwythos-9b-mythos"; Label = "Qwythos-9B Claude Mythos 5-1M Q6_K"
+        Path = "J:\MOODLES\Qwythos-9B-Claude-Mythos-5-1M-Q6_K.gguf"
+        Tri = "$TriRoot\qwythos-9b-mythos.triattention"
+        PresetRef = "Qwythos-9B Claude Mythos 5-1M (Q6_K)"
         Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $false
     },
     @{
@@ -56,14 +67,16 @@ $Models = @(
         Path = "J:\MOODLES\Negentropy-claude-opus-4.7-9B-Q4_K_M.gguf"
         Tri = "$TriRoot\negentropy-opus-9b.triattention"
         PresetRef = "Negentropy-claude-opus-4.7-9B (Q4_K_M)"
-        Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $false
+        Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $true
     },
     @{
         Id = "fablevibes-14b-moe"; Label = "Qwen3.6-14B-A3B FableVibes Q4_K_M"
         Path = "J:\MOODLES\Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf"
         Tri = "$TriRoot\qwen36-14b-fablevibes.triattention"
         PresetRef = "Qwen3.6-14B-A3B-FableVibes (Q4_K_M)"
-        Variant = "turbo3-turbo4-tri-moe"; HeHarness = "qwen"; Coding = $true; Done = $false
+        # Turbo KV compatibility for this MoE not yet confirmed (sweep run interrupted).
+        # Default to baseline-8k per the rule: do not use feature if model shows incompatibility.
+        Variant = "baseline-8k"; HeHarness = "qwen"; Coding = $true; Done = $false
         KvExtraArgs = @("-ngl", "60", "-ncmoe", "32")
     },
     @{
@@ -71,28 +84,36 @@ $Models = @(
         Path = "J:\MOODLES\Huihui-gemma-4-12B-it-abliterated.Q4_K_M.gguf"
         Tri = "$GemmaTriDir\huihui-gemma-4-12b.triattention"
         PresetRef = "Huihui-gemma-4-12B-it-abliterated (Q4_K_M)"
-        Variant = "turbo3-turbo4-tri-8k"; HeHarness = "gemma_hf"; Coding = $true; Done = $false
+        # Turbo status TBD for this native Gemma4 (non-hybrid); defaulting to baseline per principle for now.
+        # Review KV results before enabling turbo variants.
+        Variant = "baseline-8k"; HeHarness = "gemma_hf"; Coding = $true; Done = $false
     },
     @{
         Id = "gemma4-coding"; Label = "gemma4-coding Q4_K_M"
         Path = "J:\MOODLES\gemma4-coding-Q4_K_M.gguf"
-        Tri = "$GemmaTriDir\gemma4-coding.triattention"
+        Tri = "$GemmaTriDir\gemma4-coding-v2.triattention"
         PresetRef = "Gemma4-12B-Coder Fable5-Composer2.5 (Q4_K_M)"
-        Variant = "turbo3-turbo4-tri-8k"; HeHarness = "gemma_hf"; Coding = $true; Done = $false
+        # Turbo incompatible: KV matrix showed +9.86% turbo, +31% tcq vs f16 (gate FAIL).
+        # Use baseline until hybrid ISWA / turbo issues resolved (see triattention-iswa plan + kv logs).
+        Variant = "baseline-8k"; HeHarness = "gemma_hf"; Coding = $true; Done = $false
     },
     @{
         Id = "lfm25-8b"; Label = "LFM2.5-8B-A1B Q4_K_M"
         Path = "J:\MOODLES\LFM2.5-8B-A1B-Q4_K_M.gguf"
         Tri = "$TriRoot\lfm25-8b-a1b.triattention"
         PresetRef = "LiquidAI LFM2.5-8B-A1B (Q4_K_M)"
-        Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $false; Done = $false
+        # Turbo KV incompatible (previous matrices showed FAIL on turbo + context create issues on kvarn).
+        # Hot-rod on godzilla uses the viable moe_ncpu32 / baseline style.
+        Variant = "moe_ncpu32"; HeHarness = "qwen"; Coding = $false; Done = $false
     },
     @{
         Id = "qwen3-coder-30b"; Label = "Qwen3-Coder-30B-A3B IQ1_M"
         Path = "J:\MOODLES\Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf"
         Tri = "$TriRoot\qwen3-coder-30b-a3b.triattention"
         PresetRef = "Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf (IQ1_M)"
-        Variant = "turbo3-turbo4-tri-moe"; HeHarness = "qwen"; Coding = $true; Done = $false
+        # Turbo KV incompatible (+8.57% on turbo3/turbo4, much worse on tcq; gate FAIL).
+        # Hot-rod uses the extra-args baseline-style for this MoE.
+        Variant = "moe_ncpu32"; HeHarness = "qwen"; Coding = $true; Done = $false
         KvExtraArgs = @("-ngl", "60", "-ncmoe", "32")
     }
 )
@@ -108,14 +129,92 @@ if ($SkipDone) {
 $LogDir = Join-Path $RepoRoot "logs\benchmarks"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $SummaryPath = Join-Path $LogDir "prepublish_sweep_summary.tsv"
+$SweepLockPath = Join-Path $LogDir "prepublish_sweep.lock"
+$GemmaAutopilotLock = Join-Path $LogDir "gemma4_coding_autopilot.lock"
+$TsvHeader = "model_id`tlabel`tcommit`tkv_gate`thotrod`tartifact`tnotes"
+
+function Test-SweepLockHeld {
+    if (-not (Test-Path $SweepLockPath)) { return $false }
+    $owner = Get-Content $SweepLockPath -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($owner -and (Get-Process -Id $owner -ErrorAction SilentlyContinue)) { return $true }
+    Remove-Item $SweepLockPath -Force -ErrorAction SilentlyContinue
+    return $false
+}
+
+function Enter-SweepLock {
+    if (Test-FileLockHeld -Path $GemmaAutopilotLock) {
+        $gpid = (Get-Content $GemmaAutopilotLock -ErrorAction SilentlyContinue | Select-Object -First 1)
+        throw "gemma4 autopilot lock active (PID $gpid); sweep deferred"
+    }
+    if (Test-SweepLockHeld) {
+        throw "prepublish sweep lock held by another process"
+    }
+    Enter-GodzillaGpuLock -Wait -Operation "prepublish-sweep"
+    Set-Content -Path $SweepLockPath -Value $PID -Encoding ASCII
+}
+
+function Exit-SweepLock {
+    if (Test-Path $SweepLockPath) {
+        $owner = Get-Content $SweepLockPath -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($owner -eq "$PID") { Remove-Item $SweepLockPath -Force -ErrorAction SilentlyContinue }
+    }
+    Exit-GodzillaGpuLock
+}
+
+function Ensure-TsvSchema {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        $TsvHeader | Set-Content $Path -Encoding UTF8
+        return
+    }
+    $first = Get-Content $Path -TotalCount 1 -Encoding UTF8
+    if ($first -eq $TsvHeader) { return }
+    $rows = Get-Content $Path -Encoding UTF8 | Select-Object -Skip 1
+    $migrated = [System.Collections.Generic.List[string]]::new()
+    $migrated.Add($TsvHeader)
+    foreach ($row in $rows) {
+        if ([string]::IsNullOrWhiteSpace($row)) { continue }
+        $cols = $row -split "`t"
+        if ($cols.Count -eq 6) {
+            $migrated.Add(("{0}`t{1}`t{2}`t{3}`tSKIP`t{4}`t{5}" -f $cols[0], $cols[1], $cols[2], $cols[3], $cols[4], $cols[5]))
+        } elseif ($cols.Count -ge 7) {
+            $migrated.Add($row)
+        }
+    }
+    $migrated | Set-Content $Path -Encoding UTF8
+}
+
+function Upsert-TsvRow {
+    param(
+        [string]$Path,
+        [string]$ModelId,
+        [string]$Row
+    )
+    Ensure-TsvSchema -Path $Path
+    $lines = Get-Content $Path -Encoding UTF8
+    $out = [System.Collections.Generic.List[string]]::new()
+    $out.Add($lines[0])
+    $replaced = $false
+    foreach ($line in $lines | Select-Object -Skip 1) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $id = ($line -split "`t")[0]
+        if ($id -eq $ModelId) {
+            if (-not $replaced) { $out.Add($Row); $replaced = $true }
+        } else {
+            $out.Add($line)
+        }
+    }
+    if (-not $replaced) { $out.Add($Row) }
+    $out | Set-Content $Path -Encoding UTF8
+}
 $EnsureTri = Join-Path $RepoRoot "scripts\ensure-triattention.ps1"
 $KvMatrix = Join-Path $RepoRoot "scripts\benchmarks\run-kv-matrix.ps1"
 $LaunchSmokeScript = Join-Path $RepoRoot "scripts\benchmarks\run-launch-smoke.ps1"
 $HotRodScript = Join-Path $RepoRoot "scripts\benchmarks\run-godzilla-hotrod-cert.ps1"
 
-if (-not (Test-Path $SummaryPath)) {
-    "model_id`tlabel`tcommit`tkv_gate`thotrod`tartifact`tnotes" | Set-Content $SummaryPath -Encoding UTF8
-}
+Ensure-TsvSchema -Path $SummaryPath
+Enter-SweepLock
+try {
 
 $commit = git -C $RepoRoot rev-parse --short HEAD 2>$null
 Write-Host "== Godzilla pre-publish sweep @ $commit ==" -ForegroundColor Cyan
@@ -126,7 +225,7 @@ foreach ($m in $Models) {
     Write-Host "`n--- $($m.Label) ($($m.Id)) ---" -ForegroundColor Yellow
     if (-not (Test-Path -LiteralPath $m.Path)) {
         Write-Host "  SKIP: missing $($m.Path)" -ForegroundColor Red
-        Add-Content $SummaryPath "$($m.Id)`t$($m.Label)`t$commit`tMISSING`t`tfile not found"
+        Upsert-TsvRow -Path $SummaryPath -ModelId $m.Id -Row ("{0}`t{1}`t{2}`tMISSING`tSKIP`t`tfile not found" -f $m.Id, $m.Label, $commit)
         continue
     }
 
@@ -157,6 +256,7 @@ foreach ($m in $Models) {
     $kvExit = $LASTEXITCODE
     $kvGate = if ($kvExit -eq 0) { "PASS" } else { "FAIL" }
     $artifact = ""
+    $notes = ""
     if (Test-Path -LiteralPath $kvLog) {
         $resultLine = Select-String -Path $kvLog -Pattern 'Results:\s+(.+)$' | Select-Object -Last 1
         if ($resultLine) {
@@ -164,13 +264,14 @@ foreach ($m in $Models) {
         }
     }
     if (-not $artifact) {
-        $artifact = (Get-ChildItem (Join-Path $LogDir "kv_matrix_*.txt") | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name
+        $notes = "kv_exit=$kvExit;kv_incomplete"
     }
 
     $hotrodGate = "SKIP"
-    $notes = "kv_exit=$kvExit"
+    if (-not $notes) { $notes = "kv_exit=$kvExit" }
 
     if ($kvGate -eq "PASS" -and $HotRod) {
+        Wait-GodzillaGpuFree -OnWait { Write-Host "  Waiting for GPU before hot-rod..." -ForegroundColor DarkYellow }
         Write-Host "  Hot-rod cert (§5: HE sweep + speed + NIAH)..." -ForegroundColor Cyan
         & pwsh -NoProfile -File $HotRodScript -Only $m.Id
         $hotrodExit = $LASTEXITCODE
@@ -181,7 +282,7 @@ foreach ($m in $Models) {
         $sweepFailed = $true
     }
 
-    Add-Content $SummaryPath "$($m.Id)`t$($m.Label)`t$commit`t$kvGate`t$hotrodGate`t$artifact`t$notes"
+    Upsert-TsvRow -Path $SummaryPath -ModelId $m.Id -Row ("{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}" -f $m.Id, $m.Label, $commit, $kvGate, $hotrodGate, $artifact, $notes)
 
     if ($LaunchSmoke -and $m.Tri -and (Test-Path -LiteralPath $m.Tri)) {
         if (Test-Path $LaunchSmokeScript) {
@@ -193,3 +294,7 @@ foreach ($m in $Models) {
 
 Write-Host "`nSummary: $SummaryPath" -ForegroundColor Green
 if ($sweepFailed) { exit 1 }
+
+} finally {
+    Exit-SweepLock
+}

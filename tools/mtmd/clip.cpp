@@ -3859,7 +3859,7 @@ bool clip_image_batch_encode(clip_ctx * ctx, const int n_threads, const clip_ima
                                 std::fill(
                                     mask.begin() + row_offset + (dst_0 * merge_ratio * merge_ratio),
                                     mask.begin() + row_offset + (dst   * merge_ratio * merge_ratio),
-                                    0.0);
+                                    0.0f);
                                 mask_row++;
                             }
                         }

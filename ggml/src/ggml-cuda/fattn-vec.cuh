@@ -101,12 +101,12 @@ static __global__ void flash_attn_ext_vec(
     constexpr int V_rows_per_thread = V_is_unquantized ? (V_is_turbo ? 4 : 2*cpy_ne) : 4;
     constexpr int V_cols_per_iter   = WARP_SIZE / nthreads_V;
 
-    constexpr vec_dot_KQ_t vec_dot_KQ = get_vec_dot_KQ<type_K, D, nthreads_KQ>();
+    [[maybe_unused]] constexpr vec_dot_KQ_t vec_dot_KQ = get_vec_dot_KQ<type_K, D, nthreads_KQ>();
     constexpr bool Q_q8_1 = !K_is_unquantized;
 #ifdef V_DOT2_F32_F16_AVAILABLE
-    constexpr dequantize_V_t dequantize_V = get_dequantize_V<type_V, half,  V_rows_per_thread>();
+    [[maybe_unused]] constexpr dequantize_V_t dequantize_V = get_dequantize_V<type_V, half,  V_rows_per_thread>();
 #else
-    constexpr dequantize_V_t dequantize_V = get_dequantize_V<type_V, float, V_rows_per_thread>();
+    [[maybe_unused]] constexpr dequantize_V_t dequantize_V = get_dequantize_V<type_V, float, V_rows_per_thread>();
 #endif // V_DOT2_F32_F16_AVAILABLE
 
     const int ic0 = blockIdx.x * ncols; // Index of the Q/QKV column to work on.
@@ -133,7 +133,7 @@ static __global__ void flash_attn_ext_vec(
     constexpr bool is_tcq3 = type_K == GGML_TYPE_TURBO3_TCQ || type_V == GGML_TYPE_TURBO3_TCQ;
     constexpr bool is_tcq2 = type_K == GGML_TYPE_TURBO2_TCQ || type_V == GGML_TYPE_TURBO2_TCQ;
     constexpr int smem_cb_size = is_tcq3 ? 512 : (is_tcq2 ? 256 : 0);
-    __shared__ float smem_codebook[smem_cb_size > 0 ? smem_cb_size : 1];
+    [[maybe_unused]] __shared__ float smem_codebook[smem_cb_size > 0 ? smem_cb_size : 1];
     if constexpr (smem_cb_size > 0) {
         const float * cb_src = is_tcq3 ? d_turbo3_tcq_codebook_fattn : d_turbo2_tcq_codebook_fattn;
         for (int i = tid; i < smem_cb_size; i += nthreads) {
@@ -155,11 +155,11 @@ static __global__ void flash_attn_ext_vec(
     constexpr int n_centroids_lut = (D <= 256 && type_K == GGML_TYPE_TURBO3_0) ? 8 :
                                     (D <= 256 && type_K == GGML_TYPE_TURBO2_0) ? 4 : 0;
     constexpr int lut_stride = n_centroids_lut > 0 ? n_centroids_lut + 1 : 1;
-    __shared__ half turbo_lut[n_centroids_lut > 0 ? D : 1][lut_stride];
+    [[maybe_unused]] __shared__ half turbo_lut[n_centroids_lut > 0 ? D : 1][lut_stride];
 
     // Sparse V threshold: skip V dequant for negligible attention weights.
     // Positions with exp(score - max) below this contribute noise, not signal.
-    constexpr float sparse_v_threshold_f = 1e-6f;
+    [[maybe_unused]] constexpr float sparse_v_threshold_f = 1e-6f;
 #ifdef V_DOT2_F32_F16_AVAILABLE
     const     half  sparse_v_threshold_h = __float2half(sparse_v_threshold_f);
 #endif
@@ -178,8 +178,8 @@ static __global__ void flash_attn_ext_vec(
 #else
     __align__(16) float2 Q_reg[ncols][(D/2)/nthreads_KQ] = {{{0.0f, 0.0f}}}; // May be only partially initialized.
 #endif // V_DOT2_F32_F16_AVAILABLE
-    int    Q_i32[ncols][1 > D/(sizeof(int)*nthreads_KQ) ? 1 : D/(sizeof(int)*nthreads_KQ)];
-    float2  Q_ds[ncols][1 > D/(sizeof(int)*nthreads_KQ) ? 1 : D/(sizeof(int)*nthreads_KQ)];
+    [[maybe_unused]] int    Q_i32[ncols][1 > D/(sizeof(int)*nthreads_KQ) ? 1 : D/(sizeof(int)*nthreads_KQ)];
+    [[maybe_unused]] float2  Q_ds[ncols][1 > D/(sizeof(int)*nthreads_KQ) ? 1 : D/(sizeof(int)*nthreads_KQ)];
 
     ggml_cuda_pdl_sync();
     if constexpr (Q_q8_1) {

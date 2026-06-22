@@ -273,7 +273,7 @@ static void llama_tensor_dequantize_impl(
                 qtype->to_float(inbuf, outbuf, nels);
             }
         };
-        workers.emplace_back(compute, tensor->type, (uint8_t *) tensor->data + in_buff_offs, f32_output + out_buff_offs, thr_elems);
+        workers.emplace_back(compute, tensor->type, (uint8_t *) tensor->data + in_buff_offs, f32_output + out_buff_offs, static_cast<int>(thr_elems));
         in_buff_offs += thr_block_bytes;
         out_buff_offs += thr_elems;
     }

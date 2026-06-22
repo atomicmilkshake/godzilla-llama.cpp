@@ -22,9 +22,8 @@ void ggml_cuda_flash_attn_ext_mma_turbo_case(ggml_backend_cuda_context & ctx, gg
     const int  nbatch_combine = ggml_cuda_fattn_mma_get_nbatch_combine(DKQ, DV, ncols, cc);
     const bool Q_in_reg       = ggml_cuda_fattn_mma_get_Q_in_reg      (DKQ, DV, ncols, cc);
 
-    // Turbo forces nstages=0: cp.async can't do ALU dequant, so tiles load synchronously.
-    // With nstages=0, tile_K and tile_V share the same shmem region (overlap).
-    constexpr int nstages = 0;
+    // Turbo uses 1-stage shmem (nstages=0): cp.async can't do ALU dequant, so tiles load
+    // synchronously and tile_K/tile_V share the same shmem region.
 
     const int cols_per_warp = std::min(ncols, get_cols_per_warp(cc));
     const int warp_size_host = ggml_cuda_info().devices[ctx.device].warp_size;

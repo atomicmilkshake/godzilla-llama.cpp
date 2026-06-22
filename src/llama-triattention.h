@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
 // Forward declarations
 class  llama_kv_cache;
@@ -47,8 +48,31 @@ struct llama_hparams;
 //   q_abs_mean     float32[freq_count]  E[||q_f||]
 //   r_f            float32[freq_count]  ||E[q_f]|| / E[||q_f||] (validation)
 
-#define TRIATTENTION_MAGIC   0x54524941u  // "TRIA" in little-endian
-#define TRIATTENTION_VERSION 1u
+#define TRIATTENTION_MAGIC      0x54524941u  // "TRIA" in little-endian
+#define TRIATTENTION_VERSION    1u
+#define TRIATTENTION_VERSION_V2 2u
+
+// TriAttention v2 profile tags (ISWA hybrid models)
+enum triattention_profile_tag : uint32_t {
+    TRI_PROFILE_DEFAULT   = 0,
+    TRI_PROFILE_ISWA_BASE = 1,
+    TRI_PROFILE_ISWA_SWA  = 2,
+    TRI_PROFILE_CUSTOM    = 3,
+};
+
+// Projection mode flags for v1 cal on mismatched ISWA head dims (dev/interim)
+enum triattention_projection_flags : uint32_t {
+    TRI_PROJECTION_OFF            = 0,
+    TRI_PROJECTION_ALLOW_TRUNCATE = 1,
+    TRI_PROJECTION_AUTO_GEMMA4    = 2,
+};
+
+// Sub-cache profile preference for v2 file selection
+enum triattention_profile_preference : uint32_t {
+    TRI_PROFILE_PREF_AUTO      = 0,
+    TRI_PROFILE_PREF_ISWA_BASE = 1,
+    TRI_PROFILE_PREF_ISWA_SWA  = 2,
+};
 
 // ============================================================================
 // Enums
@@ -124,6 +148,21 @@ struct triattention_calibration {
     triattention_head_stats * head_stats;  // [n_sampled]
 
     char model_name[256];
+
+    // v2 / hybrid metadata (v1 files: tag=DEFAULT, projection_active=false)
+    enum triattention_profile_tag profile_tag;
+    bool projection_active;
+};
+
+// Options for per-sub-cache calibration selection (ISWA base vs SWA)
+struct triattention_init_opts {
+    enum triattention_profile_preference profile_pref = TRI_PROFILE_PREF_AUTO;
+    uint32_t projection_flags = TRI_PROJECTION_OFF;
+    int32_t  model_arch       = -1;  // llm_arch; -1 = unknown
+
+    // Model layer indices managed by this KV sub-cache (from layer_map)
+    const int32_t * managed_layers = nullptr;
+    uint32_t        n_managed_layers = 0;
 };
 
 // Runtime configuration — set from CLI args, immutable after init
@@ -153,6 +192,13 @@ struct triattention_config {
 struct triattention_state {
     triattention_calibration * cal;
     triattention_config cfg;
+
+    // Per-sub-cache geometry (may differ from cal->head_dim under projection / v2)
+    uint32_t cache_head_dim;
+    uint32_t padded_cache_hd;
+    uint32_t cache_n_kv_heads;
+    uint32_t score_freq_count;
+    bool     projection_mode;
 
     // Inference tracking
     int64_t  absolute_position;   // Monotonically increasing token counter
@@ -216,7 +262,8 @@ triattention_state * triattention_init(
     uint32_t kv_size,
     double   rope_theta,
     uint32_t head_dim,
-    uint32_t n_kv_heads);
+    uint32_t n_kv_heads,
+    const triattention_init_opts * opts = nullptr);
 
 // Free all memory associated with a TriAttention state.
 // Safe to call with nullptr.
@@ -295,7 +342,8 @@ void triattention_score_keys(
     uint32_t freq_count,
     uint32_t n_offsets,
     enum triattention_agg agg,
-    bool disable_trig);
+    bool disable_trig,
+    uint32_t rope_style = 0);
 
 // ============================================================================
 // Main pruning entry point
@@ -395,3 +443,16 @@ int32_t triattention_prune_impl(
     uint32_t              n_layers,
     const int32_t       * layer_map,
     uint32_t              kv_size);
+
+// PR-9: decode-token selection (mode union semantics + position buckets).
+// score_buf layout: [n_sampled, n_decode], may be modified in-place.
+void triattention_select_decode_tokens(
+    const triattention_config      & cfg,
+    const triattention_calibration * cal,
+    uint32_t                         cache_n_kv_heads,
+    uint32_t                         prune_call_idx,
+    float                          * score_buf,
+    uint32_t                         n_decode,
+    uint32_t                         decode_budget,
+    const int32_t                  * decode_positions,
+    std::vector<bool>              & keep_set);

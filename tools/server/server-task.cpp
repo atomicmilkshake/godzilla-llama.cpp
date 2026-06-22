@@ -1331,15 +1331,68 @@ json server_task_result_cmpl_final::to_json_oaicompat() {
     return res;
 }
 
-json server_task_result_cmpl_final::to_json_oaicompat_chat() {
-    std::string finish_reason = "length";
+// Thinking models (Gemma4 channels, thinking-only under low max_tokens, etc.) may leave
+// content empty while reasoning_content carries the only visible text. Mirror into content
+// for OpenAI-compat clients; Anthropic callers opt out to avoid duplicate blocks.
+static bool task_result_should_promote_thinking_to_content(
+        const common_chat_parser_params & params) {
+    return params.reasoning_format != COMMON_REASONING_FORMAT_NONE
+        && !params.reasoning_in_content;
+}
+
+static void task_result_promote_thinking_to_content(
+        common_chat_msg                   & msg,
+        const common_chat_parser_params   & params) {
+    if (task_result_should_promote_thinking_to_content(params) &&
+        msg.content.empty() &&
+        !msg.reasoning_content.empty()) {
+        msg.content = msg.reasoning_content;
+    }
+}
+
+static void task_result_promote_thinking_diff_to_content(
+        common_chat_msg_diff              & diff,
+        const common_chat_parser_params   & params) {
+    if (task_result_should_promote_thinking_to_content(params) &&
+        diff.content_delta.empty() &&
+        !diff.reasoning_content_delta.empty()) {
+        diff.content_delta = diff.reasoning_content_delta;
+    }
+}
+
+static common_chat_parser_params task_result_stream_promotion_params(
+        const common_chat_format            format,
+        const common_reasoning_format       reasoning_format,
+        const bool                          reasoning_in_content) {
+    common_chat_parser_params params;
+    params.format               = format;
+    params.reasoning_format     = reasoning_format;
+    params.reasoning_in_content = reasoning_in_content;
+    return params;
+}
+
+static common_chat_msg task_result_oaicompat_msg(
+        const common_chat_msg             & parsed,
+        const std::string                 & fallback_content,
+        const common_chat_parser_params   & params,
+        const bool                          promote_thinking_to_content = true) {
     common_chat_msg msg;
-    if (!oaicompat_msg.empty()) {
-        msg = oaicompat_msg;
+    if (!parsed.empty()) {
+        msg = parsed;
     } else {
         msg.role = "assistant";
-        msg.content = content;
+        msg.content = fallback_content;
     }
+    if (promote_thinking_to_content) {
+        task_result_promote_thinking_to_content(msg, params);
+    }
+    return msg;
+}
+
+json server_task_result_cmpl_final::to_json_oaicompat_chat() {
+    std::string finish_reason = "length";
+    common_chat_msg msg = task_result_oaicompat_msg(
+        oaicompat_msg, content, generation_params.chat_parser_params);
     if (stop == STOP_TYPE_WORD || stop == STOP_TYPE_EOS) {
         finish_reason = msg.tool_calls.empty() ? "stop" : "tool_calls";
     }
@@ -1387,7 +1440,9 @@ json server_task_result_cmpl_final::to_json_oaicompat_chat_stream() {
     }
 
     json deltas = json::array();
-    for (const auto & diff : oaicompat_msg_diffs) {
+    for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
+        task_result_promote_thinking_diff_to_content(
+            diff, generation_params.chat_parser_params);
         deltas.push_back({
             {"choices", json::array({
                 json {
@@ -1446,13 +1501,8 @@ json server_task_result_cmpl_final::to_json_oaicompat_chat_stream() {
 }
 
 json server_task_result_cmpl_final::to_json_oaicompat_resp() {
-    common_chat_msg msg;
-    if (!oaicompat_msg.empty()) {
-        msg = oaicompat_msg;
-    } else {
-        msg.role = "assistant";
-        msg.content = content;
-    }
+    const common_chat_msg msg = task_result_oaicompat_msg(
+        oaicompat_msg, content, generation_params.chat_parser_params);
 
     std::vector<json> output;
 
@@ -1485,7 +1535,7 @@ json server_task_result_cmpl_final::to_json_oaicompat_resp() {
         });
     }
 
-    for (const common_chat_tool_call & tool_call : oaicompat_msg.tool_calls) {
+    for (const common_chat_tool_call & tool_call : msg.tool_calls) {
         output.push_back(json {
             {"type",      "function_call"},
             {"status",    "completed"},
@@ -1516,16 +1566,19 @@ json server_task_result_cmpl_final::to_json_oaicompat_resp() {
 }
 
 json server_task_result_cmpl_final::to_json_oaicompat_resp_stream() {
+    const common_chat_msg msg = task_result_oaicompat_msg(
+        oaicompat_msg, content, generation_params.chat_parser_params);
+
     std::vector<json> server_sent_events;
     std::vector<json> output;
 
-    if (oaicompat_msg.reasoning_content != "") {
+    if (msg.reasoning_content != "") {
         const json output_item = json {
             {"id",      oai_resp_reasoning_id},
             {"summary", json::array()},
             {"type",    "reasoning"},
             {"content", json::array({ json {
-                {"text", oaicompat_msg.reasoning_content},
+                {"text", msg.reasoning_content},
                 {"type", "reasoning_text"},
             }})},
             {"encrypted_content", ""},
@@ -1541,13 +1594,13 @@ json server_task_result_cmpl_final::to_json_oaicompat_resp_stream() {
         output.push_back(output_item);
     }
 
-    if (oaicompat_msg.content != "") {
+    if (msg.content != "") {
         server_sent_events.push_back(json {
             {"event", "response.output_text.done"},
             {"data", json {
                 {"type",    "response.output_text.done"},
                 {"item_id", oai_resp_message_id},
-                {"text",    oaicompat_msg.content}
+                {"text",    msg.content}
             }}
         });
 
@@ -1555,7 +1608,7 @@ json server_task_result_cmpl_final::to_json_oaicompat_resp_stream() {
             {"type",        "output_text"},
             {"annotations", json::array()},
             {"logprobs",    json::array()},
-            {"text",        oaicompat_msg.content}
+            {"text",        msg.content}
         };
 
         server_sent_events.push_back(json {
@@ -1584,7 +1637,7 @@ json server_task_result_cmpl_final::to_json_oaicompat_resp_stream() {
         output.push_back(output_item);
     }
 
-    for (const common_chat_tool_call & tool_call : oaicompat_msg.tool_calls) {
+    for (const common_chat_tool_call & tool_call : msg.tool_calls) {
         const json output_item = {
             {"type",      "function_call"},
             {"status",    "completed"},
@@ -1650,13 +1703,8 @@ json server_task_result_cmpl_final::to_json_anthropic() {
 
     json content_blocks = json::array();
 
-    common_chat_msg msg;
-    if (!oaicompat_msg.empty()) {
-        msg = oaicompat_msg;
-    } else {
-        msg.role = "assistant";
-        msg.content = content;
-    }
+    const common_chat_msg msg = task_result_oaicompat_msg(
+        oaicompat_msg, content, generation_params.chat_parser_params, false);
 
     // thinking block comes first (Anthropic extended thinking format)
     if (!msg.reasoning_content.empty()) {
@@ -1906,6 +1954,9 @@ void server_task_result_cmpl_partial::update(task_result_state & state) {
     // Copy current state for use in to_json_*() (reflects state BEFORE this chunk)
     thinking_block_started = state.thinking_block_started;
     text_block_started     = state.text_block_started;
+    chat_format            = state.chat_parser_params.format;
+    reasoning_format       = state.chat_parser_params.reasoning_format;
+    reasoning_in_content   = state.chat_parser_params.reasoning_in_content;
 
     oai_resp_id            = state.oai_resp_id;
     oai_resp_reasoning_id  = state.oai_resp_reasoning_id;
@@ -1921,6 +1972,11 @@ void server_task_result_cmpl_partial::update(task_result_state & state) {
             state.thinking_block_started = true;
         }
         if (!diff.content_delta.empty() && !state.text_block_started) {
+            state.text_block_started = true;
+        }
+        if (task_result_should_promote_thinking_to_content(state.chat_parser_params) &&
+            !diff.reasoning_content_delta.empty() &&
+            !state.text_block_started) {
             state.text_block_started = true;
         }
         if (!diff.tool_call_delta.name.empty()) {
@@ -2044,7 +2100,10 @@ json server_task_result_cmpl_partial::to_json_oaicompat_chat() {
         });
     }
 
-    for (const auto & diff : oaicompat_msg_diffs) {
+    const auto promo_params = task_result_stream_promotion_params(
+        chat_format, reasoning_format, reasoning_in_content);
+    for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
+        task_result_promote_thinking_diff_to_content(diff, promo_params);
         add_delta(server_chat_msg_diff_to_json_oaicompat(diff));
     }
 
@@ -2097,7 +2156,11 @@ json server_task_result_cmpl_partial::to_json_oaicompat_resp() {
         });
     }
 
-    for (const common_chat_msg_diff & diff : oaicompat_msg_diffs) {
+    const auto promo_params = task_result_stream_promotion_params(
+        chat_format, reasoning_format, reasoning_in_content);
+    for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
+        task_result_promote_thinking_diff_to_content(diff, promo_params);
+
         if (!diff.reasoning_content_delta.empty()) {
             if (!thinking_block_started) {
                 events.push_back(json {

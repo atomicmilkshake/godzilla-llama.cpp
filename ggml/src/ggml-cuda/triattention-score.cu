@@ -44,43 +44,59 @@ struct triattention_gpu_state {
 // n must be 128, threads = 64 (one butterfly per thread per stage)
 // ============================================================================
 
+// 128-point FWHT in shared memory.  Only threads with tid < 64 perform butterfly
+// work, but every thread in the block must reach each __syncthreads (freq_count
+// can be 128 or 256 for 256/512-dim heads — TRIX-09).
 static __device__ void cooperative_fwht_128(float * smem, int tid) {
-    // 7 butterfly stages for 128 elements
+    const bool active = tid < 64;
+
     for (int h = 1; h < 128; h *= 2) {
-        int block_half = h;
-        int block_size = h * 2;
-        int i = (tid / block_half) * block_size + (tid % block_half);
-        float a = smem[i];
-        float b = smem[i + block_half];
+        float a = 0.0f;
+        float b = 0.0f;
+        int   i = 0;
+        const int block_half = h;
+        const int block_size = h * 2;
+        if (active) {
+            i = (tid / block_half) * block_size + (tid % block_half);
+            a = smem[i];
+            b = smem[i + block_half];
+        }
         __syncthreads();
-        smem[i]              = a + b;
-        smem[i + block_half] = a - b;
+        if (active) {
+            smem[i]              = a + b;
+            smem[i + block_half] = a - b;
+        }
         __syncthreads();
     }
-    // Normalize
-    const float inv_sqrt_128 = 0.08838834764831845f;
-    smem[tid * 2]     *= inv_sqrt_128;
-    smem[tid * 2 + 1] *= inv_sqrt_128;
+
+    if (active) {
+        const float inv_sqrt_128 = 0.08838834764831845f;
+        smem[tid * 2]     *= inv_sqrt_128;
+        smem[tid * 2 + 1] *= inv_sqrt_128;
+    }
     __syncthreads();
 }
 
 // ============================================================================
 // Device helper: inverse WHT rotation for turbo2/turbo3
-// R^T * x = signs1 * FWHT(signs2 * x)
+// R^{-1} * x = signs1 * FWHT(signs2 * x)  (inverse: signs2 pre, signs1 post)
 // ============================================================================
 
-static __device__ void inverse_wht_rotation_128(float * smem, int tid) {
-    // Step 1: multiply by signs2
-    smem[tid * 2]     *= TURBO_WHT_SIGNS2[tid * 2];
-    smem[tid * 2 + 1] *= TURBO_WHT_SIGNS2[tid * 2 + 1];
+static __device__ void inverse_wht_rotation_128(float * block, int tid) {
+    const bool active = tid < 64;
+
+    if (active) {
+        block[tid * 2]     *= TURBO_WHT_SIGNS2[tid * 2];
+        block[tid * 2 + 1] *= TURBO_WHT_SIGNS2[tid * 2 + 1];
+    }
     __syncthreads();
 
-    // Step 2: FWHT (cooperative)
-    cooperative_fwht_128(smem, tid);
+    cooperative_fwht_128(block, tid);
 
-    // Step 3: multiply by signs1
-    smem[tid * 2]     *= TURBO_WHT_SIGNS1[tid * 2];
-    smem[tid * 2 + 1] *= TURBO_WHT_SIGNS1[tid * 2 + 1];
+    if (active) {
+        block[tid * 2]     *= TURBO_WHT_SIGNS1[tid * 2];
+        block[tid * 2 + 1] *= TURBO_WHT_SIGNS1[tid * 2 + 1];
+    }
     __syncthreads();
 }
 
@@ -164,7 +180,7 @@ static __device__ void dequant_head_to_smem(
 //   6. Write to output
 // ============================================================================
 
-template <enum ggml_type K_TYPE, bool NEED_WHT_INV, bool DISABLE_TRIG>
+template <enum ggml_type K_TYPE, bool NEED_WHT_INV, bool DISABLE_TRIG, bool ROPE_HALF>
 static __global__ void triattention_score_kernel(
     float       * __restrict__ scores_out,       // [n_cells]
     const void  * __restrict__ k_data,           // device ptr to full K tensor
@@ -208,31 +224,15 @@ static __global__ void triattention_score_kernel(
     __syncthreads();
 
     // ---- Step 2: Inverse WHT rotation (turbo2/turbo3 only) ----
+    // Process every 128-element block (256-dim: 2 blocks, 512-dim: 4 blocks).
     if constexpr (NEED_WHT_INV) {
-        // Process in 128-element blocks
         for (uint32_t b = 0; b < padded_hd; b += 128) {
-            // Remap thread to work on this 128-elem block
-            if (f < 64) {
-                float * block = k_smem + b;
-                // Signs2 → FWHT → Signs1 (inverse rotation)
-                // Note: for f < 64, thread handles elements [f*2, f*2+1] within block
-                // But we need to handle the case where padded_hd > 128 (multiple blocks)
-                // For simplicity with 64 threads and 128 elements per block, each thread
-                // handles 2 elements
-            }
+            inverse_wht_rotation_128(k_smem + b, f);
         }
-        // For head_dim = 128 (standard case), single block:
-        if (padded_hd == 128 && f < 64) {
-            inverse_wht_rotation_128(k_smem, f);
-        }
-        // For head_dim > 128, we'd need multiple passes.
-        // Most turbo models use head_dim=128, so this covers the primary case.
+        __syncthreads();
     }
 
     // ---- Step 3: Inverse RoPE ----
-    // K is stored post-RoPE. To get pre-RoPE K, apply RoPE^{-1}.
-    // In "half" layout: k_re = K[f], k_im = K[f + freq_count]
-    // RoPE^{-1}: multiply by rotation(-θ) where θ = omega[f] * position
     {
         const int32_t pos = positions[cell_idx_local];
         const float w = omega[f];
@@ -240,23 +240,37 @@ static __global__ void triattention_score_kernel(
         const float cos_t = cosf(theta);
         const float sin_t = sinf(theta);
 
-        float k_re = k_smem[f];
-        float k_im = k_smem[f + freq_count];
+        float k_re, k_im;
+        if constexpr (ROPE_HALF) {
+            k_re = k_smem[f];
+            k_im = k_smem[f + freq_count];
+        } else {
+            k_re = k_smem[2 * f];
+            k_im = k_smem[2 * f + 1];
+        }
 
-        // Inverse rotation: angle = -theta
-        // k_re' =  k_re * cos(θ) + k_im * sin(θ)
-        // k_im' = -k_re * sin(θ) + k_im * cos(θ)
-        float pre_re =  k_re * cos_t + k_im * sin_t;
-        float pre_im = -k_re * sin_t + k_im * cos_t;
+        const float pre_re =  k_re * cos_t + k_im * sin_t;
+        const float pre_im = -k_re * sin_t + k_im * cos_t;
 
-        k_smem[f]              = pre_re;
-        k_smem[f + freq_count] = pre_im;
+        if constexpr (ROPE_HALF) {
+            k_smem[f]              = pre_re;
+            k_smem[f + freq_count] = pre_im;
+        } else {
+            k_smem[2 * f]     = pre_re;
+            k_smem[2 * f + 1] = pre_im;
+        }
     }
     __syncthreads();
 
     // ---- Step 4: Compute score ----
-    const float k_re = k_smem[f];
-    const float k_im = k_smem[f + freq_count];
+    float k_re, k_im;
+    if constexpr (ROPE_HALF) {
+        k_re = k_smem[f];
+        k_im = k_smem[f + freq_count];
+    } else {
+        k_re = k_smem[2 * f];
+        k_im = k_smem[2 * f + 1];
+    }
     const float k_mag = sqrtf(k_re * k_re + k_im * k_im);
 
     float total_score;
@@ -354,45 +368,72 @@ static void launch_score_kernel(
     // Compute head offset on host (ggml_row_size is a host function)
     const size_t head_off = ggml_row_size(cfg.k_type, (uint64_t)kv_head_idx * hd);
 
-    #define LAUNCH_KERNEL(KTYPE, WHT, TRIG) \
-        triattention_score_kernel<KTYPE, WHT, TRIG><<<grid, block, smem_bytes, stream>>>( \
+    #define LAUNCH_KERNEL(KTYPE, WHT, TRIG, ROPE) \
+        triattention_score_kernel<KTYPE, WHT, TRIG, ROPE><<<grid, block, smem_bytes, stream>>>( \
             scores_out, k_data, n_embd_k_gqa, row_bytes, head_off, hd, \
             cell_indices, positions, n_cells, round_start, \
             state->d_omega, state->d_freq_scale_sq, state->d_offsets, cfg.n_offsets, \
             qmr, qmi, qma, ew, fc, agg_mode)
 
+    #define LAUNCH_ALL(KTYPE, WHT, TRIG) \
+        if (cfg.rope_style == 0) { LAUNCH_KERNEL(KTYPE, WHT, TRIG, true); } \
+        else                     { LAUNCH_KERNEL(KTYPE, WHT, TRIG, false); }
+
     if (cfg.disable_trig) {
         switch (cfg.k_type) {
-            case GGML_TYPE_TURBO2_0: LAUNCH_KERNEL(GGML_TYPE_TURBO2_0, true,  true); break;
-            case GGML_TYPE_TURBO3_0: LAUNCH_KERNEL(GGML_TYPE_TURBO3_0, true,  true); break;
-            case GGML_TYPE_TURBO4_0: LAUNCH_KERNEL(GGML_TYPE_TURBO4_0, false, true); break;
-            case GGML_TYPE_Q8_0:     LAUNCH_KERNEL(GGML_TYPE_Q8_0,     false, true); break;
-            case GGML_TYPE_F16:      LAUNCH_KERNEL(GGML_TYPE_F16,      false, true); break;
-            case GGML_TYPE_F32:      LAUNCH_KERNEL(GGML_TYPE_F32,      false, true); break;
+            case GGML_TYPE_TURBO2_0: LAUNCH_ALL(GGML_TYPE_TURBO2_0, true,  true); break;
+            case GGML_TYPE_TURBO3_0: LAUNCH_ALL(GGML_TYPE_TURBO3_0, true,  true); break;
+            case GGML_TYPE_TURBO4_0: LAUNCH_ALL(GGML_TYPE_TURBO4_0, false, true); break;
+            case GGML_TYPE_Q8_0:     LAUNCH_ALL(GGML_TYPE_Q8_0,     false, true); break;
+            case GGML_TYPE_F16:      LAUNCH_ALL(GGML_TYPE_F16,      false, true); break;
+            case GGML_TYPE_F32:      LAUNCH_ALL(GGML_TYPE_F32,      false, true); break;
             default:
                 fprintf(stderr, "[TriAttention GPU] unsupported K type %d\n", cfg.k_type);
                 break;
         }
     } else {
         switch (cfg.k_type) {
-            case GGML_TYPE_TURBO2_0: LAUNCH_KERNEL(GGML_TYPE_TURBO2_0, true,  false); break;
-            case GGML_TYPE_TURBO3_0: LAUNCH_KERNEL(GGML_TYPE_TURBO3_0, true,  false); break;
-            case GGML_TYPE_TURBO4_0: LAUNCH_KERNEL(GGML_TYPE_TURBO4_0, false, false); break;
-            case GGML_TYPE_Q8_0:     LAUNCH_KERNEL(GGML_TYPE_Q8_0,     false, false); break;
-            case GGML_TYPE_F16:      LAUNCH_KERNEL(GGML_TYPE_F16,      false, false); break;
-            case GGML_TYPE_F32:      LAUNCH_KERNEL(GGML_TYPE_F32,      false, false); break;
+            case GGML_TYPE_TURBO2_0: LAUNCH_ALL(GGML_TYPE_TURBO2_0, true,  false); break;
+            case GGML_TYPE_TURBO3_0: LAUNCH_ALL(GGML_TYPE_TURBO3_0, true,  false); break;
+            case GGML_TYPE_TURBO4_0: LAUNCH_ALL(GGML_TYPE_TURBO4_0, false, false); break;
+            case GGML_TYPE_Q8_0:     LAUNCH_ALL(GGML_TYPE_Q8_0,     false, false); break;
+            case GGML_TYPE_F16:      LAUNCH_ALL(GGML_TYPE_F16,      false, false); break;
+            case GGML_TYPE_F32:      LAUNCH_ALL(GGML_TYPE_F32,      false, false); break;
             default:
                 fprintf(stderr, "[TriAttention GPU] unsupported K type %d\n", cfg.k_type);
                 break;
         }
     }
 
+    #undef LAUNCH_ALL
     #undef LAUNCH_KERNEL
 }
 
 // ============================================================================
 // Host API: Init
 // ============================================================================
+
+static void triattention_gpu_free_partial(triattention_gpu_state * state) {
+    if (!state) return;
+    cudaFree(state->d_q_mean_real);
+    cudaFree(state->d_q_mean_imag);
+    cudaFree(state->d_q_mean_abs);
+    cudaFree(state->d_extra_weight);
+    cudaFree(state->d_omega);
+    cudaFree(state->d_freq_scale_sq);
+    cudaFree(state->d_offsets);
+    delete state;
+}
+
+static bool triattention_gpu_malloc_impl(void ** ptr, size_t nbytes, const char * what) {
+    const cudaError_t err = cudaMalloc(ptr, nbytes);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] cudaMalloc %s failed (%zu bytes): %s\n",
+                what, nbytes, cudaGetErrorString(err));
+        return false;
+    }
+    return true;
+}
 
 triattention_gpu_state * triattention_gpu_init(
     const triattention_gpu_config * config,
@@ -405,47 +446,56 @@ triattention_gpu_state * triattention_gpu_init(
     cudaStream_t stream = (cudaStream_t)stream_ptr;
     triattention_gpu_state * state = new triattention_gpu_state();
     state->cfg = *config;
+    state->d_q_mean_real   = nullptr;
+    state->d_q_mean_imag   = nullptr;
+    state->d_q_mean_abs    = nullptr;
+    state->d_extra_weight  = nullptr;
+    state->d_omega         = nullptr;
+    state->d_freq_scale_sq = nullptr;
+    state->d_offsets       = nullptr;
 
     const uint32_t fc = config->freq_count;
     const uint32_t ns = config->n_sampled;
     const size_t calib_bytes = (size_t)ns * fc * sizeof(float);
 
-    // Allocate device arrays for calibration data
-    CUDA_CHECK(cudaMalloc(&state->d_q_mean_real,  calib_bytes));
-    CUDA_CHECK(cudaMalloc(&state->d_q_mean_imag,  calib_bytes));
-    CUDA_CHECK(cudaMalloc(&state->d_q_mean_abs,   calib_bytes));
-    CUDA_CHECK(cudaMalloc(&state->d_extra_weight,  calib_bytes));
-
-    // Upload per-head calibration
-    for (uint32_t h = 0; h < ns; h++) {
-        const size_t off = (size_t)h * fc * sizeof(float);
-        CUDA_CHECK(cudaMemcpyAsync(
-            (char *)state->d_q_mean_real + off, head_calibs[h].q_mean_real,
-            fc * sizeof(float), cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaMemcpyAsync(
-            (char *)state->d_q_mean_imag + off, head_calibs[h].q_mean_imag,
-            fc * sizeof(float), cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaMemcpyAsync(
-            (char *)state->d_q_mean_abs + off, head_calibs[h].q_mean_abs,
-            fc * sizeof(float), cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaMemcpyAsync(
-            (char *)state->d_extra_weight + off, head_calibs[h].extra_weight,
-            fc * sizeof(float), cudaMemcpyHostToDevice, stream));
+    if (!triattention_gpu_malloc_impl((void **)&state->d_q_mean_real,  calib_bytes, "q_mean_real") ||
+        !triattention_gpu_malloc_impl((void **)&state->d_q_mean_imag,  calib_bytes, "q_mean_imag") ||
+        !triattention_gpu_malloc_impl((void **)&state->d_q_mean_abs,   calib_bytes, "q_mean_abs") ||
+        !triattention_gpu_malloc_impl((void **)&state->d_extra_weight, calib_bytes, "extra_weight") ||
+        !triattention_gpu_malloc_impl((void **)&state->d_omega,         fc * sizeof(float), "omega") ||
+        !triattention_gpu_malloc_impl((void **)&state->d_freq_scale_sq, fc * sizeof(float), "freq_scale_sq") ||
+        !triattention_gpu_malloc_impl((void **)&state->d_offsets, config->n_offsets * sizeof(float), "offsets")) {
+        triattention_gpu_free_partial(state);
+        return nullptr;
     }
 
-    // Upload omega, freq_scale_sq, offsets
-    CUDA_CHECK(cudaMalloc(&state->d_omega,         fc * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&state->d_freq_scale_sq, fc * sizeof(float)));
-    CUDA_CHECK(cudaMalloc(&state->d_offsets,        config->n_offsets * sizeof(float)));
+    for (uint32_t h = 0; h < ns; h++) {
+        const size_t off = (size_t)h * fc * sizeof(float);
+        cudaError_t err;
+        err = cudaMemcpyAsync((char *)state->d_q_mean_real + off, head_calibs[h].q_mean_real,
+            fc * sizeof(float), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) goto upload_fail;
+        err = cudaMemcpyAsync((char *)state->d_q_mean_imag + off, head_calibs[h].q_mean_imag,
+            fc * sizeof(float), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) goto upload_fail;
+        err = cudaMemcpyAsync((char *)state->d_q_mean_abs + off, head_calibs[h].q_mean_abs,
+            fc * sizeof(float), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) goto upload_fail;
+        err = cudaMemcpyAsync((char *)state->d_extra_weight + off, head_calibs[h].extra_weight,
+            fc * sizeof(float), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) goto upload_fail;
+    }
 
-    CUDA_CHECK(cudaMemcpyAsync(state->d_omega,         omega,
-        fc * sizeof(float), cudaMemcpyHostToDevice, stream));
-    CUDA_CHECK(cudaMemcpyAsync(state->d_freq_scale_sq, freq_scale_sq,
-        fc * sizeof(float), cudaMemcpyHostToDevice, stream));
-    CUDA_CHECK(cudaMemcpyAsync(state->d_offsets,        offsets,
-        config->n_offsets * sizeof(float), cudaMemcpyHostToDevice, stream));
-
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    if (cudaMemcpyAsync(state->d_omega, omega, fc * sizeof(float), cudaMemcpyHostToDevice, stream) != cudaSuccess ||
+        cudaMemcpyAsync(state->d_freq_scale_sq, freq_scale_sq, fc * sizeof(float), cudaMemcpyHostToDevice, stream) != cudaSuccess ||
+        cudaMemcpyAsync(state->d_offsets, offsets, config->n_offsets * sizeof(float), cudaMemcpyHostToDevice, stream) != cudaSuccess ||
+        cudaStreamSynchronize(stream) != cudaSuccess) {
+upload_fail:
+        fprintf(stderr, "[TriAttention GPU] calibration upload failed: %s\n",
+                cudaGetErrorString(cudaGetLastError()));
+        triattention_gpu_free_partial(state);
+        return nullptr;
+    }
 
     return state;
 }
@@ -494,7 +544,7 @@ void triattention_gpu_scores_to_host(
     CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
-void triattention_gpu_upload_cells(
+bool triattention_gpu_upload_cells(
     uint32_t     ** cell_indices_dev,
     int32_t      ** positions_dev,
     const uint32_t * cell_indices_host,
@@ -503,17 +553,65 @@ void triattention_gpu_upload_cells(
     void * stream_ptr)
 {
     cudaStream_t stream = (cudaStream_t)stream_ptr;
-    CUDA_CHECK(cudaMalloc(cell_indices_dev, n_cells * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(positions_dev,    n_cells * sizeof(int32_t)));
-    CUDA_CHECK(cudaMemcpyAsync(*cell_indices_dev, cell_indices_host,
-        n_cells * sizeof(uint32_t), cudaMemcpyHostToDevice, stream));
-    CUDA_CHECK(cudaMemcpyAsync(*positions_dev, positions_host,
-        n_cells * sizeof(int32_t), cudaMemcpyHostToDevice, stream));
+    *cell_indices_dev = nullptr;
+    *positions_dev    = nullptr;
+
+    if (!triattention_gpu_malloc_impl((void **)cell_indices_dev,
+            (size_t) n_cells * sizeof(uint32_t), "cell_indices") ||
+        !triattention_gpu_malloc_impl((void **)positions_dev,
+            (size_t) n_cells * sizeof(int32_t), "positions")) {
+        triattention_gpu_free_dev(*cell_indices_dev);
+        triattention_gpu_free_dev(*positions_dev);
+        *cell_indices_dev = nullptr;
+        *positions_dev    = nullptr;
+        return false;
+    }
+
+    cudaError_t err;
+    err = cudaMemcpyAsync(*cell_indices_dev, cell_indices_host,
+        n_cells * sizeof(uint32_t), cudaMemcpyHostToDevice, stream);
+    if (err != cudaSuccess) goto upload_fail;
+    err = cudaMemcpyAsync(*positions_dev, positions_host,
+        n_cells * sizeof(int32_t), cudaMemcpyHostToDevice, stream);
+    if (err != cudaSuccess) goto upload_fail;
+
+    return true;
+
+upload_fail:
+    fprintf(stderr, "[TriAttention GPU] cell upload failed: %s\n",
+            cudaGetErrorString(err));
+    triattention_gpu_free_dev(*cell_indices_dev);
+    triattention_gpu_free_dev(*positions_dev);
+    *cell_indices_dev = nullptr;
+    *positions_dev    = nullptr;
+    return false;
+}
+
+void triattention_gpu_device_sync(void) {
+    cudaDeviceSynchronize();
+}
+
+bool triattention_gpu_device_available(void) {
+    int dev = 0;
+    return cudaGetDevice(&dev) == cudaSuccess;
+}
+
+bool triattention_gpu_malloc(void ** ptr, size_t nbytes) {
+    return triattention_gpu_malloc_impl(ptr, nbytes, "buffer");
+}
+
+bool triattention_gpu_memcpy_h2d(void * dst, const void * src, size_t nbytes) {
+    return cudaMemcpy(dst, src, nbytes, cudaMemcpyHostToDevice) == cudaSuccess;
 }
 
 float * triattention_gpu_alloc_scores(uint32_t n_cells, void * /* stream_ptr */) {
     float * ptr = nullptr;
-    CUDA_CHECK(cudaMalloc(&ptr, n_cells * sizeof(float)));
+    const cudaError_t err = cudaMalloc(&ptr, (size_t) n_cells * sizeof(float));
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] cudaMalloc scores failed (%u cells): %s\n",
+                n_cells, cudaGetErrorString(err));
+        return nullptr;
+    }
     return ptr;
 }
 

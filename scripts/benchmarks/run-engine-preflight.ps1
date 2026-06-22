@@ -48,6 +48,7 @@ $report = [ordered]@{
         dflash        = Has-Flag $help @("dflash", "--spec-type")
         flash_attn    = Has-Flag $help @("--flash-attn", "-fa")
         triattention  = Has-Flag $help @("--triattention-stats", "triattention-budget")
+        kvarn         = Has-Flag $help @("kvarn2", "kvarn3", "kvarn4", "kvarn8")
         ngram_mod     = Has-Flag $help @("ngram", "spec-type")
         reasoning_loop = Has-Flag $help @("reasoning-loop")
     }
@@ -58,6 +59,7 @@ $report = [ordered]@{
 $missing = @()
 if (-not $report.capabilities.turboquant) { $missing += "turboquant" }
 if (-not $report.capabilities.triattention) { $missing += "triattention" }
+if (-not $report.capabilities.kvarn) { $missing += "kvarn" }
 if (-not $cudaDll) { $missing += "cuda_dll" }
 if ($missing.Count -gt 0) {
     $report.ready = $false

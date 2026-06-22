@@ -14,6 +14,7 @@ struct llama_model;
 struct llama_context;
 struct triattention_state;
 struct triattention_config;
+struct triattention_init_opts;
 
 //
 // llama_kv_cache
@@ -248,7 +249,10 @@ public:
 
     // Initialize TriAttention on this cache. Called after construction.
     // Does nothing if stats_path is nullptr or empty.
-    void init_triattention(const char * stats_path, const triattention_config * cfg);
+    void init_triattention(
+        const char * stats_path,
+        const triattention_config * cfg,
+        const triattention_init_opts * opts = nullptr);
 
     // Attempt TriAttention pruning if conditions are met (trigger check + prune).
     // Called automatically from apply_ubatch(). Can also be called explicitly.

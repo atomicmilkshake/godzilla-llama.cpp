@@ -7,7 +7,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "godzilla-env.ps1")
 $RepoRoot = "J:\LLM\godzilla-llama.cpp"
+$AutopilotLockPath = Join-Path $GodzillaLogDir "autopilot_perpetual.lock"
 $Journal = "J:\LLM\agent-journal.md"
 $Log = "J:\LLM\autopilot_perpetual.log"
 $Sweep = Join-Path $RepoRoot "scripts\benchmarks\run-prepublish-sweep.ps1"
@@ -19,11 +21,16 @@ $HotrodSummary = Join-Path $RepoRoot "logs\benchmarks\prepublish_hotrod_summary.
 # Models to re-KV after harness fixes (turbo4asym gate, kvarn crash waivers, etc.)
 $KvRerunIds = @("huihui-opus-9b")
 
+# Priority KV targets (operator queue — newest first when not certified)
+# qwythos-9b-mythos: dedicated run-queue-qwythos-hotrod.ps1 (tri + KV + hot-rod serial)
+$PriorityKvIds = @()
+
 # KV FAIL quality/arch ceilings — documented, not engine-fixable this sweep
-$KvCeilingIds = @("gemma4-coding", "lfm25-8b", "qwen3-coder-30b")
+$KvCeilingIds = @("lfm25-8b", "qwen3-coder-30b", "vibethinker-3b", "huihui-gemma-4-12b")
 
 # Hot-rod ceilings — blocked models or repeated NOT_CERTIFIED (incl. peak 0)
-$HotrodCeilingIds = @("gemma4-31b", "gemma4-coding")
+# gemma4-coding: operator lifted ceiling 2026-06-21 — hot-rod cert in flight
+$HotrodCeilingIds = @("gemma4-31b")
 
 function Write-Auto([string]$Msg) {
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Msg
@@ -32,17 +39,14 @@ function Write-Auto([string]$Msg) {
 }
 
 function Wait-GpuFree {
-    while (Get-Process -Name llama-perplexity, llama-server -ErrorAction SilentlyContinue) {
-        Write-Auto "GPU busy — waiting ${PollSeconds}s"
-        Start-Sleep -Seconds $PollSeconds
-    }
+    Wait-GodzillaGpuFree -PollSeconds $PollSeconds -OnWait { Write-Auto "GPU busy — waiting ${PollSeconds}s" }
 }
 
 function Get-LatestKvRows {
     if (-not (Test-Path $KvSummary)) { return @{} }
     $map = @{}
     Import-Csv $KvSummary -Delimiter "`t" | ForEach-Object {
-        $map[$_.model_id] = $_
+        $map[$_.model_id] = $_  # last row wins (upserted TSV keeps one row per model)
     }
     return $map
 }
@@ -90,15 +94,43 @@ $Note
     Add-Content -Path $Journal -Value $block -Encoding utf8
 }
 
+if (Test-FileLockHeld -Path $AutopilotLockPath) {
+    $lp = Get-Content $AutopilotLockPath -ErrorAction SilentlyContinue | Select-Object -First 1
+    Write-Auto "Another autopilot perpetual instance (PID $lp) — exit"
+    exit 0
+}
+$PID | Set-Content $AutopilotLockPath -Encoding ASCII
+
 Write-Auto "AUTOPILOT PERPETUAL start (single=$SingleCycle)"
 
+try {
 do {
     $cycleNotes = [System.Collections.Generic.List[string]]::new()
     Wait-GpuFree
+    if (Test-FileLockHeld -Path $GemmaAutopilotLockPath) {
+        Write-Auto "gemma4 autopilot active — skip cycle"
+        if ($SingleCycle) { break }
+        Start-Sleep -Seconds ($CycleSleepMinutes * 60)
+        continue
+    }
 
     $kvRows = Get-LatestKvRows
     $certIds = Get-CertifiedIds
     $hotrodRows = Get-LatestHotrodRows
+
+    # --- Priority new-wave KV (fablevibes + huihui-gemma) ---
+    $priorityTargets = @($PriorityKvIds | Where-Object {
+        $certIds -notcontains $_ -and (
+            -not $kvRows.ContainsKey($_) -or $kvRows[$_].kv_gate -ne "PASS"
+        )
+    })
+    if ($priorityTargets.Count -gt 0) {
+        Write-Auto "Priority KV: $($priorityTargets -join ', ')"
+        & pwsh -NoProfile -File $Sweep -Only ($priorityTargets -join ',') -HotRod:$false 2>&1 |
+            Tee-Object -FilePath "J:\LLM\autopilot_kv_priority_perpetual.log" -Append
+        $cycleNotes.Add("Priority KV $($priorityTargets -join ',') exit=$LASTEXITCODE")
+        $kvRows = Get-LatestKvRows
+    }
 
     # --- KV reruns for harness-fixed models still showing FAIL ---
     $kvTargets = @($KvRerunIds | Where-Object {
@@ -165,5 +197,12 @@ do {
     Write-Auto "Sleeping ${CycleSleepMinutes}m before next cycle"
     Start-Sleep -Seconds ($CycleSleepMinutes * 60)
 } while ($true)
+
+} finally {
+    if (Test-Path $AutopilotLockPath) {
+        $owner = Get-Content $AutopilotLockPath -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($owner -eq "$PID") { Remove-Item $AutopilotLockPath -Force -ErrorAction SilentlyContinue }
+    }
+}
 
 Write-Auto "AUTOPILOT PERPETUAL exit"

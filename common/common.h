@@ -704,6 +704,7 @@ struct common_params {
     bool verbose_prompt    = false; // print prompt tokens before generation
     bool display_prompt    = true;  // print prompt before generation
     bool no_kv_offload     = false; // disable KV offloading
+    bool kv_ram            = false; // --kv-ram: keep KV cache in host RAM (see common_params_apply_kv_ram)
     bool warmup            = true;  // warmup run
     bool check_tensors     = false; // validate tensor data
     bool no_op_offload     = false; // globally disable offload host tensor operations to device
@@ -883,6 +884,7 @@ struct common_params {
     bool        triattention_log          = false;  // log pruning events to stderr
     int32_t     triattention_hard_prefix  = 128;    // V3: protect first N tokens
     int32_t     triattention_buckets      = 8;        // V3: position buckets for eviction
+    int32_t     triattention_projection   = 0;      // 0=off 1=allow-truncate 2=auto-gemma4
 };
 
 // call once at the start of a program if it uses libcommon
@@ -891,6 +893,9 @@ void common_init();
 
 void common_params_print_info(const common_params & params, bool print_devices = true);
 std::string common_params_get_system_info(const common_params & params);
+
+// Apply --kv-ram policy: host KV, unified cache default, turbo cache types → f16.
+void common_params_apply_kv_ram(common_params & params);
 
 bool parse_cpu_range(const std::string & range, bool(&boolmask)[GGML_MAX_N_THREADS]);
 bool parse_cpu_mask(const std::string & mask, bool(&boolmask)[GGML_MAX_N_THREADS]);

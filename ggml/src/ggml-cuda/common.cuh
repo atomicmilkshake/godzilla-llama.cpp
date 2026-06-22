@@ -46,6 +46,14 @@
 #define WARP_SIZE 32
 #define CUDART_HMAX   11070 // CUDA 11.7, min. ver. for which __hmax and __hmax2 are known to work (may be higher than needed)
 #define CUDART_HMASK  12000 // CUDA 12.0, min. ver. for half2 -> uint mask comparisons
+// Bit-pattern -inf for device code (avoids NVCC #221 on -INFINITY → 1e+300 in __device__ paths).
+#if defined(__CUDACC__)
+static __device__ __forceinline__ float ggml_cuda_neginf_f() {
+    // Union avoids __int_as_float (unavailable in NVCC host pass) and -INFINITY (#221).
+    union { unsigned int u; float f; } v { 0xff800000u };
+    return v.f;
+}
+#endif
 
 #define GGML_CUDA_CC_PASCAL          600
 #define GGML_CUDA_CC_DP4A            610 // minimum compute capability for __dp4a, an intrinsic for byte-wise dot products
@@ -608,9 +616,11 @@ template <typename T> struct block_reduce_policy<block_reduce_method::MAX, T> {
 
     static __device__ T sentinel() {
         if constexpr (std::is_same_v<T, float>) {
-            return -INFINITY;
+            return ggml_cuda_neginf_f();
         } else if constexpr (std::is_same_v<T, half2>) {
-            return make_half2(-INFINITY, -INFINITY);
+            // fp16 has no infinity; use max finite half (see fattn-common.cuh HALF_MAX_HALF).
+            const half h = __float2half(-65504.0f / 2.0f);
+            return make_half2(h, h);
         } else {
             static_assert(ggml_cuda_dependent_false_v<T>, "Unsupported type for block reduce max");
         }

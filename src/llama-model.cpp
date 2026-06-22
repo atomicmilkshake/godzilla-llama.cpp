@@ -514,20 +514,20 @@ struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const str
                 const int64_t head_ratio = n_v_heads / n_k_heads;
                 if (std::regex_match(tensor_name, pattern_qkv_weight) || std::regex_match(tensor_name, pattern_ssm_conv1d)) {
                     GGML_ASSERT(tensor->ne[axis] == 2*key_dim + value_dim);
-                    return {{key_dim, 2 + head_ratio}};
+                    return {{key_dim, static_cast<uint32_t>(2 + head_ratio)}};
                 }
                 if (std::regex_match(tensor_name, pattern_attn_gate_weight) || std::regex_match(tensor_name, pattern_ssm_out_weight)) {
-                    return {{key_dim, head_ratio}};
+                    return {{key_dim, static_cast<uint32_t>(head_ratio)}};
                 }
                 if (std::regex_match(tensor_name, pattern_ssm_dt) || std::regex_match(tensor_name, pattern_ssm_a) ||
                         std::regex_match(tensor_name, pattern_ssm_alpha) || std::regex_match(tensor_name, pattern_ssm_beta)) {
-                    return {{n_k_heads, head_ratio}};
+                    return {{n_k_heads, static_cast<uint32_t>(head_ratio)}};
                 }
                 if (std::regex_match(tensor_name, pattern_r_cache)) {
-                    return {{key_dim * (hparams.ssm_d_conv - 1), 2 + head_ratio}};
+                    return {{key_dim * (hparams.ssm_d_conv - 1), static_cast<uint32_t>(2 + head_ratio)}};
                 }
                 if (std::regex_match(tensor_name, pattern_s_cache)) {
-                    return {{n_k_heads * head_v_dim * head_v_dim, head_ratio}};
+                    return {{n_k_heads * head_v_dim * head_v_dim, static_cast<uint32_t>(head_ratio)}};
                 }
             }
 

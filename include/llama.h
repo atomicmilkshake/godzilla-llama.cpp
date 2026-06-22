@@ -966,7 +966,8 @@ extern "C" {
                             bool   enable_logging,
                          int32_t   hard_prefix,
                          int32_t   buckets,
-                         int32_t   spec_protect_extra);
+                         int32_t   spec_protect_extra,
+                         int32_t   projection_flags);
 
     //
     // State / sessions

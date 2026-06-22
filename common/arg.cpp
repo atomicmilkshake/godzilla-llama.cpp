@@ -1102,7 +1102,13 @@ static void common_params_triattention_normalize(common_params & params) {
 
     if (!params.triattention_stats.empty() &&
             (params.cache_kvarn_bits_k > 0 || params.cache_kvarn_bits_v > 0)) {
-        LOG_WRN("warning: TriAttention + KVarN is experimental; eviction may be disabled on KVarN sub-caches\n");
+        throw std::invalid_argument(
+            "TriAttention + KVarN are incompatible until KVarN-aware prune is implemented (KVX-2)");
+    }
+
+    if (!params.triattention_stats.empty() && params.n_sequences > 1 && !params.kv_unified) {
+        throw std::invalid_argument(
+            "TriAttention with n_parallel > 1 requires --kv-unified (TRIX-13)");
     }
 }
 
@@ -1215,6 +1221,10 @@ bool common_params_parse(int argc, char ** argv, common_params & params, llama_e
         }
         params.lr.init();
         common_validate_reasoning_loop_guard_params(params.reasoning_loop_guard);
+
+        if (params.kv_ram) {
+            common_params_apply_kv_ram(params);
+        }
 
         // DFlash only needs a small drafter context by default. Keep upstream
         // target -b/-ub defaults unchanged; prompt prefill performance depends
@@ -2318,6 +2328,19 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.no_kv_offload = !value;
         }
     ).set_env("LLAMA_ARG_KV_OFFLOAD"));
+    add_opt(common_arg(
+        {"--kv-ram"},
+        {"--ram-kv"},
+        "keep the KV cache in host RAM: implies --no-kv-offload and --kv-unified; "
+        "downgrades turbo3/turbo4/tcq KV types to f16 (turbo KV requires GPU FlashAttention)",
+        [](common_params & params, bool value) {
+            params.kv_ram = value;
+            if (value) {
+                params.no_kv_offload = true;
+                params.kv_unified    = true;
+            }
+        }
+    ).set_env("LLAMA_ARG_KV_RAM"));
     add_opt(common_arg(
         {"--repack"},
         {"-nr", "--no-repack"},
@@ -4802,6 +4825,16 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.triattention_buckets = value;
         }
     ).set_env("LLAMA_ARG_TRIATTENTION_BUCKETS").set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
+    add_opt(common_arg(
+        {"--triattention-projection"}, "MODE",
+        "head_dim projection for hybrid ISWA: off, allow-truncate, auto-gemma4 (default: off; gemma4 auto-enables if unset)",
+        [](common_params & params, const std::string & value) {
+            if (value == "off")              params.triattention_projection = 0;
+            else if (value == "allow-truncate") params.triattention_projection = 1;
+            else if (value == "auto-gemma4") params.triattention_projection = 2;
+            else throw std::invalid_argument("invalid triattention projection: " + value);
+        }
+    ).set_env("LLAMA_ARG_TRIATTENTION_PROJECTION").set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
 
     return ctx_arg;
 }

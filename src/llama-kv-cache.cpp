@@ -576,6 +576,10 @@ llama_kv_cache::llama_kv_cache(
 }
 
 llama_kv_cache::~llama_kv_cache() {
+    if (triattention_st &&
+            (triattention_st->cfg.enable_logging || triattention_st->total_prune_calls > 0)) {
+        triattention_print_stats(triattention_st, stderr);
+    }
     triattention_free(triattention_st);
     triattention_st = nullptr;
 }
@@ -2924,7 +2928,10 @@ bool llama_kv_cache::state_read_data(llama_io_read_i & io, uint32_t strm, uint32
 // llama_kv_cache: TriAttention integration
 //
 
-void llama_kv_cache::init_triattention(const char * stats_path, const triattention_config * cfg) {
+void llama_kv_cache::init_triattention(
+        const char * stats_path,
+        const triattention_config * cfg,
+        const triattention_init_opts * opts_in) {
     if (!stats_path || stats_path[0] == '\0') {
         return;
     }
@@ -2934,7 +2941,7 @@ void llama_kv_cache::init_triattention(const char * stats_path, const triattenti
     }
 
     const uint32_t kv_size = v_cells.empty() ? 0 : (uint32_t)v_cells[0].size();
-    const double rope_theta = (double)hparams.rope_freq_base_train;
+    double rope_theta = (double) hparams.rope_freq_base_train;
 
     // Use first managed layer's dims when available (critical for ISWA/hybrid subs:
     // swa sub-caches only contain SWA layers which may have different n_embd_head_* and n_head_kv).
@@ -2946,10 +2953,45 @@ void llama_kv_cache::init_triattention(const char * stats_path, const triattenti
         n_kv_heads = hparams.n_head_kv(il0);
     }
 
-    triattention_st = triattention_init(stats_path, cfg, kv_size, rope_theta, head_dim, n_kv_heads);
+    triattention_init_opts opts = {};
+    if (opts_in) {
+        opts = *opts_in;
+    }
+    opts.model_arch = (int32_t) model.arch;
+
+    std::vector<int32_t> managed_layers;
+    managed_layers.reserve(layers.size());
+    for (const auto & layer : layers) {
+        managed_layers.push_back((int32_t) layer.il);
+    }
+    if (!managed_layers.empty()) {
+        opts.managed_layers    = managed_layers.data();
+        opts.n_managed_layers  = (uint32_t) managed_layers.size();
+
+        const bool is_swa_sub = hparams.is_swa((uint32_t) managed_layers[0]);
+        if (opts.profile_pref == TRI_PROFILE_PREF_AUTO) {
+            opts.profile_pref = is_swa_sub ? TRI_PROFILE_PREF_ISWA_SWA : TRI_PROFILE_PREF_ISWA_BASE;
+        }
+        if (is_swa_sub && hparams.swa_type != LLAMA_SWA_TYPE_NONE) {
+            rope_theta = (double) hparams.rope_freq_base_train_swa;
+        }
+    }
+
+    triattention_st = triattention_init(stats_path, cfg, kv_size, rope_theta, head_dim, n_kv_heads, &opts);
     if (!triattention_st) {
         LLAMA_LOG_ERROR("%s: failed to initialize TriAttention from %s\n", __func__, stats_path);
     }
+}
+
+int32_t triattention_prune(triattention_state * state, llama_kv_cache * kv) {
+    // TRIX-05: public API delegates to KV-cache integration (tensor access + cell sync).
+    if (!state || !kv) {
+        return -1;
+    }
+    if (!kv->has_triattention()) {
+        return -1;
+    }
+    return kv->triattention_try_prune();
 }
 
 int32_t llama_kv_cache::triattention_try_prune() {

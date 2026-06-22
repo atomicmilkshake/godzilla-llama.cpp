@@ -19,12 +19,13 @@ KNOWN_HF_MODELS: list[tuple[tuple[str, ...], str]] = [
     (("gemma-4-26b", "gemma4-26b", "26b-a4b"), "google/gemma-4-26b-it"),
     (("gemma-4-e4b", "gemma4-e4b"), "google/gemma-4-e4b-it"),
     (("gemma-4-e2b", "gemma4-e2b"), "google/gemma-4-e2b-it"),
-    (("gemma4-coding", "gemma-4-coding", "fable5-composer"), "google/gemma-4-12b-it"),
+    (("gemma4-coding", "gemma-4-coding", "fable5-composer", "composer2.5"), "yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1"),
     (("lfm2.5", "lfm25", "lfm2-5", "lfm2.5-8b", "lfm2moe"), "LiquidAI/LFM2.5-8B-A1B"),
     (("huihui", "huihui-qwen"), "Qwen/Qwen3.5-9B"),
     (("negentropy", "opus-4.7"), "Qwen/Qwen3.5-9B"),
+    (("qwythos", "mythos-5-1m", "claude-mythos"), "empero-ai/Qwythos-9B-Claude-Mythos-5-1M"),
     (("fablevibes", "14b-a3b", "qwen3.6-14b"), "tvall43/Qwen3.6-14B-A3B-FableVibes"),
-    (("huihui-gemma", "huihui-gemma-4"), "google/gemma-4-12b-it"),
+    (("huihui-gemma", "huihui-gemma-4", "abliterated"), "huihui-ai/Huihui-gemma-4-12B-it-abliterated"),
 ]
 
 

@@ -1,5 +1,10 @@
 #!/usr/bin/env pwsh
 # Godzilla hot-rod certification (GuffPuffer/SOMS §5) on MEMORY-ALPHA for MOODLES sweep models.
+#
+# "Hot rod" = the best a given model can actually be on this specific machine (MEMORY-ALPHA).
+# We only ever test variants that have a realistic chance of being the peak for *that model* here.
+# Incompatible or inferior configs (e.g. turbo KV for some models) are excluded per model.
+#
 # Phase 2: variant HE sweeps (row_intent=promotion) → Phase 4: speed_frontier on peak → Phase 5: NIAH/limit @ peak KV.
 param(
     [string[]]$Only = @(),
@@ -10,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$env:TURBO_INNERQ = "1"
+. (Join-Path $PSScriptRoot "godzilla-env.ps1")
 
 function Resolve-ModelOnlyFilter {
     param([string[]]$Only)
@@ -60,7 +65,17 @@ $Models = @(
         PresetId = "VibeThinker-3B (Q4_K_M)"
         Harness = "qwen"
         Coding = $true
-        Variants = @("baseline-8k", "turbo3-turbo4-8k", "turbo3-turbo4-tri-8k")
+        # Only viable variants on MEMORY-ALPHA. Turbo KV is incompatible (massive PPL regression).
+        # Hot rod = best this model can actually be here.
+        Variants = @("baseline-8k")
+        HeTimeout = 300; LaunchTimeout = 300
+    },
+    @{
+        Id = "qwythos-9b-mythos"
+        PresetId = "Qwythos-9B Claude Mythos 5-1M (Q6_K)"
+        Harness = "qwen"
+        Coding = $true
+        Variants = @("baseline-8k", "turbo3-turbo4-8k", "turbo3-turbo4-tri-8k", "turbo3-turbo4", "turbo3-turbo4-tri")
         HeTimeout = 300; LaunchTimeout = 300
     },
     @{
@@ -76,7 +91,7 @@ $Models = @(
         PresetId = "Qwen3.6-14B-A3B-FableVibes (Q4_K_M)"
         Harness = "qwen"
         Coding = $true
-        Variants = @("turbo3-turbo4-moe", "turbo3-turbo4-tri-moe")
+        Variants = @("baseline-8k")
         HeTimeout = 240; LaunchTimeout = 300
     },
     @{
@@ -84,7 +99,8 @@ $Models = @(
         PresetId = "Huihui-gemma-4-12B-it-abliterated (Q4_K_M)"
         Harness = "gemma_hf"
         Coding = $true
-        Variants = @("baseline-8k", "turbo3-turbo4-8k", "turbo3-turbo4-tri-8k", "turbo3-turbo4", "turbo3-turbo4-tri")
+        # Baseline is the current viable choice for hot rod on MEMORY-ALPHA for this model.
+        Variants = @("baseline-8k")
         HeTimeout = 300; LaunchTimeout = 300
     },
     @{
@@ -92,7 +108,8 @@ $Models = @(
         PresetId = "Gemma4-12B-Coder Fable5-Composer2.5 (Q4_K_M)"
         Harness = "gemma_hf"
         Coding = $true
-        Variants = @("baseline-8k", "turbo3-turbo4-8k", "turbo3-turbo4-tri-8k", "turbo3-turbo4", "turbo3-turbo4-tri")
+        # Turbo variants excluded; not the best (and had compatibility issues) on this hardware.
+        Variants = @("baseline-8k")
         HeTimeout = 300; LaunchTimeout = 300
     },
     @{
@@ -108,7 +125,8 @@ $Models = @(
         PresetId = "LiquidAI LFM2.5-8B-A1B (Q4_K_M)"
         Harness = "qwen"
         Coding = $true
-        Variants = @("moe_ncpu32", "turbo3-turbo4-moe", "turbo3-turbo4-tri-moe")
+        # Only viable on MEMORY-ALPHA. Turbo KV showed problems in prior matrices.
+        Variants = @("moe_ncpu32")
         HeTimeout = 300; LaunchTimeout = 600
     },
     @{
@@ -116,7 +134,9 @@ $Models = @(
         PresetId = "Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf (IQ1_M)"
         Harness = "qwen"
         Coding = $true
-        Variants = @("turbo3-turbo4-moe", "turbo3-turbo4-tri-moe")
+        # Turbo KV not the best (or incompatible) for this MoE on this hardware.
+        # Hot rod uses the viable moe config.
+        Variants = @("moe_ncpu32")
         HeTimeout = 180; LaunchTimeout = 300
     }
 )
@@ -219,6 +239,13 @@ function Test-HotRodCertified {
 if (-not (Test-Path $SummaryPath)) {
     "model_id`tpreset_ref`tpeak_he`tspeed_frontier`tniah`thotrod_cert`tevidence" | Set-Content $SummaryPath -Encoding UTF8
 }
+
+if (Test-FileLockHeld -Path $PrepublishSweepLockPath) {
+    Write-Error "prepublish KV sweep active — defer hot-rod cert until GPU sweep completes"
+    exit 1
+}
+Wait-GodzillaGpuFree -OnWait { Write-Host "Waiting for GPU before hot-rod cert..." -ForegroundColor DarkYellow }
+Enter-GodzillaGpuLock -Operation "hotrod-cert"
 
 $LockFile = Join-Path $SomsRoot "logs\godzilla_hotrod.cert.lock"
 if (Test-Path $LockFile) {

@@ -10,6 +10,20 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 
+# Prefer J: for HF cache — C: often lacks space for 12B+ BF16 checkpoints
+if (-not $env:HF_HOME) {
+    $hfHome = "J:\LLM\huggingface-cache"
+    $env:HF_HOME = $hfHome
+    $env:HF_HUB_CACHE = Join-Path $hfHome "hub"
+    $env:HF_DATASETS_CACHE = Join-Path $hfHome "datasets"
+    if (-not (Test-Path -LiteralPath $env:HF_HUB_CACHE)) {
+        New-Item -ItemType Directory -Force -Path $env:HF_HUB_CACHE | Out-Null
+    }
+    if (-not (Test-Path -LiteralPath $env:HF_DATASETS_CACHE)) {
+        New-Item -ItemType Directory -Force -Path $env:HF_DATASETS_CACHE | Out-Null
+    }
+}
+
 if (Test-Path -LiteralPath $Output) {
     Write-Host "TriAttention calibration present: $Output"
     exit 0

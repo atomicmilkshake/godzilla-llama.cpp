@@ -28,6 +28,7 @@
 #include <cinttypes>
 #include <cfloat>
 #include <cstdlib>
+#include <limits>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -206,7 +207,7 @@ struct log_norm_cache {
     struct llama_context * ctx;
 
     log_norm_cache(struct llama_context * ctx_, float temp, int32_t max_batch_idx = -1)
-        : cache(max_batch_idx >= 0 ? (size_t) max_batch_idx + 1 : 0, -INFINITY)
+        : cache(max_batch_idx >= 0 ? (size_t) max_batch_idx + 1 : 0, -std::numeric_limits<float>::infinity())
         , inv_temp(temp > 0.0f ? 1.0f / temp : 1.0f)
         , n_vocab(llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(ctx_))))
         , ctx(ctx_) {}
@@ -221,7 +222,7 @@ struct log_norm_cache {
         const float * logits = llama_get_logits_ith(ctx, batch_idx);
         if (!logits) {
             if (batch_idx >= (int32_t) cache.size()) {
-                cache.resize(batch_idx + 1, -INFINITY);
+                cache.resize(batch_idx + 1, -std::numeric_limits<float>::infinity());
             }
             cache[batch_idx] = -FLT_MAX;
             return -FLT_MAX;
@@ -239,7 +240,7 @@ struct log_norm_cache {
         }
         float ln = mx + (float) log(se);
         if (batch_idx >= (int32_t) cache.size()) {
-            cache.resize(batch_idx + 1, -INFINITY);
+            cache.resize(batch_idx + 1, -std::numeric_limits<float>::infinity());
         }
         cache[batch_idx] = ln;
         return ln;

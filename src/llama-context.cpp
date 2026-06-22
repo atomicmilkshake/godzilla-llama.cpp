@@ -9942,7 +9942,8 @@ int32_t llama_triattention_init(
                         bool   enable_logging,
                      int32_t   hard_prefix,
                      int32_t   buckets,
-                     int32_t   spec_protect_extra) {
+                     int32_t   spec_protect_extra,
+                     int32_t   projection_flags) {
     if (!ctx || !stats_path || stats_path[0] == '\0') {
         return -1;
     }
@@ -9998,23 +9999,33 @@ int32_t llama_triattention_init(
     cfg.buckets             = (uint32_t)buckets;
     cfg.spec_protect_extra  = (uint32_t)std::max(0, spec_protect_extra);
 
-    // Wire TriAttention to base (non-SWA) always.
-    kv->init_triattention(stats_path, &cfg);
-    const bool base_ok = kv->has_triattention();
+    triattention_init_opts tri_opts = {};
+    uint32_t proj = (uint32_t) projection_flags;
+    const llm_arch arch = ctx->get_model().arch;
+    if (proj == TRI_PROJECTION_OFF &&
+        (arch == LLM_ARCH_GEMMA4 || arch == LLM_ARCH_GEMMA4_ASSISTANT)) {
+        proj = TRI_PROJECTION_AUTO_GEMMA4;
+    }
+    tri_opts.projection_flags = proj;
+    tri_opts.model_arch       = (int32_t) arch;
 
-    // Fully wire for hybrid-SWA (Gemma4 etc.): also init on the SWA sub-cache if present.
-    bool swa_ok = true;
-    if (iswa) {
-        if (auto * swa_kv = dynamic_cast<llama_kv_cache *>(iswa->get_swa())) {
-            swa_kv->init_triattention(stats_path, &cfg);
-            swa_ok = swa_kv->has_triattention();
-        }
+    // Wire TriAttention to base (non-SWA) always.
+    kv->init_triattention(stats_path, &cfg, &tri_opts);
+    const bool base_ok = kv->has_triattention();
+    if (!base_ok) {
+        LLAMA_LOG_ERROR("%s: TriAttention init failed on base (non-SWA) sub-cache\n", __func__);
+        return -1;
     }
 
-    if (!base_ok || !swa_ok) {
-        LLAMA_LOG_ERROR("%s: TriAttention init incomplete (base=%s swa=%s)\n",
-                __func__, base_ok ? "ok" : "fail", swa_ok ? "ok" : "fail");
-        return -1;
+    // Fully wire for hybrid-SWA (Gemma4 etc.): also init on the SWA sub-cache if present.
+    if (iswa) {
+        if (auto * swa_kv = dynamic_cast<llama_kv_cache *>(iswa->get_swa())) {
+            swa_kv->init_triattention(stats_path, &cfg, &tri_opts);
+            if (!swa_kv->has_triattention()) {
+                LLAMA_LOG_ERROR("%s: TriAttention init failed on SWA sub-cache\n", __func__);
+                return -1;
+            }
+        }
     }
     return 0;
 }

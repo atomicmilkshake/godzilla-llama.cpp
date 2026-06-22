@@ -457,6 +457,10 @@ struct server_task_result_cmpl_partial : server_task_result {
     // for Anthropic API: track if any reasoning content has been generated
     bool anthropic_has_reasoning = false;
 
+    common_chat_format      chat_format          = COMMON_CHAT_FORMAT_CONTENT_ONLY;
+    common_reasoning_format reasoning_format       = COMMON_REASONING_FORMAT_NONE;
+    bool                    reasoning_in_content   = false;
+
     virtual bool is_stop() override {
         return false; // in stream mode, partial responses are not considered stop
     }

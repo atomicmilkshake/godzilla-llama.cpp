@@ -65,6 +65,7 @@ struct triattention_gpu_config {
     enum ggml_type k_type;
     bool     need_wht_inv;
     bool     disable_trig;
+    uint32_t rope_style;  // 0=half, 1=interleaved (TRIX-08)
 };
 
 GGML_BACKEND_API triattention_gpu_state * triattention_gpu_init(
@@ -96,7 +97,7 @@ GGML_BACKEND_API void triattention_gpu_scores_to_host(
     uint32_t n_cells,
     void * stream);
 
-GGML_BACKEND_API void triattention_gpu_upload_cells(
+GGML_BACKEND_API bool triattention_gpu_upload_cells(
     uint32_t     ** cell_indices_dev,
     int32_t      ** positions_dev,
     const uint32_t * cell_indices_host,
@@ -107,6 +108,10 @@ GGML_BACKEND_API void triattention_gpu_upload_cells(
 GGML_BACKEND_API float * triattention_gpu_alloc_scores(uint32_t n_cells, void * stream);
 GGML_BACKEND_API void    triattention_gpu_free_dev(void * ptr);
 GGML_BACKEND_API void    triattention_gpu_free(triattention_gpu_state * state);
+GGML_BACKEND_API void    triattention_gpu_device_sync(void);
+GGML_BACKEND_API bool    triattention_gpu_device_available(void);
+GGML_BACKEND_API bool    triattention_gpu_malloc(void ** ptr, size_t nbytes);
+GGML_BACKEND_API bool    triattention_gpu_memcpy_h2d(void * dst, const void * src, size_t nbytes);
 
 #ifdef  __cplusplus
 }
