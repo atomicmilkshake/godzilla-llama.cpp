@@ -432,6 +432,7 @@ Chat/template args:
 | `--reasoning-format none|deepseek|deepseek-legacy` | Code default `deepseek`; parser help text says `auto` | How thought tags are parsed and returned. |
 | `--reasoning-budget N` | `-1` unrestricted | `0` ends thinking immediately, positive values cap thinking tokens. |
 | `--reasoning-budget-message MESSAGE` | None | Message injected when the reasoning budget is exhausted. |
+| `--reasoning-promote-to-content` / `--no-reasoning-promote-to-content` | `true` | Mirror `reasoning_content` into streaming `content` for legacy clients. Use `--no-reasoning-promote-to-content` for VSCode Copilot agent mode so thinking stays in `reasoning_content` only; with promote off, Godzilla coalesces plain `content` token deltas across SSE chunks (word boundary or ≥32 chars, remainder on stream end). |
 
 Sampling args people commonly tune:
 
@@ -509,6 +510,7 @@ Validation rules in the server require positive windows/periods/coverage/interva
 | `--log-colors on|off|auto` | Control ANSI color output. Use `off` for clean log files. |
 | `-lv`, `--verbosity N`, `--log-verbosity N` | Log threshold. `0` generic, `1` error, `2` warning, `3` info, `4` debug. Also available as `LLAMA_LOG_VERBOSITY`. |
 | `-v`, `--verbose`, `--log-verbose` | Set verbosity to the maximum debug level. |
+| `--log-payloads` | When set, the server logs full request bodies (raw + parsed/after-conversion JSON) via SRV_INF with ISO timestamp in post_* handlers (completions, chat, responses, transcriptions, anthropic, etc.) and converter paths. Complements --log-timestamps. (env: LLAMA_ARG_LOG_PAYLOADS; default: disabled) |
 
 The launch script uses all three so captured logs are stable:
 

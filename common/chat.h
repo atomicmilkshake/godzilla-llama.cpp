@@ -229,6 +229,8 @@ struct common_chat_parser_params {
     common_reasoning_format reasoning_format     = COMMON_REASONING_FORMAT_NONE; // TODO: refactor this to "bool parse_reasoning"
     // Whether reasoning_content should be inlined in the content (e.g. for reasoning_format=deepseek in stream mode)
     bool                    reasoning_in_content = false;
+    // Mirror reasoning_content into content when content is empty (disable for Copilot/agent clients)
+    bool                    reasoning_promote_to_content = true;
     std::string             generation_prompt;
     std::string             thinking_start_tag;
     std::string             thinking_end_tag;

@@ -774,6 +774,7 @@ struct common_params {
     bool enable_chat_template = true;
     bool force_pure_content_parser = false;
     common_reasoning_format reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+    bool reasoning_promote_to_content = true; // mirror reasoning_content into content for legacy clients
     int enable_reasoning = -1; // -1 = auto, 0 = disable, 1 = enable
     bool prefill_assistant = true; // if true, any trailing assistant message will be prefilled into the response
     int sleep_idle_seconds = -1;   // if >0, server will sleep after this many seconds of idle time
@@ -811,6 +812,7 @@ struct common_params {
     bool models_autoload = true;    // automatically load models when requested via the router server
 
     bool log_json = false;
+    bool log_payloads = false;
 
     std::string slot_save_path;
     std::string media_path; // path to directory for loading media files

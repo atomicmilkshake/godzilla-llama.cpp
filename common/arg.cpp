@@ -3480,6 +3480,15 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_THINK"));
     add_opt(common_arg(
+        {"--reasoning-promote-to-content"},
+        {"--no-reasoning-promote-to-content"},
+        "mirror reasoning_content into content for clients that ignore reasoning fields (default: enabled; "
+        "disable for VS Code Copilot agent mode to avoid per-token 'Finished with 1 step' fragmentation)",
+        [](common_params & params, bool value) {
+            params.reasoning_promote_to_content = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_REASONING_PROMOTE_TO_CONTENT"));
+    add_opt(common_arg(
         {"-rea", "--reasoning"}, "[on|off|auto]",
         "Use reasoning/thinking in the chat ('on', 'off', or 'auto', default: 'auto' (detect from template))",
         [](common_params & params, const std::string & value) {
@@ -3762,6 +3771,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             common_log_set_timestamps(common_log_main(), value);
         }
     ).set_env("LLAMA_ARG_LOG_TIMESTAMPS"));
+    add_opt(common_arg(
+        {"--log-payloads"},
+        "log server request payloads (default: disabled)",
+        [](common_params & params) {
+            params.log_payloads = true;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_LOG_PAYLOADS"));
 
     //
     // speculative parameters

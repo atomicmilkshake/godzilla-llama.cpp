@@ -121,6 +121,9 @@ struct task_result_state {
     const std::string oai_resp_message_id;
     std::string oai_resp_fc_id; // function call ID for current args delta
 
+    // Copilot agent mode: coalesce per-token content deltas across partial SSE chunks
+    std::string copilot_content_coalesce_buffer;
+
     task_result_state(const common_chat_parser_params & chat_parser_params);
 
     // parse partial tool calls and update the internal state
@@ -379,6 +382,9 @@ struct server_task_result_cmpl_final : server_task_result {
     std::vector<common_chat_msg_diff> oaicompat_msg_diffs; // to be populated by update()
     bool is_updated = false;
 
+    // non-owning; set in update() for stream-end coalesce flush
+    std::string * p_copilot_content_coalesce_buffer = nullptr;
+
     // for OpenAI Responses API
     std::string oai_resp_id;
     std::string oai_resp_reasoning_id;
@@ -393,6 +399,8 @@ struct server_task_result_cmpl_final : server_task_result {
     virtual void update(task_result_state & state) override {
         is_updated = true;
         oaicompat_msg = state.update_chat_msg(content, false, oaicompat_msg_diffs, true);
+
+        p_copilot_content_coalesce_buffer = &state.copilot_content_coalesce_buffer;
 
         oai_resp_id = state.oai_resp_id;
         oai_resp_reasoning_id = state.oai_resp_reasoning_id;
@@ -460,6 +468,10 @@ struct server_task_result_cmpl_partial : server_task_result {
     common_chat_format      chat_format          = COMMON_CHAT_FORMAT_CONTENT_ONLY;
     common_reasoning_format reasoning_format       = COMMON_REASONING_FORMAT_NONE;
     bool                    reasoning_in_content   = false;
+    common_chat_parser_params chat_parser_params;
+
+    // non-owning; points at task_result_state::copilot_content_coalesce_buffer
+    std::string * p_copilot_content_coalesce_buffer = nullptr;
 
     virtual bool is_stop() override {
         return false; // in stream mode, partial responses are not considered stop

@@ -904,6 +904,7 @@ task_params server_task::params_from_json_cmpl(
         }
         params.chat_parser_params.reasoning_format = reasoning_format;
         params.chat_parser_params.reasoning_in_content = params.stream && (reasoning_format == COMMON_REASONING_FORMAT_DEEPSEEK_LEGACY);
+        params.chat_parser_params.reasoning_promote_to_content = params_base.reasoning_promote_to_content;
         params.chat_parser_params.generation_prompt = json_value(data, "generation_prompt", std::string());
         params.chat_parser_params.thinking_start_tag = json_value(data, "thinking_start_tag", std::string());
         params.chat_parser_params.thinking_end_tag = json_value(data, "thinking_end_tag", std::string());
@@ -1337,7 +1338,8 @@ json server_task_result_cmpl_final::to_json_oaicompat() {
 static bool task_result_should_promote_thinking_to_content(
         const common_chat_parser_params & params) {
     return params.reasoning_format != COMMON_REASONING_FORMAT_NONE
-        && !params.reasoning_in_content;
+        && !params.reasoning_in_content
+        && params.reasoning_promote_to_content;
 }
 
 static void task_result_promote_thinking_to_content(
@@ -1360,15 +1362,70 @@ static void task_result_promote_thinking_diff_to_content(
     }
 }
 
-static common_chat_parser_params task_result_stream_promotion_params(
-        const common_chat_format            format,
-        const common_reasoning_format       reasoning_format,
-        const bool                          reasoning_in_content) {
-    common_chat_parser_params params;
-    params.format               = format;
-    params.reasoning_format     = reasoning_format;
-    params.reasoning_in_content = reasoning_in_content;
-    return params;
+static bool task_result_should_flush_copilot_content_buffer(const std::string & buffer) {
+    if (buffer.empty()) {
+        return false;
+    }
+    if (buffer.size() >= 32) {
+        return true;
+    }
+    const char c = buffer.back();
+    return c == ' ' || c == '\n' || c == '\t' ||
+           c == '.' || c == ',' || c == '!' || c == '?' || c == ';' ||
+           c == ':' || c == ')' || c == ']' || c == '}' || c == '\r';
+}
+
+static void task_result_flush_copilot_content_coalesce_buffer(
+        std::string                       & buffer,
+        std::vector<common_chat_msg_diff> & out_diffs) {
+    if (buffer.empty()) {
+        return;
+    }
+    common_chat_msg_diff diff;
+    diff.content_delta = std::move(buffer);
+    buffer.clear();
+    out_diffs.push_back(std::move(diff));
+}
+
+static std::vector<common_chat_msg_diff> task_result_coalesce_oaicompat_msg_diffs(
+        const std::vector<common_chat_msg_diff> & diffs_in,
+        const common_chat_parser_params         & chat_parser_params,
+        std::string                             & copilot_content_coalesce_buffer,
+        const bool                                flush_remainder) {
+    const bool coalesce_content = !chat_parser_params.reasoning_promote_to_content;
+    std::vector<common_chat_msg_diff> out;
+
+    auto flush = [&]() {
+        task_result_flush_copilot_content_coalesce_buffer(copilot_content_coalesce_buffer, out);
+    };
+
+    for (common_chat_msg_diff diff : diffs_in) {
+        task_result_promote_thinking_diff_to_content(diff, chat_parser_params);
+
+        const bool is_tool_diff = diff.tool_call_index != std::string::npos;
+        const bool is_reasoning_diff = !diff.reasoning_content_delta.empty();
+        const bool is_content_diff = !diff.content_delta.empty();
+
+        if (coalesce_content && is_content_diff && !is_reasoning_diff && !is_tool_diff) {
+            copilot_content_coalesce_buffer += diff.content_delta;
+            if (task_result_should_flush_copilot_content_buffer(copilot_content_coalesce_buffer)) {
+                flush();
+            }
+            continue;
+        }
+
+        if (coalesce_content) {
+            flush();
+        }
+
+        out.push_back(std::move(diff));
+    }
+
+    if (coalesce_content && flush_remainder) {
+        flush();
+    }
+
+    return out;
 }
 
 static common_chat_msg task_result_oaicompat_msg(
@@ -1440,6 +1497,31 @@ json server_task_result_cmpl_final::to_json_oaicompat_chat_stream() {
     }
 
     json deltas = json::array();
+
+    const bool coalesce_content = !generation_params.chat_parser_params.reasoning_promote_to_content;
+    if (coalesce_content && p_copilot_content_coalesce_buffer != nullptr) {
+        std::vector<common_chat_msg_diff> remainder;
+        task_result_flush_copilot_content_coalesce_buffer(
+            *p_copilot_content_coalesce_buffer,
+            remainder);
+        for (const common_chat_msg_diff & diff : remainder) {
+            deltas.push_back({
+                {"choices", json::array({
+                    json {
+                        {"finish_reason", nullptr},
+                        {"index", index},
+                        {"delta", server_chat_msg_diff_to_json_oaicompat(diff)},
+                    },
+                })},
+                {"created", t},
+                {"id", oaicompat_cmpl_id},
+                {"model", oaicompat_model},
+                {"system_fingerprint", std::string(llama_build_info())},
+                {"object", "chat.completion.chunk"},
+            });
+        }
+    }
+
     for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
         task_result_promote_thinking_diff_to_content(
             diff, generation_params.chat_parser_params);
@@ -1951,12 +2033,15 @@ void server_task_result_cmpl_partial::update(task_result_state & state) {
     is_updated = true;
     state.update_chat_msg(content, true, oaicompat_msg_diffs, true);
 
+    p_copilot_content_coalesce_buffer = &state.copilot_content_coalesce_buffer;
+
     // Copy current state for use in to_json_*() (reflects state BEFORE this chunk)
     thinking_block_started = state.thinking_block_started;
     text_block_started     = state.text_block_started;
     chat_format            = state.chat_parser_params.format;
     reasoning_format       = state.chat_parser_params.reasoning_format;
     reasoning_in_content   = state.chat_parser_params.reasoning_in_content;
+    chat_parser_params     = state.chat_parser_params;
 
     oai_resp_id            = state.oai_resp_id;
     oai_resp_reasoning_id  = state.oai_resp_reasoning_id;
@@ -2100,10 +2185,25 @@ json server_task_result_cmpl_partial::to_json_oaicompat_chat() {
         });
     }
 
-    const auto promo_params = task_result_stream_promotion_params(
-        chat_format, reasoning_format, reasoning_in_content);
-    for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
-        task_result_promote_thinking_diff_to_content(diff, promo_params);
+    const bool coalesce_content = !chat_parser_params.reasoning_promote_to_content;
+    GGML_ASSERT(!coalesce_content || p_copilot_content_coalesce_buffer != nullptr);
+
+    const std::vector<common_chat_msg_diff> coalesced_diffs = coalesce_content
+        ? task_result_coalesce_oaicompat_msg_diffs(
+            oaicompat_msg_diffs,
+            chat_parser_params,
+            *p_copilot_content_coalesce_buffer,
+            false)
+        : [&]() {
+            std::vector<common_chat_msg_diff> out;
+            for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
+                task_result_promote_thinking_diff_to_content(diff, chat_parser_params);
+                out.push_back(std::move(diff));
+            }
+            return out;
+        }();
+
+    for (const common_chat_msg_diff & diff : coalesced_diffs) {
         add_delta(server_chat_msg_diff_to_json_oaicompat(diff));
     }
 
@@ -2156,10 +2256,8 @@ json server_task_result_cmpl_partial::to_json_oaicompat_resp() {
         });
     }
 
-    const auto promo_params = task_result_stream_promotion_params(
-        chat_format, reasoning_format, reasoning_in_content);
     for (common_chat_msg_diff diff : oaicompat_msg_diffs) {
-        task_result_promote_thinking_diff_to_content(diff, promo_params);
+        task_result_promote_thinking_diff_to_content(diff, chat_parser_params);
 
         if (!diff.reasoning_content_delta.empty()) {
             if (!thinking_block_started) {
