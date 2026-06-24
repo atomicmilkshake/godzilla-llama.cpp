@@ -230,6 +230,19 @@ struct triattention_state {
     bool     use_gpu;              // true once GPU state is successfully initialized
     bool     gpu_init_tried;       // prevents re-trying init on failure
 
+    // Host-KV staging (TRIX-HOST-KV): -nkvo keeps K on CPU; gather rows to device before GPU score
+    bool     kv_on_host;           // detected from k_tensors[0] buffer type at first prune
+    bool     kv_on_host_logged;    // one-time staging log
+    void *   d_k_staging;          // device buffer [n_decode x row_bytes] compact rows
+    size_t   k_staging_bytes;      // capacity of d_k_staging
+    float *  d_scores_pool;        // reusable [n_sampled * n_decode] device scores
+    size_t   d_scores_pool_floats; // capacity of d_scores_pool (float count)
+
+    // Reusable device cell upload buffers (grow-only pool, TRIX-ISWA-RESOURCES)
+    uint32_t * d_cell_indices_pool;
+    int32_t  * d_positions_pool;
+    uint32_t   d_cell_pool_capacity; // max n_decode seen
+
     // Monitoring statistics
     uint64_t total_prune_calls;
     uint64_t total_tokens_evicted;
@@ -416,6 +429,12 @@ void triattention_on_reset(
 void triattention_print_stats(
     const triattention_state * state,
     FILE * stream);
+
+// ISWA double-prune coordination: one device sync per ubatch across base+SWA sub-caches
+void triattention_iswa_prune_scope_begin(void);
+void triattention_iswa_prune_scope_end(void);
+void triattention_iswa_note_gpu_failure(void);
+bool triattention_iswa_gpu_blocked(void);
 
 #ifdef __cplusplus
 }

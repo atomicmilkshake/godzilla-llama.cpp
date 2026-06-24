@@ -180,7 +180,7 @@ static __device__ void dequant_head_to_smem(
 //   6. Write to output
 // ============================================================================
 
-template <enum ggml_type K_TYPE, bool NEED_WHT_INV, bool DISABLE_TRIG, bool ROPE_HALF>
+template <enum ggml_type K_TYPE, bool NEED_WHT_INV, bool DISABLE_TRIG, bool ROPE_HALF, bool K_ROWS_COMPACT>
 static __global__ void triattention_score_kernel(
     float       * __restrict__ scores_out,       // [n_cells]
     const void  * __restrict__ k_data,           // device ptr to full K tensor
@@ -217,7 +217,9 @@ static __global__ void triattention_score_kernel(
     float * score_smem = smem + padded_hd;
 
     // ---- Step 1: Dequant K head row to shared memory ----
-    const uint32_t cell_global = cell_indices[cell_idx_local];
+    const uint32_t cell_global = K_ROWS_COMPACT
+        ? (uint32_t) cell_idx_local
+        : cell_indices[cell_idx_local];
     const char * k_row_ptr = (const char *)k_data + (size_t)cell_global * row_bytes + head_offset_bytes;
 
     dequant_head_to_smem<K_TYPE>(k_smem, k_row_ptr, f, padded_hd);
@@ -336,7 +338,7 @@ static __global__ void triattention_score_kernel(
 // Kernel launch dispatcher
 // ============================================================================
 
-static void launch_score_kernel(
+static bool launch_score_kernel(
     triattention_gpu_state * state,
     float       * scores_out,
     const void  * k_data,
@@ -344,6 +346,8 @@ static void launch_score_kernel(
     size_t       row_bytes,
     uint32_t     kv_head_idx,
     uint32_t     head_calib_idx,
+    uint32_t     padded_hd,
+    bool         k_rows_compact,
     const uint32_t * cell_indices,
     const int32_t  * positions,
     uint32_t     n_cells,
@@ -353,7 +357,11 @@ static void launch_score_kernel(
 {
     const auto & cfg = state->cfg;
     const uint32_t fc = cfg.freq_count;
-    const uint32_t hd = cfg.head_dim;
+
+    if (padded_hd == 0 || fc == 0 || fc > padded_hd) {
+        fprintf(stderr, "[TriAttention GPU] invalid padded_hd=%u fc=%u\n", padded_hd, fc);
+        return false;
+    }
 
     // Calibration pointers for this head
     const float * qmr = state->d_q_mean_real  + (size_t)head_calib_idx * fc;
@@ -363,21 +371,26 @@ static void launch_score_kernel(
 
     const dim3 grid(n_cells, 1, 1);
     const dim3 block(fc, 1, 1);
-    const size_t smem_bytes = (hd + fc) * sizeof(float);  // K vector + score reduction
+    const size_t smem_bytes = ((size_t) padded_hd + fc) * sizeof(float);
 
-    // Compute head offset on host (ggml_row_size is a host function)
-    const size_t head_off = ggml_row_size(cfg.k_type, (uint64_t)kv_head_idx * hd);
+    // TRIX-03: per-layer padded head dim for GQA head offset within row
+    const size_t head_off = ggml_row_size(cfg.k_type, (uint64_t)kv_head_idx * padded_hd);
 
-    #define LAUNCH_KERNEL(KTYPE, WHT, TRIG, ROPE) \
-        triattention_score_kernel<KTYPE, WHT, TRIG, ROPE><<<grid, block, smem_bytes, stream>>>( \
-            scores_out, k_data, n_embd_k_gqa, row_bytes, head_off, hd, \
+    #define LAUNCH_KERNEL(KTYPE, WHT, TRIG, ROPE, COMPACT) \
+        triattention_score_kernel<KTYPE, WHT, TRIG, ROPE, COMPACT><<<grid, block, smem_bytes, stream>>>( \
+            scores_out, k_data, n_embd_k_gqa, row_bytes, head_off, padded_hd, \
             cell_indices, positions, n_cells, round_start, \
             state->d_omega, state->d_freq_scale_sq, state->d_offsets, cfg.n_offsets, \
             qmr, qmi, qma, ew, fc, agg_mode)
 
     #define LAUNCH_ALL(KTYPE, WHT, TRIG) \
-        if (cfg.rope_style == 0) { LAUNCH_KERNEL(KTYPE, WHT, TRIG, true); } \
-        else                     { LAUNCH_KERNEL(KTYPE, WHT, TRIG, false); }
+        if (cfg.rope_style == 0) { \
+            if (k_rows_compact) { LAUNCH_KERNEL(KTYPE, WHT, TRIG, true,  true); } \
+            else                 { LAUNCH_KERNEL(KTYPE, WHT, TRIG, true,  false); } \
+        } else { \
+            if (k_rows_compact) { LAUNCH_KERNEL(KTYPE, WHT, TRIG, false, true); } \
+            else                 { LAUNCH_KERNEL(KTYPE, WHT, TRIG, false, false); } \
+        }
 
     if (cfg.disable_trig) {
         switch (cfg.k_type) {
@@ -389,7 +402,7 @@ static void launch_score_kernel(
             case GGML_TYPE_F32:      LAUNCH_ALL(GGML_TYPE_F32,      false, true); break;
             default:
                 fprintf(stderr, "[TriAttention GPU] unsupported K type %d\n", cfg.k_type);
-                break;
+                return false;
         }
     } else {
         switch (cfg.k_type) {
@@ -401,12 +414,36 @@ static void launch_score_kernel(
             case GGML_TYPE_F32:      LAUNCH_ALL(GGML_TYPE_F32,      false, false); break;
             default:
                 fprintf(stderr, "[TriAttention GPU] unsupported K type %d\n", cfg.k_type);
-                break;
+                return false;
         }
     }
 
     #undef LAUNCH_ALL
     #undef LAUNCH_KERNEL
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] kernel launch failed: %s\n", cudaGetErrorString(err));
+        return false;
+    }
+
+    // Illegal access often surfaces at sync, not launch (TRIX-GPU-HARDEN)
+    if (stream == nullptr) {
+        err = cudaStreamSynchronize(cudaStreamPerThread);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "[TriAttention GPU] per-head stream sync failed: %s\n",
+                    cudaGetErrorString(err));
+            cudaGetLastError();
+            return false;
+        }
+        err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            fprintf(stderr, "[TriAttention GPU] sticky error after sync: %s\n",
+                    cudaGetErrorString(err));
+            return false;
+        }
+    }
+    return true;
 }
 
 // ============================================================================
@@ -504,13 +541,15 @@ upload_fail:
 // Host API: Score head
 // ============================================================================
 
-void triattention_gpu_score_head(
+bool triattention_gpu_score_head(
     triattention_gpu_state * state,
     const void   * k_data_dev,
     uint64_t       n_embd_k_gqa,
     size_t         row_bytes,
     uint32_t       kv_head_idx,
     uint32_t       head_calib_idx,
+    uint32_t       padded_hd,
+    bool           k_rows_compact,
     const uint32_t * cell_indices_dev,
     const int32_t  * positions_dev,
     uint32_t       n_cells,
@@ -520,11 +559,12 @@ void triattention_gpu_score_head(
     void * stream_ptr)
 {
     cudaStream_t stream = (cudaStream_t)stream_ptr;
-    if (n_cells == 0) return;
+    if (n_cells == 0) return true;
 
-    launch_score_kernel(state, scores_dev, k_data_dev,
+    return launch_score_kernel(state, scores_dev, k_data_dev,
                         n_embd_k_gqa, row_bytes, kv_head_idx,
-                        head_calib_idx, cell_indices_dev, positions_dev,
+                        head_calib_idx, padded_hd, k_rows_compact,
+                        cell_indices_dev, positions_dev,
                         n_cells, round_start, agg_mode, stream);
 }
 
@@ -532,16 +572,25 @@ void triattention_gpu_score_head(
 // Host API: Utility functions
 // ============================================================================
 
-void triattention_gpu_scores_to_host(
+bool triattention_gpu_scores_to_host(
     float * scores_host,
     const float * scores_dev,
     uint32_t n_cells,
     void * stream_ptr)
 {
     cudaStream_t stream = (cudaStream_t)stream_ptr;
-    CUDA_CHECK(cudaMemcpyAsync(scores_host, scores_dev,
-        n_cells * sizeof(float), cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    cudaError_t err = cudaMemcpyAsync(scores_host, scores_dev,
+        (size_t) n_cells * sizeof(float), cudaMemcpyDeviceToHost, stream);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] scores D2H failed: %s\n", cudaGetErrorString(err));
+        return false;
+    }
+    err = cudaStreamSynchronize(stream);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] scores sync failed: %s\n", cudaGetErrorString(err));
+        return false;
+    }
+    return true;
 }
 
 bool triattention_gpu_upload_cells(
@@ -587,8 +636,18 @@ upload_fail:
     return false;
 }
 
-void triattention_gpu_device_sync(void) {
-    cudaDeviceSynchronize();
+bool triattention_gpu_device_sync(void) {
+    const cudaError_t err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] device sync failed: %s\n", cudaGetErrorString(err));
+        cudaGetLastError();
+        return false;
+    }
+    return true;
+}
+
+void triattention_gpu_clear_errors(void) {
+    cudaGetLastError();
 }
 
 bool triattention_gpu_device_available(void) {
@@ -601,7 +660,61 @@ bool triattention_gpu_malloc(void ** ptr, size_t nbytes) {
 }
 
 bool triattention_gpu_memcpy_h2d(void * dst, const void * src, size_t nbytes) {
-    return cudaMemcpy(dst, src, nbytes, cudaMemcpyHostToDevice) == cudaSuccess;
+    const cudaError_t err = cudaMemcpy(dst, src, nbytes, cudaMemcpyHostToDevice);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[TriAttention GPU] H2D memcpy failed (%zu bytes): %s\n",
+                nbytes, cudaGetErrorString(err));
+        return false;
+    }
+    return true;
+}
+
+bool triattention_gpu_ensure_buffer(void ** ptr, size_t * cap_bytes, size_t need_bytes) {
+    if (need_bytes == 0) {
+        return true;
+    }
+    if (*ptr != nullptr && *cap_bytes >= need_bytes) {
+        return true;
+    }
+    if (*ptr != nullptr) {
+        cudaFree(*ptr);
+        *ptr = nullptr;
+        *cap_bytes = 0;
+    }
+    void * new_ptr = nullptr;
+    if (!triattention_gpu_malloc_impl(&new_ptr, need_bytes, "ensure_buffer")) {
+        return false;
+    }
+    *ptr = new_ptr;
+    *cap_bytes = need_bytes;
+    return true;
+}
+
+bool triattention_gpu_gather_k_rows(
+    void * d_staging,
+    const void * k_host,
+    size_t row_bytes,
+    const uint32_t * cell_indices_host,
+    uint32_t n_cells,
+    uint32_t kv_cells_per_stream) {
+    if (!d_staging || !k_host || !cell_indices_host || n_cells == 0 || row_bytes == 0) {
+        return false;
+    }
+    auto * dst_base = (char *) d_staging;
+    const auto * src_base = (const char *) k_host;
+    for (uint32_t i = 0; i < n_cells; i++) {
+        if (kv_cells_per_stream > 0 && cell_indices_host[i] >= kv_cells_per_stream) {
+            fprintf(stderr, "[TriAttention GPU] gather cell index %u >= kv_size %u\n",
+                    cell_indices_host[i], kv_cells_per_stream);
+            return false;
+        }
+        const char * src = src_base + (size_t) cell_indices_host[i] * row_bytes;
+        char * dst = dst_base + (size_t) i * row_bytes;
+        if (!triattention_gpu_memcpy_h2d(dst, src, row_bytes)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 float * triattention_gpu_alloc_scores(uint32_t n_cells, void * /* stream_ptr */) {
@@ -617,7 +730,10 @@ float * triattention_gpu_alloc_scores(uint32_t n_cells, void * /* stream_ptr */)
 
 void triattention_gpu_free_dev(void * ptr) {
     if (ptr) {
-        CUDA_CHECK(cudaFree(ptr));
+        const cudaError_t err = cudaFree(ptr);
+        if (err != cudaSuccess) {
+            fprintf(stderr, "[TriAttention GPU] cudaFree failed: %s\n", cudaGetErrorString(err));
+        }
     }
 }
 

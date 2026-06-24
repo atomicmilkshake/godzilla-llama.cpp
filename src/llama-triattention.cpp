@@ -1118,6 +1118,22 @@ void triattention_free(triattention_state * state) {
         triattention_gpu_free((triattention_gpu_state *)state->d_gpu_state);
         state->d_gpu_state = nullptr;
     }
+    if (state->d_k_staging) {
+        triattention_gpu_free_dev(state->d_k_staging);
+        state->d_k_staging = nullptr;
+    }
+    if (state->d_scores_pool) {
+        triattention_gpu_free_dev(state->d_scores_pool);
+        state->d_scores_pool = nullptr;
+    }
+    if (state->d_cell_indices_pool) {
+        triattention_gpu_free_dev(state->d_cell_indices_pool);
+        state->d_cell_indices_pool = nullptr;
+    }
+    if (state->d_positions_pool) {
+        triattention_gpu_free_dev(state->d_positions_pool);
+        state->d_positions_pool = nullptr;
+    }
 
     delete state;
 }
@@ -1595,9 +1611,102 @@ static void triattention_init_gpu(triattention_state * state, ggml_type k_type) 
     state->d_scores     = d_s;
     state->use_gpu      = true;
 
-    fprintf(stderr, "[TriAttention] GPU scoring enabled (k_type=%d, heads=%u)\n",
-            (int)k_type, cal->n_sampled);
+    if (state->kv_on_host) {
+        fprintf(stderr, "[TriAttention] GPU scoring enabled with host-KV staging (k_type=%d, heads=%u)\n",
+                (int)k_type, cal->n_sampled);
+    } else {
+        fprintf(stderr, "[TriAttention] GPU scoring enabled (k_type=%d, heads=%u)\n",
+                (int)k_type, cal->n_sampled);
+    }
 }
+
+// ============================================================================
+// ISWA prune batch coordination (TRIX-ISWA-DUAL-PRUNE)
+// ============================================================================
+
+static int  g_iswa_prune_depth = 0;
+static bool g_iswa_force_cpu   = false;
+
+void triattention_iswa_prune_scope_begin(void) {
+    if (g_iswa_prune_depth++ == 0) {
+        g_iswa_force_cpu = false;
+    }
+}
+
+void triattention_iswa_prune_scope_end(void) {
+    if (g_iswa_prune_depth <= 0) {
+        return;
+    }
+    if (--g_iswa_prune_depth == 0) {
+#if defined(GGML_USE_CUDA)
+        triattention_gpu_clear_errors();
+        if (!triattention_gpu_device_sync()) {
+            fprintf(stderr, "[TriAttention] ISWA batch device sync failed\n");
+        }
+#endif
+    }
+}
+
+void triattention_iswa_note_gpu_failure(void) {
+    g_iswa_force_cpu = true;
+}
+
+bool triattention_iswa_gpu_blocked(void) {
+    return g_iswa_force_cpu;
+}
+
+#if defined(GGML_USE_CUDA)
+static bool triattention_gpu_ensure_cell_pool(
+        triattention_state * state,
+        uint32_t n_cells) {
+    if (state->d_cell_pool_capacity >= n_cells &&
+        state->d_cell_indices_pool && state->d_positions_pool) {
+        return true;
+    }
+    if (state->d_cell_indices_pool) {
+        triattention_gpu_free_dev(state->d_cell_indices_pool);
+        state->d_cell_indices_pool = nullptr;
+    }
+    if (state->d_positions_pool) {
+        triattention_gpu_free_dev(state->d_positions_pool);
+        state->d_positions_pool = nullptr;
+    }
+    if (!triattention_gpu_malloc(
+            (void **)&state->d_cell_indices_pool,
+            (size_t) n_cells * sizeof(uint32_t)) ||
+        !triattention_gpu_malloc(
+            (void **)&state->d_positions_pool,
+            (size_t) n_cells * sizeof(int32_t))) {
+        triattention_gpu_free_dev(state->d_cell_indices_pool);
+        triattention_gpu_free_dev(state->d_positions_pool);
+        state->d_cell_indices_pool = nullptr;
+        state->d_positions_pool = nullptr;
+        state->d_cell_pool_capacity = 0;
+        return false;
+    }
+    state->d_cell_pool_capacity = n_cells;
+    return true;
+}
+
+static bool triattention_gpu_upload_cells_pooled(
+        triattention_state * state,
+        const uint32_t * cell_indices_host,
+        const int32_t  * positions_host,
+        uint32_t n_cells) {
+    if (!triattention_gpu_ensure_cell_pool(state, n_cells)) {
+        return false;
+    }
+    if (!triattention_gpu_memcpy_h2d(
+            state->d_cell_indices_pool, cell_indices_host,
+            (size_t) n_cells * sizeof(uint32_t)) ||
+        !triattention_gpu_memcpy_h2d(
+            state->d_positions_pool, positions_host,
+            (size_t) n_cells * sizeof(int32_t))) {
+        return false;
+    }
+    return true;
+}
+#endif
 
 // ============================================================================
 // Internal pruning implementation (called from KV cache integration)
@@ -1730,100 +1839,206 @@ int32_t triattention_prune_impl(
 
     // Lazy GPU init: runs only once per state lifetime
     if (!state->gpu_init_tried) {
+        if (n_layers > 0 && k_tensors[0] && k_tensors[0]->buffer) {
+            state->kv_on_host = ggml_backend_buffer_is_host(k_tensors[0]->buffer);
+        }
         triattention_init_gpu(state, k_type);
+        if (state->kv_on_host && state->use_gpu && !state->kv_on_host_logged) {
+            fprintf(stderr, "[TriAttention] GPU scoring with host-KV staging enabled\n");
+            state->kv_on_host_logged = true;
+        }
     }
 
     bool gpu_scored = false;
-    if (state->use_gpu) {
+    const bool try_gpu = state->use_gpu && !triattention_iswa_gpu_blocked();
+    static bool n_decode_cap_logged = false;
+    const bool n_decode_gpu_ok = (n_decode <= 8192);
+    if (state->use_gpu && !n_decode_gpu_ok) {
+        if (!n_decode_cap_logged) {
+            fprintf(stderr,
+                "[TriAttention] n_decode %u exceeds GPU cap 8192, using CPU for large prunes\n",
+                n_decode);
+            n_decode_cap_logged = true;
+        }
+    }
+
+    if (try_gpu && n_decode_gpu_ok) {
 #if defined(GGML_USE_CUDA)
-        triattention_gpu_device_sync();  // TRIX-14: ensure pending KV writes visible before GPU prune
+        triattention_gpu_clear_errors();
+        if (g_iswa_prune_depth == 0) {
+            if (!triattention_gpu_device_sync()) {
+                fprintf(stderr,
+                    "[TriAttention] GPU device sync failed before prune, using CPU scoring\n");
+                triattention_iswa_note_gpu_failure();
+                state->use_gpu = false;
+            }
+        }
 #endif
+        if (state->use_gpu && !triattention_iswa_gpu_blocked()) {
         // ---- GPU path ----
         uint32_t * d_cell_indices = nullptr;
         int32_t  * d_positions    = nullptr;
-        const bool cells_uploaded = triattention_gpu_upload_cells(
-            &d_cell_indices, &d_positions,
-            decode_cell_idx.data(), decode_positions.data(),
-            n_decode, nullptr);
-
-        float * d_scores_all = nullptr;
+#if defined(GGML_USE_CUDA)
+        const bool cells_uploaded = triattention_gpu_upload_cells_pooled(
+            state, decode_cell_idx.data(), decode_positions.data(), n_decode);
         if (cells_uploaded) {
-            d_scores_all = triattention_gpu_alloc_scores(
-                (uint32_t)((size_t)cal->n_sampled * n_decode), nullptr);
+            d_cell_indices = state->d_cell_indices_pool;
+            d_positions    = state->d_positions_pool;
+        }
+#else
+        const bool cells_uploaded = false;
+#endif
+
+        const size_t need_score_bytes = (size_t)cal->n_sampled * n_decode * sizeof(float);
+        size_t scores_cap_bytes = state->d_scores_pool_floats * sizeof(float);
+        float * d_scores_all = nullptr;
+        if (cells_uploaded &&
+            triattention_gpu_ensure_buffer(
+                (void **)&state->d_scores_pool, &scores_cap_bytes, need_score_bytes)) {
+            d_scores_all = state->d_scores_pool;
+            state->d_scores_pool_floats = scores_cap_bytes / sizeof(float);
         }
 
         if (!cells_uploaded || !d_scores_all) {
             fprintf(stderr, "[TriAttention] GPU prune buffer alloc failed, using CPU scoring\n");
+            triattention_iswa_note_gpu_failure();
             state->use_gpu = false;
             triattention_gpu_free((triattention_gpu_state *)state->d_gpu_state);
             state->d_gpu_state = nullptr;
-            triattention_gpu_free_dev(d_cell_indices);
-            triattention_gpu_free_dev(d_positions);
-            triattention_gpu_free_dev(d_scores_all);
         } else {
-        for (uint32_t sh = 0; sh < cal->n_sampled; sh++) {
-            const uint32_t layer_idx = cal->sampled_layer[sh];
-            if (layer_idx >= layer_in_subcache.size() || !layer_in_subcache[layer_idx]) {
-                continue;
-            }
-            const uint32_t attn_head = cal->sampled_head[sh];
-            const uint32_t cache_kv_groups = cal->num_attn_heads / state->cache_n_kv_heads;
-            const uint32_t kv_head   = attn_head / cache_kv_groups;
+            bool gpu_ok = true;
+            int32_t last_staged_ikv = -1;
 
-            int32_t ikv = -1;
-            for (uint32_t l = 0; l < n_layers; l++) {
-                if (layer_map[l] == (int32_t) layer_idx) { ikv = (int32_t)l; break; }
-            }
-            if (ikv < 0) {
-                continue;
+            // TRIX-ROWBYTES: validate cell indices before any gather/score
+            if (n_layers > 0 && k_tensors[0]) {
+                const uint64_t kv_cells_per_stream = (uint64_t) k_tensors[0]->ne[1];
+                for (uint32_t ci = 0; ci < n_decode; ci++) {
+                    if ((uint64_t) decode_cell_idx[ci] >= kv_cells_per_stream) {
+                        fprintf(stderr,
+                            "[TriAttention] GPU: cell index %u >= kv_size %llu\n",
+                            decode_cell_idx[ci], (unsigned long long) kv_cells_per_stream);
+                        gpu_ok = false;
+                        break;
+                    }
+                }
             }
 
-            const ggml_tensor * kt = k_tensors[ikv];
-            const size_t row_bytes = (size_t)(ggml_nbytes(kt) / (size_t)kt->ne[1]);
-            const uint64_t n_embd  = (uint64_t)kt->ne[0];
+            for (uint32_t sh = 0; sh < cal->n_sampled && gpu_ok; sh++) {
+                const uint32_t layer_idx = cal->sampled_layer[sh];
+                if (layer_idx >= layer_in_subcache.size() || !layer_in_subcache[layer_idx]) {
+                    continue;
+                }
+                const uint32_t attn_head = cal->sampled_head[sh];
+                const uint32_t cache_kv_groups = cal->num_attn_heads / state->cache_n_kv_heads;
+                const uint32_t kv_head   = attn_head / cache_kv_groups;
 
-            triattention_gpu_score_head(
-                (triattention_gpu_state *)state->d_gpu_state,
-                kt->data,                                   // device pointer (K on GPU)
-                n_embd,
-                row_bytes,
-                kv_head,
-                sh,                                         // head_calib_idx
-                d_cell_indices,
-                d_positions,
-                n_decode,
-                (int64_t)state->absolute_position,          // round_start
-                (int)cfg.agg,
-                d_scores_all + (size_t)sh * n_decode,       // output slice
-                nullptr);                                    // default stream
+                int32_t ikv = -1;
+                for (uint32_t l = 0; l < n_layers; l++) {
+                    if (layer_map[l] == (int32_t) layer_idx) { ikv = (int32_t)l; break; }
+                }
+                if (ikv < 0) {
+                    continue;
+                }
+
+                const ggml_tensor * kt = k_tensors[ikv];
+                if (state->cache_n_kv_heads == 0 || kt->ne[0] % state->cache_n_kv_heads != 0) {
+                    fprintf(stderr, "[TriAttention] GPU: bad K tensor layout for layer %u\n", layer_idx);
+                    gpu_ok = false;
+                    break;
+                }
+                const uint32_t layer_padded_hd =
+                    (uint32_t)(kt->ne[0] / (uint64_t) state->cache_n_kv_heads);
+                // TRIX-ROWBYTES: align with CPU dequant path (not ggml_nbytes/ne[1])
+                const size_t row_bytes = ggml_row_size(kt->type, (int64_t) kt->ne[0]);
+                const uint64_t n_embd  = (uint64_t) kt->ne[0];
+                const uint32_t stream_idx = 0; // prune path uses stream 0 (unified / single-slot)
+                const size_t stream_stride = row_bytes * (size_t) kt->ne[1];
+                const char * k_host_base = (const char *) kt->data +
+                    (size_t) stream_idx * stream_stride;
+                const uint32_t score_hd = state->projection_mode ? cal->head_dim : layer_padded_hd;
+
+                const void * k_ptr = k_host_base;
+                bool k_rows_compact = false;
+
+                if (state->kv_on_host) {
+                    if (ikv != last_staged_ikv) {
+                        const size_t need_staging = n_decode * row_bytes;
+                        if (!triattention_gpu_ensure_buffer(
+                                &state->d_k_staging, &state->k_staging_bytes, need_staging) ||
+                            !triattention_gpu_gather_k_rows(
+                                state->d_k_staging, k_host_base, row_bytes,
+                                decode_cell_idx.data(), n_decode,
+                                (uint32_t) kt->ne[1])) {
+                            fprintf(stderr,
+                                "[TriAttention] GPU host-KV staging failed for layer %u\n", layer_idx);
+                            gpu_ok = false;
+                            break;
+                        }
+                        last_staged_ikv = ikv;
+                    }
+                    k_ptr = state->d_k_staging;
+                    k_rows_compact = true;
+                }
+
+                if (!triattention_gpu_score_head(
+                        (triattention_gpu_state *)state->d_gpu_state,
+                        k_ptr,
+                        n_embd,
+                        row_bytes,
+                        kv_head,
+                        sh,
+                        score_hd,
+                        k_rows_compact,
+                        d_cell_indices,
+                        d_positions,
+                        n_decode,
+                        (int64_t)state->absolute_position,
+                        (int)cfg.agg,
+                        d_scores_all + (size_t)sh * n_decode,
+                        nullptr)) {
+                    fprintf(stderr, "[TriAttention] GPU score_head failed for layer %u head %u\n",
+                            layer_idx, attn_head);
+                    gpu_ok = false;
+                }
+            }
+
+            if (gpu_ok &&
+                !triattention_gpu_scores_to_host(
+                    score_buf, d_scores_all,
+                    (uint32_t)((size_t)cal->n_sampled * n_decode), nullptr)) {
+                fprintf(stderr, "[TriAttention] GPU scores D2H failed\n");
+                gpu_ok = false;
+            }
+
+            if (!gpu_ok) {
+                fprintf(stderr, "[TriAttention] GPU scoring failed, using CPU scoring\n");
+                triattention_iswa_note_gpu_failure();
+                state->use_gpu = false;
+                triattention_gpu_free((triattention_gpu_state *)state->d_gpu_state);
+                state->d_gpu_state = nullptr;
+                if (state->d_scores) {
+                    triattention_gpu_free_dev(state->d_scores);
+                    state->d_scores = nullptr;
+                }
+            } else {
+                for (uint32_t sh = 0; sh < cal->n_sampled; sh++) {
+                    const uint32_t layer_idx = cal->sampled_layer[sh];
+                    if (layer_idx >= layer_in_subcache.size() || !layer_in_subcache[layer_idx]) {
+                        memset(score_buf + (size_t)sh * n_decode, 0, n_decode * sizeof(float));
+                        continue;
+                    }
+                    int32_t ikv = -1;
+                    for (uint32_t l = 0; l < n_layers; l++) {
+                        if (layer_map[l] == (int32_t) layer_idx) { ikv = (int32_t)l; break; }
+                    }
+                    if (ikv < 0) {
+                        memset(score_buf + (size_t)sh * n_decode, 0, n_decode * sizeof(float));
+                    }
+                }
+                gpu_scored = true;
+            }
         }
-
-        // Copy all scores to host with one synchronization point
-        triattention_gpu_scores_to_host(
-            score_buf, d_scores_all,
-            (uint32_t)((size_t)cal->n_sampled * n_decode), nullptr);
-
-        // Zero out scores for heads outside this sub-cache or missing K tensors
-        for (uint32_t sh = 0; sh < cal->n_sampled; sh++) {
-            const uint32_t layer_idx = cal->sampled_layer[sh];
-            if (layer_idx >= layer_in_subcache.size() || !layer_in_subcache[layer_idx]) {
-                memset(score_buf + (size_t)sh * n_decode, 0, n_decode * sizeof(float));
-                continue;
-            }
-            int32_t ikv = -1;
-            for (uint32_t l = 0; l < n_layers; l++) {
-                if (layer_map[l] == (int32_t)layer_idx) { ikv = (int32_t)l; break; }
-            }
-            if (ikv < 0) {
-                memset(score_buf + (size_t)sh * n_decode, 0, n_decode * sizeof(float));
-            }
-        }
-
-        triattention_gpu_free_dev(d_scores_all);
-        triattention_gpu_free_dev(d_cell_indices);
-        triattention_gpu_free_dev(d_positions);
-        gpu_scored = true;
-        }
+        } // state->use_gpu && !triattention_iswa_gpu_blocked()
     }
 
     if (!gpu_scored) {

@@ -222,6 +222,17 @@ Per head (repeated n_sampled times):
   samples representative heads per KV group
 - **Architectures**: Any transformer with standard RoPE-based attention
 
+## Godzilla `kv-god` hardening (2026-06)
+
+Production fixes on top of the buun TriAttention port:
+
+- **TRIX-HOST-KV**: GPU scoring when KV lives on host (`-nkvo --kv-unified`) — H2D gather into pooled staging buffers instead of passing host pointers to CUDA.
+- **TRIX-ROWBYTES**: `ggml_row_size`-correct row bytes, stream-adjusted host bases, and cell-index validation for multi-stream KV layouts.
+- **TRIX-GPU-HARDEN**: Non-fatal CUDA sync/error clearing; per-head stream sync after score kernels; gather bounds checks.
+- **TRIX-ISWA-RESOURCES**: ISWA prune scope guards, shared GPU failure flag, grow-only index/position pools, and CPU cap for very large `n_decode` prunes.
+
+Regression tests: `ctest -R triattention` (host-kv-staging, rowbytes-multistream, gpu-fault-inject, plus existing cal-v2/iswa/parity suite).
+
 ## References
 
 - Paper: ["TriAttention: Trigonometric KV Cache Eviction"](https://arxiv.org/abs/2604.04921)

@@ -1,4 +1,5 @@
 #include "llama-triattention.h"
+#include "ggml.h"
 #include "ggml-cuda.h"
 #include "ggml-quants.h"
 #include "turbo-rotation-data.h"
@@ -110,6 +111,10 @@ static void parity_case(
         if (k_type == GGML_TYPE_F32) {
             std::memcpy(row_q, row_f, padded_hd * sizeof(float));
             std::memcpy(dequant.data() + (size_t) c * padded_hd, row_f, padded_hd * sizeof(float));
+        } else if (k_type == GGML_TYPE_F16) {
+            ggml_fp32_to_fp16_row(row_f, (ggml_fp16_t *) row_q, (int64_t) padded_hd);
+            ggml_fp16_to_fp32_row((const ggml_fp16_t *) row_q,
+                dequant.data() + (size_t) c * padded_hd, (int64_t) padded_hd);
         } else if (k_type == GGML_TYPE_TURBO3_0) {
             quantize_row_turbo3_0_ref(row_f, (block_turbo3_0 *) row_q, (int64_t) padded_hd);
             dequantize_row_turbo3_0((const block_turbo3_0 *) row_q,
@@ -201,15 +206,19 @@ static void parity_case(
     float * d_scores = triattention_gpu_alloc_scores(n_cells, nullptr);
     require(d_scores != nullptr, "gpu score alloc failed");
 
-    triattention_gpu_score_head(
+    require(triattention_gpu_score_head(
         gst, d_k, padded_hd, row_bytes, 0, 0,
+        padded_hd, false,
         d_cells, d_pos, n_cells, round_start, (int) TRIATTENTION_AGG_MEAN,
-        d_scores, nullptr);
+        d_scores, nullptr), "triattention_gpu_score_head failed");
 
     std::vector<float> gpu_scores(n_cells);
-    triattention_gpu_scores_to_host(gpu_scores.data(), d_scores, n_cells, nullptr);
+    require(triattention_gpu_scores_to_host(gpu_scores.data(), d_scores, n_cells, nullptr),
+            "triattention_gpu_scores_to_host failed");
 
-    const float eps = k_type == GGML_TYPE_F32 ? 1e-4f : 5e-2f;
+    const float eps = (k_type == GGML_TYPE_F32) ? 1e-4f
+                    : (k_type == GGML_TYPE_F16) ? 1e-3f
+                    : 5e-2f;
     for (uint32_t i = 0; i < n_cells; i++) {
         const float diff = std::fabs(cpu_scores[i] - gpu_scores[i]);
         if (diff > eps) {
@@ -245,6 +254,8 @@ int main() {
     parity_case(GGML_TYPE_F32,       512, 1, false);
     parity_case(GGML_TYPE_TURBO3_0,  256, 0, true);
     parity_case(GGML_TYPE_TURBO3_0,  512, 0, true);
+    parity_case(GGML_TYPE_F16,       256, 0, false);
+    parity_case(GGML_TYPE_F16,       512, 0, false);
 
     std::fprintf(stderr, "test-triattention-gpu-parity: all tests passed\n");
     return 0;

@@ -153,6 +153,10 @@ flake.lock
 /run-spec.sh
 /.ccache/
 
+# Godzilla local runtime artifacts (do not commit)
+logs/
+benchmarks/wikitext/
+
 # IDE
 
 /*.code-workspace

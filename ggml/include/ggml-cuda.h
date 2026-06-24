@@ -76,13 +76,15 @@ GGML_BACKEND_API triattention_gpu_state * triattention_gpu_init(
     const float * offsets,
     void * stream);
 
-GGML_BACKEND_API void triattention_gpu_score_head(
+GGML_BACKEND_API bool triattention_gpu_score_head(
     triattention_gpu_state * state,
     const void   * k_data_dev,
     uint64_t       n_embd_k_gqa,
     size_t         row_bytes,
     uint32_t       kv_head_idx,
     uint32_t       head_calib_idx,
+    uint32_t       padded_hd,
+    bool           k_rows_compact,
     const uint32_t * cell_indices_dev,
     const int32_t  * positions_dev,
     uint32_t       n_cells,
@@ -91,7 +93,7 @@ GGML_BACKEND_API void triattention_gpu_score_head(
     float        * scores_dev,
     void * stream);
 
-GGML_BACKEND_API void triattention_gpu_scores_to_host(
+GGML_BACKEND_API bool triattention_gpu_scores_to_host(
     float * scores_host,
     const float * scores_dev,
     uint32_t n_cells,
@@ -108,10 +110,19 @@ GGML_BACKEND_API bool triattention_gpu_upload_cells(
 GGML_BACKEND_API float * triattention_gpu_alloc_scores(uint32_t n_cells, void * stream);
 GGML_BACKEND_API void    triattention_gpu_free_dev(void * ptr);
 GGML_BACKEND_API void    triattention_gpu_free(triattention_gpu_state * state);
-GGML_BACKEND_API void    triattention_gpu_device_sync(void);
+GGML_BACKEND_API bool    triattention_gpu_device_sync(void);
+GGML_BACKEND_API void    triattention_gpu_clear_errors(void);
 GGML_BACKEND_API bool    triattention_gpu_device_available(void);
 GGML_BACKEND_API bool    triattention_gpu_malloc(void ** ptr, size_t nbytes);
 GGML_BACKEND_API bool    triattention_gpu_memcpy_h2d(void * dst, const void * src, size_t nbytes);
+GGML_BACKEND_API bool    triattention_gpu_ensure_buffer(void ** ptr, size_t * cap_bytes, size_t need_bytes);
+GGML_BACKEND_API bool    triattention_gpu_gather_k_rows(
+    void * d_staging,
+    const void * k_host,
+    size_t row_bytes,
+    const uint32_t * cell_indices_host,
+    uint32_t n_cells,
+    uint32_t kv_cells_per_stream);
 
 #ifdef  __cplusplus
 }

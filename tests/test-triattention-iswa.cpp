@@ -225,9 +225,22 @@ static void test_ondisk_gemma4_v2_dual_init() {
     triattention_free(swa_st);
 }
 
+static void test_iswa_prune_scope_single_sync(void) {
+    triattention_iswa_prune_scope_begin();
+    require(!triattention_iswa_gpu_blocked(), "scope begin must clear gpu block");
+    triattention_iswa_note_gpu_failure();
+    require(triattention_iswa_gpu_blocked(), "note_gpu_failure must block SWA GPU");
+    triattention_iswa_prune_scope_end();
+    require(triattention_iswa_gpu_blocked(), "block persists until next ubatch scope");
+    triattention_iswa_prune_scope_begin();
+    require(!triattention_iswa_gpu_blocked(), "next ubatch scope must clear block");
+    triattention_iswa_prune_scope_end();
+}
+
 int main() {
     test_synthetic_dual_sub_init();
     test_ondisk_gemma4_v2_dual_init();
+    test_iswa_prune_scope_single_sync();
     std::fprintf(stderr, "test-triattention-iswa: all tests passed\n");
     return 0;
 }

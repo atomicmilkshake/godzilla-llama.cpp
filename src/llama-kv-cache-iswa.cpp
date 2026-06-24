@@ -1,4 +1,5 @@
 #include "llama-kv-cache-iswa.h"
+#include "llama-triattention.h"
 
 #include "llama-kv-cache-kvarn.h"
 #include "llama-impl.h"
@@ -393,10 +394,14 @@ bool llama_kv_cache_iswa_context::next() {
 bool llama_kv_cache_iswa_context::apply() {
     assert(!llama_memory_status_is_fail(status));
 
+    triattention_iswa_prune_scope_begin();
+
     bool res = true;
 
     res = res & ctx_base->apply();
     res = res & ctx_swa ->apply();
+
+    triattention_iswa_prune_scope_end();
 
     return res;
 }
