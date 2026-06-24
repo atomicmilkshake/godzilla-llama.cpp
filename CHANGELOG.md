@@ -1,5 +1,11 @@
 # Changelog
 
+## kv-god (unreleased, Godzilla fork)
+
+- **TriAttention hardening**: host-KV GPU staging (`-nkvo`), `ggml_row_size` rowbytes for multi-stream KV, CUDA sync/error hardening, ISWA prune resource guards; new regression tests (`test-triattention-host-kv-staging`, `test-triattention-rowbytes-multistream`, `test-triattention-gpu-fault-inject`).
+- **Copilot streaming**: `--reasoning-promote-to-content` / `--no-reasoning-promote-to-content`; persistent per-task content coalescing when promote is off (word boundary or ≥32 chars; flush remainder on stream end); `test-server-copilot-coalesce`.
+- **Observability**: `--log-payloads` logs full request bodies (raw + parsed) at SRV_INF across chat/completions and related routes.
+
 ## v0.3.1
 
 - Merged latest upstream llama.cpp master. This pulls in Gemma 4 12B and Gemma 4 unified multimodal support fixes, including non-causal vision, unified audio/vision projector handling, and FPE fixes; Qwen3.5 post-norm hidden-state behavior for MTP; CUDA KV-cache quantization preallocation and PDL race fixes; WebGPU FlashAttention refactoring with standardized quantization support; CPU backend improvements for RVV/SVE; lower-latency Metal command-buffer status polling; Mermaid diagram rendering and preview support in `tools/ui`; updated BoringSSL, SYCL documentation, save/load-state tests, Docker docs, and small CI/release maintenance.

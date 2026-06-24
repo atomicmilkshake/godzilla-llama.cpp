@@ -129,6 +129,7 @@ int llama_server(int argc, char ** argv) {
     //
 
     // register API routes
+    // common_params (incl. log_payloads) is passed by ref to server_routes (which forwards to post_* handlers in server-context.cpp); no additional ctx wiring needed for the flag
     server_routes routes(params, ctx_server);
     server_tools tools;
 

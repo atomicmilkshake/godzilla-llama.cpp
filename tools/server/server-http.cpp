@@ -10,10 +10,14 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <ctime>
 
 //
 // HTTP implementation using cpp-httplib
 //
+
+// Threaded flag from common_params (set in init); contained to this translation unit so only server-http.cpp is edited for the logging enhancement.
+static bool s_log_payloads = false;
 
 class server_http_context::Impl {
 public:
@@ -42,8 +46,32 @@ static void log_server_request(const httplib::Request & req, const httplib::Resp
 
     SRV_TRC("done request: %s %s %s %d\n", req.method.c_str(), req.path.c_str(), req.remote_addr.c_str(), res.status);
 
-    SRV_DBG("request:  %s\n", req.body.c_str());
-    SRV_DBG("response: %s\n", res.body.c_str());
+    if (s_log_payloads) {
+        // Enhanced payload logging (when params.log_payloads): full raw req.body + key headers with timestamp; reuse SRV_DBG to common log system (no dedicated file to keep simple reuse).
+        std::time_t now = std::time(nullptr);
+        char ts_buf[64] = {0};
+        if (std::strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now)) == 0) {
+            ts_buf[0] = '\0';
+        }
+        const std::string ua = req.get_header_value("User-Agent");
+        const std::string ct = req.get_header_value("Content-Type");
+        const std::string auth = req.get_header_value("Authorization");
+        SRV_DBG("payload [%s] %s %s remote=%s UA=\"%s\" CT=\"%s\" Auth=****%s body: %s\n",
+            ts_buf,
+            req.method.c_str(),
+            req.path.c_str(),
+            req.remote_addr.c_str(),
+            ua.c_str(),
+            ct.c_str(),
+            (auth.length() > 4 ? auth.substr(auth.length()-4).c_str() : ""),
+            req.body.c_str());
+        // also log response body for completeness on payload-log paths (chat/completions etc)
+        SRV_DBG("response [%s]: %s\n", ts_buf, res.body.c_str());
+    } else {
+        // original lightweight body logging retained when flag is off
+        SRV_DBG("request:  %s\n", req.body.c_str());
+        SRV_DBG("response: %s\n", res.body.c_str());
+    }
 }
 
 // For Google Cloud Platform deployment compatibility
@@ -81,6 +109,9 @@ bool server_http_context::init(const common_params & params) {
     port = params.port;
     hostname = params.hostname;
 
+    // Thread the log_payloads flag from common_params into the static for use by logger and post lambda (per enhancement requirement).
+    s_log_payloads = params.log_payloads;
+
     if (gcp.enabled) {
         SRV_INF("Google Cloud Platform compat: health route = %s, predict route = %s, port = %d\n", gcp.path_health.c_str(), gcp.path_predict.c_str(), gcp.port);
 
@@ -113,6 +144,7 @@ bool server_http_context::init(const common_params & params) {
 #endif
 
     srv->set_default_headers({{"Server", "llama.cpp"}});
+    // Logger uses the static s_log_payloads (threaded from params in init); flag controls enhanced payload+headers+timestamp logging for chat/completions etc.
     srv->set_logger(log_server_request);
     srv->set_exception_handler([](const httplib::Request &, httplib::Response & res, const std::exception_ptr & ep) {
         // this is fail-safe; exceptions should already handled by `ex_wrapper`
@@ -491,6 +523,35 @@ void server_http_context::post(const std::string & path, const server_http_conte
     pimpl->srv->Post(path_prefix + path, [handler](const httplib::Request & req, httplib::Response & res) {
         std::string body = req.body;
         std::map<std::string, uploaded_file> files;
+
+        // Enhanced input payload logging in post lambda (when flag): log full raw req.body + key headers with timestamp for chat/completions etc. Reuses SRV_DBG.
+        if (s_log_payloads) {
+            const bool is_payload_path = (req.path.find("/chat/completions") != std::string::npos)
+                                      || (req.path.find("/completions") != std::string::npos)
+                                      || (req.path.find("/v1/chat/completions") != std::string::npos)
+                                      || (req.path.find("/v1/completions") != std::string::npos)
+                                      || (req.path.find("/apply-template") != std::string::npos)
+                                      || (req.path.find("/tokenize") != std::string::npos);
+            if (is_payload_path || true) {  // comprehensive: log for all POSTs under flag (input focus), especially completions
+                std::time_t now = std::time(nullptr);
+                char ts_buf[64] = {0};
+                if (std::strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now)) == 0) {
+                    ts_buf[0] = '\0';
+                }
+                const std::string ua = req.get_header_value("User-Agent");
+                const std::string ct = req.get_header_value("Content-Type");
+                const std::string auth = req.get_header_value("Authorization");
+                SRV_DBG("post-input [%s] %s %s remote=%s UA=\"%s\" CT=\"%s\" Auth=****%s RAW_BODY: %s\n",
+                    ts_buf,
+                    req.method.c_str(),
+                    req.path.c_str(),
+                    req.remote_addr.c_str(),
+                    ua.c_str(),
+                    ct.c_str(),
+                    (auth.length() > 4 ? auth.substr(auth.length()-4).c_str() : ""),
+                    req.body.c_str());  // full raw (before any multipart transform)
+            }
+        }
 
         if (req.is_multipart_form_data()) {
             // translate text fields to a JSON object and use it as the body

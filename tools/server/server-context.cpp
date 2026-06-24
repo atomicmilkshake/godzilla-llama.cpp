@@ -8029,7 +8029,21 @@ void server_routes::init_routes() {
         }
 
         // validate input
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw for infill): %s\n", buf, req.body.c_str());
+            }
+        }
         json data = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json for infill): %s\n", buf, data.dump().c_str());
+            }
+        }
         if (data.contains("prompt") && !data.at("prompt").is_string()) {
             // prompt is optional
             res->error(format_error_response("\"prompt\" must be a string", ERROR_TYPE_INVALID_REQUEST));
@@ -8091,7 +8105,21 @@ void server_routes::init_routes() {
     this->post_completions = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files; // dummy
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json): %s\n", buf, body.dump().c_str());
+            }
+        }
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -8103,7 +8131,21 @@ void server_routes::init_routes() {
     this->post_completions_oai = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files; // dummy
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json): %s\n", buf, body.dump().c_str());
+            }
+        }
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -8115,11 +8157,32 @@ void server_routes::init_routes() {
     this->post_chat_completions = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files;
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw): %s\n", buf, req.body.c_str());
+            }
+        }
         json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json before chat conversion): %s\n", buf, body.dump().c_str());
+            }
+        }
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
             files);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (parsed after chat conversion): %s\n", buf, body_parsed.dump().c_str());
+            }
+        }
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -8130,7 +8193,21 @@ void server_routes::init_routes() {
 
     this->post_control = [this](const server_http_req & req) {
         auto res = create_response();
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw for control): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json for control): %s\n", buf, body.dump().c_str());
+            }
+        }
 
         const std::string cmpl_id = json_value(body, "id", std::string());
         const std::string action  = json_value(body, "action", std::string());
@@ -8168,13 +8245,35 @@ void server_routes::init_routes() {
     this->post_responses_oai = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files;
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw before responses conversion): %s\n", buf, req.body.c_str());
+            }
+        }
         json body = server_chat_convert_responses_to_chatcmpl(json::parse(req.body));
-        SRV_DBG("%s\n", "Request converted: OpenAI Responses -> OpenAI Chat Completions");
-        SRV_DBG("converted request: %s\n", body.dump().c_str());
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (after responses->chat conversion): %s\n", buf, body.dump().c_str());
+            }
+        } else {
+            SRV_DBG("%s\n", "Request converted: OpenAI Responses -> OpenAI Chat Completions");
+            SRV_DBG("converted request: %s\n", body.dump().c_str());
+        }
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
             files);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (parsed after chat conversion for responses): %s\n", buf, body_parsed.dump().c_str());
+            }
+        }
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -8192,17 +8291,39 @@ void server_routes::init_routes() {
         }
 
         std::vector<raw_buffer> files;
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw before transcriptions conversion): %s\n", buf, req.body.c_str());
+            }
+        }
         json body = convert_transcriptions_to_chatcmpl(
             json::parse(req.body),
             meta->chat_params.tmpls.get(),
             req.files,
             files);
-        SRV_DBG("%s\n", "Request converted: OpenAI Transcriptions -> OpenAI Chat Completions");
-        SRV_DBG("converted request: %s\n", body.dump().c_str());
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (after transcriptions->chat conversion): %s\n", buf, body.dump().c_str());
+            }
+        } else {
+            SRV_DBG("%s\n", "Request converted: OpenAI Transcriptions -> OpenAI Chat Completions");
+            SRV_DBG("converted request: %s\n", body.dump().c_str());
+        }
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
             files);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (parsed after chat conversion for transcriptions): %s\n", buf, body_parsed.dump().c_str());
+            }
+        }
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -8214,13 +8335,35 @@ void server_routes::init_routes() {
     this->post_anthropic_messages = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files;
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw before anthropic conversion): %s\n", buf, req.body.c_str());
+            }
+        }
         json body = server_chat_convert_anthropic_to_oai(json::parse(req.body));
-        SRV_DBG("%s\n", "Request converted: Anthropic -> OpenAI Chat Completions");
-        SRV_DBG("converted request: %s\n", body.dump().c_str());
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (after anthropic->chat conversion): %s\n", buf, body.dump().c_str());
+            }
+        } else {
+            SRV_DBG("%s\n", "Request converted: Anthropic -> OpenAI Chat Completions");
+            SRV_DBG("converted request: %s\n", body.dump().c_str());
+        }
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
             files);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (parsed after chat conversion for anthropic): %s\n", buf, body_parsed.dump().c_str());
+            }
+        }
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -8232,9 +8375,24 @@ void server_routes::init_routes() {
     this->post_anthropic_count_tokens = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files;
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw before anthropic count_tokens conversion): %s\n", buf, req.body.c_str());
+            }
+        }
         json body = server_chat_convert_anthropic_to_oai(json::parse(req.body));
-        SRV_DBG("%s\n", "Request converted: Anthropic -> OpenAI Chat Completions");
-        SRV_DBG("converted request: %s\n", body.dump().c_str());
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (after anthropic->chat conversion for count_tokens): %s\n", buf, body.dump().c_str());
+            }
+        } else {
+            SRV_DBG("%s\n", "Request converted: Anthropic -> OpenAI Chat Completions");
+            SRV_DBG("converted request: %s\n", body.dump().c_str());
+        }
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
@@ -8250,11 +8408,32 @@ void server_routes::init_routes() {
     this->post_apply_template = [this](const server_http_req & req) {
         auto res = create_response();
         std::vector<raw_buffer> files; // dummy, unused
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw): %s\n", buf, req.body.c_str());
+            }
+        }
         json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json): %s\n", buf, body.dump().c_str());
+            }
+        }
         json data = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
             files);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (parsed for apply_template): %s\n", buf, data.dump().c_str());
+            }
+        }
         res->ok({{ "prompt", std::move(data.at("prompt")) }});
         return res;
     };
@@ -8302,7 +8481,21 @@ void server_routes::init_routes() {
 
     this->post_tokenize = [this](const server_http_req & req) {
         auto res = create_response();
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw for tokenize): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json for tokenize): %s\n", buf, body.dump().c_str());
+            }
+        }
         json tokens_response = json::array();
         if (body.count("content") != 0) {
             const bool add_special = json_value(body, "add_special", false);
@@ -8343,7 +8536,21 @@ void server_routes::init_routes() {
 
     this->post_detokenize = [this](const server_http_req & req) {
         auto res = create_response();
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw for detokenize): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json for detokenize): %s\n", buf, body.dump().c_str());
+            }
+        }
 
         std::string content;
         if (body.count("tokens") != 0) {
@@ -8370,7 +8577,21 @@ void server_routes::init_routes() {
             return res;
         }
 
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw for rerank): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json for rerank): %s\n", buf, body.dump().c_str());
+            }
+        }
 
         // if true, use TEI API format, otherwise use Jina API format
         // Jina: https://jina.ai/reranker/
@@ -8473,7 +8694,21 @@ void server_routes::init_routes() {
 
     this->post_lora_adapters = [this](const server_http_req & req) {
         auto res = create_response();
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (raw for lora adapters): %s\n", buf, req.body.c_str());
+            }
+        }
         const json body = json::parse(req.body);
+        if (params.log_payloads) {
+            const auto t = std::time(nullptr);
+            char buf[64] = {};
+            if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+                SRV_INF("[%s] request body (json for lora adapters): %s\n", buf, body.dump().c_str());
+            }
+        }
         if (!body.is_array()) {
             res->error(format_error_response("Request body must be an array", ERROR_TYPE_INVALID_REQUEST));
             return res;
@@ -8528,7 +8763,21 @@ json server_routes::get_model_info() const {
 
 std::unique_ptr<server_res_generator> server_routes::handle_slots_save(const server_http_req & req, int id_slot) {
     auto res = create_response();
+    if (params.log_payloads) {
+        const auto t = std::time(nullptr);
+        char buf[64] = {};
+        if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+            SRV_INF("[%s] request body (raw for slot save): %s\n", buf, req.body.c_str());
+        }
+    }
     const json request_data = json::parse(req.body);
+    if (params.log_payloads) {
+        const auto t = std::time(nullptr);
+        char buf[64] = {};
+        if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+            SRV_INF("[%s] request body (json for slot save): %s\n", buf, request_data.dump().c_str());
+        }
+    }
     std::string filename = request_data.at("filename");
     if (!fs_validate_filename(filename)) {
         res->error(format_error_response("Invalid filename", ERROR_TYPE_INVALID_REQUEST));
@@ -8564,7 +8813,21 @@ std::unique_ptr<server_res_generator> server_routes::handle_slots_save(const ser
 
 std::unique_ptr<server_res_generator> server_routes::handle_slots_restore(const server_http_req & req, int id_slot) {
     auto res = create_response();
+    if (params.log_payloads) {
+        const auto t = std::time(nullptr);
+        char buf[64] = {};
+        if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+            SRV_INF("[%s] request body (raw for slot restore): %s\n", buf, req.body.c_str());
+        }
+    }
     const json request_data = json::parse(req.body);
+    if (params.log_payloads) {
+        const auto t = std::time(nullptr);
+        char buf[64] = {};
+        if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+            SRV_INF("[%s] request body (json for slot restore): %s\n", buf, request_data.dump().c_str());
+        }
+    }
     std::string filename = request_data.at("filename");
     if (!fs_validate_filename(filename)) {
         res->error(format_error_response("Invalid filename", ERROR_TYPE_INVALID_REQUEST));
@@ -8638,7 +8901,21 @@ std::unique_ptr<server_res_generator> server_routes::handle_embeddings_impl(cons
         return res;
     }
 
+    if (params.log_payloads) {
+        const auto t = std::time(nullptr);
+        char buf[64] = {};
+        if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+            SRV_INF("[%s] request body (raw for embeddings): %s\n", buf, req.body.c_str());
+        }
+    }
     const json body = json::parse(req.body);
+    if (params.log_payloads) {
+        const auto t = std::time(nullptr);
+        char buf[64] = {};
+        if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&t))) {
+            SRV_INF("[%s] request body (json for embeddings): %s\n", buf, body.dump().c_str());
+        }
+    }
 
     // for the shape of input/content, see tokenize_input_prompts()
     json prompt;

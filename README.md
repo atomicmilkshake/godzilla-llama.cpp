@@ -67,6 +67,23 @@ cmake --build build -j 8 --target llama-server
 
 Calibration: `J:\LLM\TurboQuantExperimentation\calibrate.py` (see workspace TriAttention rule).
 
+### VSCode Copilot / agent mode (Qwopus-style)
+
+For remote Copilot through Caddy, keep reasoning in `reasoning_content` only and coalesce visible `content` deltas so agent mode does not treat every token as a completed step:
+
+```powershell
+.\build\bin\llama-server.exe `
+  -m J:\MOODLES\Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf `
+  -c 262144 -ngl 99 --flash-attn on -nkvo --kv-unified `
+  --host 0.0.0.0 --port 8090 --parallel 1 `
+  --alias "Qwopus Coder,Godzilla Test" --jinja `
+  --reasoning on --reasoning-budget 8192 --reasoning-format deepseek `
+  --no-reasoning-promote-to-content `
+  --verbose --log-payloads
+```
+
+Build helper: `pwsh -File scripts/build_cuda.ps1 -Target llama-server` (stop any running `llama-server` first on Windows to avoid DLL lock).
+
 ## Benchmarks
 
 ```powershell
