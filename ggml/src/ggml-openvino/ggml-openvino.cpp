@@ -872,6 +872,10 @@ static bool is_op_unsupported_case(const ggml_tensor * op) {
             // GGML_LOG_WARN("OpenVINO backend only supports CPY that is a cast\n");
             return true;
         }
+        // CPY into a strided view of a larger buffer (recurrent-state snapshots) not supported
+        if (op->view_src && ggml_nbytes(op) != ggml_nbytes(op->view_src)) {
+            return true;
+        }
         break;
     }
     case GGML_OP_MUL_MAT: {
