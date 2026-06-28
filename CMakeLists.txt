@@ -20,6 +20,8 @@ endif()
 
 message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 
+set(LLAMA_VENDOR_BITNET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/bitnet" CACHE PATH "Microsoft BitNet vendor kernel slice")
+
 # Add path to modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 

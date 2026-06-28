@@ -443,7 +443,11 @@ extern "C" {
         GGML_TYPE_Q2_0    = 53,
         GGML_TYPE_Q2_1    = 54,
         GGML_TYPE_TURBO4_TCQ = 55, // TurboQuant 4-bit KV cache: TCQ (k=4, L=10, 1024 states)
-        GGML_TYPE_COUNT   = 56,
+        GGML_TYPE_I2_S    = 56, // BitNet 2-bit ternary (Microsoft I2_S MAD path)
+        GGML_TYPE_I8_S    = 57, // BitNet activation type for I2_S vec_dot
+        GGML_TYPE_TL1     = 58, // BitNet TL1 LUT (ARM)
+        GGML_TYPE_TL2     = 59, // BitNet TL2 LUT (x86)
+        GGML_TYPE_COUNT   = 60,
     };
 
     // precision

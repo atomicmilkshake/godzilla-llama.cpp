@@ -18,6 +18,19 @@
 #define GGUF_MAX_STRING_LENGTH  (1024*1024*1024)
 #define GGUF_MAX_ARRAY_ELEMENTS (1024*1024*1024)
 
+#if defined(GGML_BITNET_I2_S) || defined(GGML_BITNET_X86_TL2) || defined(GGML_BITNET_ARM_TL1)
+// Microsoft BitNet fork stores I2_S/I8_S/TL1/TL2 at ggml type IDs 36-39; godzilla uses 56-59.
+static enum ggml_type ggml_type_bitnet_gguf_remap(enum ggml_type type) {
+    switch ((int) type) {
+        case 36: return GGML_TYPE_I2_S;
+        case 37: return GGML_TYPE_I8_S;
+        case 38: return GGML_TYPE_TL1;
+        case 39: return GGML_TYPE_TL2;
+        default: return type;
+    }
+}
+#endif
+
 #ifdef _WIN32
 #    define gguf_ftell _ftelli64
 #    define gguf_fseek _fseeki64
@@ -697,6 +710,10 @@ static struct gguf_context * gguf_init_from_reader(const struct gguf_reader & gr
         {
             ok = ok && gr.read(info.t.type);
 
+#if defined(GGML_BITNET_I2_S) || defined(GGML_BITNET_X86_TL2) || defined(GGML_BITNET_ARM_TL1)
+            info.t.type = ggml_type_bitnet_gguf_remap(info.t.type);
+#endif
+
             // check that tensor type is within defined range
             if (info.t.type < 0 || info.t.type >= GGML_TYPE_COUNT) {
                 GGML_LOG_ERROR("%s: tensor '%s' has invalid ggml type %d. should be in [0, %d)\n",
@@ -1184,7 +1201,11 @@ const char * gguf_get_tensor_name(const struct gguf_context * ctx, int64_t tenso
 
 enum ggml_type gguf_get_tensor_type(const struct gguf_context * ctx, int64_t tensor_id) {
     GGML_ASSERT(tensor_id >= 0 && tensor_id < gguf_get_n_tensors(ctx));
+#if defined(GGML_BITNET_I2_S) || defined(GGML_BITNET_X86_TL2) || defined(GGML_BITNET_ARM_TL1)
+    return ggml_type_bitnet_gguf_remap(ctx->info[tensor_id].t.type);
+#else
     return ctx->info[tensor_id].t.type;
+#endif
 }
 
 size_t gguf_get_tensor_size(const struct gguf_context * ctx, int64_t tensor_id) {

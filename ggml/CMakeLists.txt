@@ -275,6 +275,11 @@ set   (GGML_VULKAN_SHADERS_GEN_TOOLCHAIN "" CACHE FILEPATH "ggml: toolchain file
 option(GGML_ZENDNN                          "ggml: use ZenDNN"                                OFF)
 option(ZENDNN_ROOT                          "ggml: path to ZenDNN installation"               "")
 
+# Microsoft BitNet CPU kernels (vendor/bitnet); default OFF — see docs/BITNET.md
+option(GGML_BITNET_I2_S                     "ggml: BitNet I2_S MAD kernels"                   OFF)
+option(GGML_BITNET_X86_TL2                  "ggml: BitNet TL2 LUT kernels (x86)"              OFF)
+option(GGML_BITNET_ARM_TL1                  "ggml: BitNet TL1 LUT kernels (ARM)"              OFF)
+
 # extra artifacts
 option(GGML_BUILD_TESTS    "ggml: build tests"    ${GGML_STANDALONE})
 option(GGML_BUILD_EXAMPLES "ggml: build examples" ${GGML_STANDALONE})

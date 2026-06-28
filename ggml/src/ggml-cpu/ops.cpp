@@ -7,6 +7,7 @@
 #include "ggml.h"
 #include "unary-ops.h"
 #include "vec.h"
+#include "ggml-quants.h"
 
 #include <algorithm>
 #include <array>
@@ -4863,6 +4864,52 @@ static void ggml_compute_forward_get_rows_q(
     }
 }
 
+#ifdef GGML_BITNET_I2_S
+static void ggml_compute_forward_get_rows_i2_s(
+        const ggml_compute_params * params,
+              ggml_tensor * dst) {
+
+    const ggml_tensor * src0 = dst->src[0];
+    const ggml_tensor * src1 = dst->src[1];
+
+    GGML_TENSOR_BINARY_OP_LOCALS
+
+    const int64_t nc = ne00;
+    const int64_t nr = ggml_nelements(src1);
+
+    const enum ggml_type type = src0->type;
+
+    assert(ne0  == nc);
+    assert(ne02 == ne11);
+    assert(nb00 == ggml_type_size(type));
+    assert(ggml_nrows(dst) == nr);
+
+    const int ith = params->ith;
+    const int nth = params->nth;
+
+    const int dr = (nr + nth - 1)/nth;
+    const int ir0 = dr*ith;
+    const int ir1 = MIN(ir0 + dr, nr);
+
+    const uint8_t * base = (const uint8_t *) src0->data;
+    const size_t packed_bytes_total = (size_t) (ggml_nelements(src0) / 4);
+    const float  scl = *(const float *)(base + packed_bytes_total);
+
+    for (int64_t i = ir0; i < ir1; ++i) {
+        const int64_t i12 = i/(ne11*ne10);
+        const int64_t i11 = (i - i12*ne11*ne10)/ne10;
+        const int64_t i10 = (i - i12*ne11*ne10 - i11*ne10);
+        const int64_t i01 = *(const int32_t *) ((char *) src1->data + i10*nb10 + i11*nb11 + i12*nb12);
+
+        GGML_ASSERT(i01 >= 0 && i01 < ne01);
+
+        dequantize_row_i2_s(
+                (const uint8_t *) ((char *) src0->data + i01*nb01/4 + i11*nb02/4 + i12*nb03/4),
+                     (float *) ((char *)  dst->data + i10*nb1  + i11*nb2  + i12*nb3), nc, scl);
+    }
+}
+#endif
+
 static void ggml_compute_forward_get_rows_f16(
         const ggml_compute_params * params,
               ggml_tensor * dst) {
@@ -5040,6 +5087,12 @@ void ggml_compute_forward_get_rows(
             {
                 ggml_compute_forward_get_rows_f32(params, dst);
             } break;
+#ifdef GGML_BITNET_I2_S
+        case GGML_TYPE_I2_S:
+            {
+                ggml_compute_forward_get_rows_i2_s(params, dst);
+            } break;
+#endif
         default:
             {
                 GGML_ABORT("fatal error");

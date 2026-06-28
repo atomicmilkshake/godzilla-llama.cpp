@@ -319,6 +319,23 @@ if (LLAMA_TESTS_INSTALL)
 endif()
 add_test(NAME test-triattention-modes WORKING_DIRECTORY . COMMAND $<TARGET_FILE:test-triattention-modes>)
 set_property(TEST test-triattention-modes PROPERTY LABELS main)
+
+if (GGML_BITNET_I2_S)
+    add_executable(test-bitnet-i2s-quant test-bitnet-i2s-quant.c
+        ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-i2s-quants.c)
+    target_include_directories(test-bitnet-i2s-quant PRIVATE
+        ${PROJECT_SOURCE_DIR}/ggml/include
+        ${PROJECT_SOURCE_DIR}/ggml/src
+        ${LLAMA_VENDOR_BITNET_DIR}/include)
+    target_compile_definitions(test-bitnet-i2s-quant PRIVATE GGML_BITNET_I2_S)
+    target_link_libraries(test-bitnet-i2s-quant PRIVATE ggml)
+    if (LLAMA_TESTS_INSTALL)
+        install(TARGETS test-bitnet-i2s-quant RUNTIME)
+    endif()
+    add_test(NAME test-bitnet-i2s-quant WORKING_DIRECTORY . COMMAND $<TARGET_FILE:test-bitnet-i2s-quant>)
+    set_property(TEST test-bitnet-i2s-quant PROPERTY LABELS bitnet)
+endif()
+
 if (GGML_CUDA)
     add_executable(test-triattention-gpu-parity test-triattention-gpu-parity.cpp ../src/llama-triattention.cpp)
     target_include_directories(test-triattention-gpu-parity PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/ggml/src)

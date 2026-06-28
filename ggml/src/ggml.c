@@ -861,6 +861,31 @@ static const struct ggml_type_traits type_traits[GGML_TYPE_COUNT] = {
         .to_float                 = (ggml_to_float_t) dequantize_row_tq4_1s,
         .from_float_ref           = (ggml_from_float_t) quantize_row_tq4_1s_ref,
     },
+    [GGML_TYPE_I2_S] = {
+        .type_name                = "i2_s",
+        .blck_size                = 1,
+        .type_size                = sizeof(int8_t),
+        .is_quantized             = true,
+        .to_float                 = NULL,
+    },
+    [GGML_TYPE_I8_S] = {
+        .type_name                = "i8_s",
+        .blck_size                = 1,
+        .type_size                = sizeof(int8_t),
+        .is_quantized             = true,
+    },
+    [GGML_TYPE_TL1] = {
+        .type_name                = "tl1",
+        .blck_size                = 1,
+        .type_size                = sizeof(uint8_t),
+        .is_quantized             = true,
+    },
+    [GGML_TYPE_TL2] = {
+        .type_name                = "tl2",
+        .blck_size                = 1,
+        .type_size                = sizeof(uint8_t),
+        .is_quantized             = true,
+    },
     [GGML_TYPE_Q2_K] = {
         .type_name                = "q2_K",
         .blck_size                = QK_K,
@@ -1388,6 +1413,15 @@ size_t ggml_nbytes(const struct ggml_tensor * tensor) {
         nbytes = ggml_type_size(tensor->type);
         for (int i = 0; i < GGML_MAX_DIMS; ++i) {
             nbytes += (tensor->ne[i] - 1)*tensor->nb[i];
+        }
+        if (tensor->type == GGML_TYPE_I2_S || tensor->type == GGML_TYPE_TL1) {
+            nbytes = nbytes / 4 + 32;
+        } else if (tensor->type == GGML_TYPE_TL2) {
+            nbytes = (tensor->ne[0] - 256) * tensor->ne[1] / 3 * 5 / 8 + 256 * tensor->ne[1] / 2 * 4 / 8;
+            if (nbytes % 32 != 0) {
+                nbytes = 32 - nbytes % 32 + nbytes;
+            }
+            nbytes += 32;
         }
     }
     else {
