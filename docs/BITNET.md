@@ -7,8 +7,15 @@ Microsoft **I2_S / TL1 / TL2** CPU kernels are vendored under `vendor/bitnet/` a
 | Phase | Endpoint | Binary | Status |
 |-------|----------|--------|--------|
 | **P0** | `:8091` | `J:\LLM\BitNet` Microsoft fork (WSL Clang) | Operational |
-| **P1** | dev | `build-bitnet-cpu` with `GGML_BITNET_I2_S=ON` | In progress |
-| **P2** | `:8090` | Unified godzilla + `start-bitnet-godzilla.bat` | Pending parity gate |
+| **P1** | dev | `build-bitnet-cpu` with `GGML_BITNET_I2_S=ON` | Build + load OK; greedy parity in progress |
+| **P2** | `:8090` | Unified godzilla + `start-bitnet-godzilla.bat` | Preset **#47** in master.ps1 (no TriAttention) |
+
+## Ports (Caddy)
+
+| Port | Stack | Notes |
+|------|-------|-------|
+| **8090** | Production godzilla CUDA (kv-god) or BitNet godzilla CPU (preset 47 / `start-bitnet-godzilla.bat`) | Caddy reverse proxy target |
+| **8091** | Microsoft BitNet fork WSL (`start-bitnet-2b-godzilla-stack.bat`) | P0 reference; deprecate after I2_S parity gate |
 
 ## P0 dual-binary (no godzilla code required)
 
@@ -68,7 +75,11 @@ BitNet master preset omits `--triattention-stats` (same as Bonsai #8). No `.tria
 
 ## CUDA / `-ngl`
 
-Optional TQ1/TQ2 CUDA mmq for BitNet GPU experiments is **not implemented** (P4). Default BitNet serving is **CPU I2_S** (`-ngl 0`).
+Optional TQ1/TQ2 CUDA mmq for BitNet GPU experiments is **not implemented** (P4). Default BitNet serving is **CPU I2_S** (`-ngl 0`). **Do not** use IQ2/TQ GPU paths for I2_S models — results are numerically wrong per Microsoft `ggml-bitnet.h` and godzilla TurboQuant layout.
+
+## TL2 (P2)
+
+`GGML_BITNET_X86_TL2` wires `vendor/bitnet/src/ggml-bitnet-lut.cpp` + `preset_kernels/` codegen (`codegen_tl2.py`). **BitNet-b1.58-2B-4T** ships as prebuilt **I2_S** GGUF; TL2 is optional for future 3B pretuned builds. Benchmark note: MS fork reports ~1.37× decode speedup vs I2_S on x86 when pretuned TL2 kernels exist (see Microsoft BitNet README).
 
 ## Vendor pin
 
