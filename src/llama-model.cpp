@@ -188,6 +188,7 @@ static llama_model * llama_model_mapping(llm_arch arch, const llama_model_params
         case LLM_ARCH_GLM4_MOE:
             return new llama_model_glm4_moe(params);
         case LLM_ARCH_BITNET:
+        case LLM_ARCH_BITNET_B158:
             return new llama_model_bitnet(params);
         case LLM_ARCH_T5:
             return new llama_model_t5(params);
@@ -1150,7 +1151,8 @@ void llama_model_base::load_hparams(llama_model_loader & ml) {
 
         ml.get_key(LLM_KV_ROPE_DIMENSION_COUNT, hparams.n_rot_full, false);
 
-        if (arch == LLM_ARCH_LLAMA || arch == LLM_ARCH_DECI || arch == LLM_ARCH_FALCON || arch == LLM_ARCH_LLAMA_EMBED) {
+        if (arch == LLM_ARCH_LLAMA || arch == LLM_ARCH_DECI || arch == LLM_ARCH_FALCON || arch == LLM_ARCH_LLAMA_EMBED
+                || arch == LLM_ARCH_BITNET_B158) {
             if (hparams.n_rot_full != hparams.n_embd_head_k_full) {
                 throw std::runtime_error(format("invalid n_rot: %u, expected %u", hparams.n_rot_full, hparams.n_embd_head_k_full));
             }
@@ -2402,6 +2404,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
         case LLM_ARCH_EUROBERT:
         case LLM_ARCH_STABLELM:
         case LLM_ARCH_BITNET:
+        case LLM_ARCH_BITNET_B158:
         case LLM_ARCH_QWEN:
         case LLM_ARCH_QWEN2:
         case LLM_ARCH_DREAM:

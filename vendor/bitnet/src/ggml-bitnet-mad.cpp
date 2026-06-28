@@ -1040,6 +1040,7 @@ void ggml_vec_dot_i2_i8_s_Nx1(int n, float * s, size_t bs, const void * vx, size
 }
 
 
+extern "C"
 void ggml_vec_dot_i2_i8_s(int n, float * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc) {
     if (nrc % PARALLEL_SIZE == 0)
     {

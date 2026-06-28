@@ -1296,6 +1296,54 @@ static void ggml_compute_forward_mul_mat_one_chunk(
     // 16 * 2, accounting for mmla kernels
     float tmp[32];
 
+#ifdef GGML_BITNET_I2_S
+    if (type == GGML_TYPE_I2_S) {
+        const float * scale      = (const float *) ((const uint8_t *) src0->data + (ne00 * ne01 / 4));
+        const float * act_scales = (const float *) ((const char *) wdata + (ne11 * ne10));
+        const int32_t * act_sums = (const int32_t *) ((const char *) act_scales + (ne11) * sizeof(float));
+
+        for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
+            for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
+                for (int64_t ir1 = iir1; ir1 < iir1 + blck_1 && ir1 < ir1_end; ir1 += num_rows_per_vec_dot) {
+                    const int64_t i13 = (ir1 / (ne12 * ne1));
+                    const int64_t i12 = (ir1 - i13 * ne12 * ne1) / ne1;
+                    const int64_t i11 = (ir1 - i13 * ne12 * ne1 - i12 * ne1);
+
+                    const int64_t i03 = i13 / r3;
+                    const int64_t i02 = i12 / r2;
+
+                    const int64_t i1 = i11;
+                    const int64_t i2 = i12;
+                    const int64_t i3 = i13;
+
+                    const char * src0_row = (const char *) src0->data + (0 + i02 * nb02 + i03 * nb03);
+                    const char * src1_col_de = (const char *) wdata + (i11 * nb11 / 4);
+                    float * dst_col = (float *) ((char *) dst->data + (i1 * nb1 + i2 * nb2 + i3 * nb3));
+
+                    if (iir0 + blck_0 - 1 < ir0_end) {
+                        vec_dot(ne00, &tmp[0], 1,
+                            src0_row + iir0 * nb01 / 4, nb01,
+                            src1_col_de, 0, 16);
+                        for (int row = 0; row < 16; row++) {
+                            tmp[row] = (tmp[row] - act_sums[i11]) / (act_scales[i11]) * (*scale);
+                        }
+                    } else {
+                        for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ir0 += num_rows_per_vec_dot) {
+                            vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_row + ir0 * nb01 / 4, 0, src1_col_de, 0, 1);
+                            tmp[ir0 - iir0] = (tmp[ir0 - iir0] - act_sums[i11]) / (act_scales[i11]) * (*scale);
+                        }
+                    }
+
+                    for (int cn = 0; cn < num_rows_per_vec_dot; ++cn) {
+                        memcpy(&dst_col[iir0 + cn * nb1 / nb0], tmp + (cn * 16), (MIN(iir0 + blck_0, ir0_end) - iir0) * sizeof(float));
+                    }
+                }
+            }
+        }
+        return;
+    }
+#endif
+
     for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
         for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
             for (int64_t ir1 = iir1; ir1 < iir1 + blck_1 && ir1 < ir1_end; ir1 += num_rows_per_vec_dot) {
@@ -1418,6 +1466,22 @@ UseGgmlGemm1:;
         assert(params->wsize >= ne13*nbw3);
         GGML_ASSERT(src1->type == GGML_TYPE_F32);
 
+#ifdef GGML_BITNET_I2_S
+        if (src0->type == GGML_TYPE_I2_S) {
+            float * act_scales = (float *) ((char *) wdata + (ne11 * ne10));
+            int32_t * act_sums = (int32_t *) ((char *) act_scales + (ne11) * sizeof(float));
+            for (int64_t i13 = 0; i13 < ne13; ++i13) {
+                for (int64_t i12 = 0; i12 < ne12; ++i12) {
+                    for (int64_t i11 = ith; i11 < ne11; i11 += nth) {
+                        quantize_row_i8_s(
+                            (float *) ((char *) src1->data + i13*nb13 + i12*nb12 + i11*nb11),
+                            (void *) (wdata + i13*nbw3 + i12*nbw2 + i11*nbw1),
+                            ne10, act_scales + i11, act_sums + i11);
+                    }
+                }
+            }
+        } else
+#endif
     #if 0
         for (int64_t i13 = 0; i13 < ne13; ++i13) {
             for (int64_t i12 = 0; i12 < ne12; ++i12) {
@@ -2944,6 +3008,11 @@ struct ggml_cplan ggml_graph_plan(
 
                         if (node->src[1]->type != vec_dot_type) {
                             cur = ggml_row_size(vec_dot_type, ggml_nelements(node->src[1]));
+#ifdef GGML_BITNET_I2_S
+                            if (node->src[0]->type == GGML_TYPE_I2_S) {
+                                cur += node->src[1]->ne[1] * sizeof(float) + node->src[1]->ne[1] * sizeof(int32_t);
+                            }
+#endif
                         }
                     } break;
                 case GGML_OP_MUL_MAT_ID:

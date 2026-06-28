@@ -36,6 +36,7 @@ void quantize_row_tq2_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, i
 
 #ifdef GGML_BITNET_I2_S
 void ggml_vec_dot_i2_i8_s(int n, float * s, size_t bs, const void * vx, size_t bx, const void * vy, size_t by, int nrc);
+void quantize_row_i8_s(const float * x, void * y, int64_t n, float * act_scales, int32_t * act_sums);
 #endif
 
 // turbo2/turbo3/turbo4: stub CPU quantize (no FWHT rotation — GPU-only types)

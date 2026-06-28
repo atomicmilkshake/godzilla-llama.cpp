@@ -93,7 +93,8 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
         if (GGML_BITNET_I2_S)
             target_compile_definitions(${GGML_CPU_NAME} PRIVATE GGML_BITNET_I2_S)
             list(APPEND GGML_CPU_SOURCES
-                ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-mad.cpp)
+                ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-mad.cpp
+                ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-i2s-quants.c)
         endif()
         if (GGML_BITNET_X86_TL2)
             target_compile_definitions(${GGML_CPU_NAME} PRIVATE GGML_BITNET_X86_TL2)
