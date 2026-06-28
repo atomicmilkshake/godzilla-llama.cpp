@@ -7,7 +7,7 @@ Microsoft **I2_S / TL1 / TL2** CPU kernels are vendored under `vendor/bitnet/` a
 | Phase | Endpoint | Binary | Status |
 |-------|----------|--------|--------|
 | **P0** | `:8091` | `J:\LLM\BitNet` Microsoft fork (WSL Clang) | Operational |
-| **P1** | dev | `build-bitnet-cpu` with `GGML_BITNET_I2_S=ON` | Build + load OK; greedy parity in progress |
+| **P1** | dev | `build-bitnet-cpu` with `GGML_BITNET_I2_S=ON` | Build + load OK; greedy parity vs MS (use `llama-completion --no-conversation`) |
 | **P2** | `:8090` | Unified godzilla + `start-bitnet-godzilla.bat` | Preset **#47** in master.ps1 (no TriAttention) |
 
 ## Ports (Caddy)
@@ -93,3 +93,33 @@ ctest -R "triattention|copilot-coalesce"   # must pass with GGML_BITNET_*=OFF
 ```
 
 I2_S parity: greedy decode vs `J:\LLM\BitNet\build/bin/llama-cli` on same prompt (≥95% token match) before deprecating `:8091`.
+
+```bash
+# Raw completion parity (not chat-formatted llama-cli)
+MODEL=/mnt/j/MOODLES/bitnet-b1.58-2B-4T/ggml-model-i2_s.gguf
+MS=/mnt/j/LLM/BitNet/build/bin/llama-cli
+GZ=/mnt/j/LLM/godzilla-llama.cpp/build-bitnet-cpu/bin/llama-completion
+$MS -m "$MODEL" -p "Hello" -n 16 -ngl 0 --temp 0 --no-warmup --no-display-prompt -t 4
+$GZ -m "$MODEL" -p "Hello" -n 16 -ngl 0 --temp 0 --fit off --no-warmup --no-display-prompt --no-conversation --single-turn -t 4
+```
+
+**Note:** BitNet-b1.58 uses **ReLU²** FFN (`LLM_FFN_RELU_SQR`), not SiLU. Wrong activation caused token drift after ~3 tokens (fixed in `src/models/bitnet.cpp`).
+
+## Merge checklist (`bitnet-god` → `kv-god`)
+
+Before merge:
+
+- [ ] `ctest -R "triattention|copilot-coalesce"` on default CUDA `build/` (BitNet OFF) — **9/9 PASS**
+- [ ] `llama-completion --no-conversation` greedy parity vs MS on `Hello` n=16
+- [ ] `test-bitnet-i2s-quant` PASS (bitnet-cpu build)
+- [ ] `llama-server` smoke: `/v1/models` 200 on `:8090`
+- [ ] Confirm production `:8090` preset still uses CUDA build with `GGML_BITNET_*=OFF`
+- [ ] Append `agent-journal.md` with merge SHA
+
+Merge (no force-push):
+
+```powershell
+cd J:\LLM\godzilla-llama.cpp
+git checkout kv-god
+git merge --no-ff bitnet-god -m "merge(bitnet): I2_S CPU path for BitNet-b1.58 (BitNet OFF by default on CUDA)"
+```
