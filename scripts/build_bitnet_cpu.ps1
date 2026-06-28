@@ -13,10 +13,14 @@ $ErrorActionPreference = "Stop"
 function Invoke-WslBitnetBuild {
     $wslRoot = ($RepoRoot -replace '\\', '/') -replace '^J:', '/mnt/j'
     $wslBuild = "$wslRoot/$BuildDir"
-    wsl -e bash -lc @"
+    $reconf = if ($Reconfigure) { "True" } else { "False" }
+    $cmd = @"
 set -euo pipefail
 cd '$wslRoot'
-if [ '$Reconfigure' = 'True' ] || [ ! -d '$wslBuild' ]; then
+if ! dpkg -s libomp-dev >/dev/null 2>&1; then
+  sudo apt-get update -qq && sudo apt-get install -y -qq libomp-dev clang cmake build-essential || true
+fi
+if [ '$reconf' = 'True' ] || [ ! -d '$wslBuild' ]; then
   rm -rf '$wslBuild'
   cmake -S . -B '$wslBuild' \
     -DCMAKE_BUILD_TYPE=Release \
@@ -25,11 +29,14 @@ if [ '$Reconfigure' = 'True' ] || [ ! -d '$wslBuild' ]; then
     -DGGML_CUDA=OFF \
     -DGGML_BITNET_I2_S=ON \
     -DGGML_BITNET_X86_TL2=OFF \
-    -DLLAMA_BUILD_SERVER=ON
+    -DLLAMA_BUILD_SERVER=ON \
+    -DGGML_OPENMP=ON
 fi
 cmake --build '$wslBuild' --target '$Target' -j`$(nproc)
 ls -la '$wslBuild/bin/$Target' 2>/dev/null || ls -la '$wslBuild/bin/Release/$Target' 2>/dev/null || true
 "@
+    $cmd = $cmd -replace "`r`n", "`n"
+    wsl -e bash -lc $cmd
 }
 
 if ($UseWsl -or -not (Get-Command clang -ErrorAction SilentlyContinue)) {

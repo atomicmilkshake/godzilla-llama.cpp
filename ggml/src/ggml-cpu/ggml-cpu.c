@@ -7,6 +7,9 @@
 #include "ggml-cpu-impl.h"
 #include "ggml-impl.h"
 #include "quants.h"
+#ifdef GGML_BITNET_I2_S
+#include "ggml-quants.h"
+#endif
 #include "ggml-threading.h"
 #include "unary-ops.h"
 #include "binary-ops.h"
@@ -1317,7 +1320,7 @@ static void ggml_compute_forward_mul_mat_one_chunk(
                     const int64_t i3 = i13;
 
                     const char * src0_row = (const char *) src0->data + (0 + i02 * nb02 + i03 * nb03);
-                    const char * src1_col_de = (const char *) wdata + (i11 * nb11 / 4);
+                    const char * src1_col_de = (const char *) wdata + (i11 * row_size);
                     float * dst_col = (float *) ((char *) dst->data + (i1 * nb1 + i2 * nb2 + i3 * nb3));
 
                     if (iir0 + blck_0 - 1 < ir0_end) {
@@ -1537,6 +1540,64 @@ UseGgmlGemm1:;
         return;
     }
 UseGgmlGemm2:;
+#endif
+
+#ifdef GGML_BITNET_I2_S
+    // Microsoft BitNet I2_S: 2D weight matrices use gemv/gemm (not chunked vec_dot).
+    if (ggml_n_dims(src0) == 2 && src0->type == GGML_TYPE_I2_S) {
+        const void * src1_wdata      = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+        const size_t src1_col_stride = ggml_is_contiguous(src1) || src1->type != vec_dot_type ? ggml_row_size(vec_dot_type, ne10) : nb11;
+        const int64_t matmul_num_cols = 4;
+        int64_t src0_start = (ith * ne01) / nth;
+        int64_t src0_end   = ((ith + 1) * ne01) / nth;
+        src0_start = (src0_start % matmul_num_cols) ? src0_start + matmul_num_cols - (src0_start % matmul_num_cols) : src0_start;
+        src0_end   = (src0_end   % matmul_num_cols) ? src0_end   + matmul_num_cols - (src0_end   % matmul_num_cols) : src0_end;
+        if (src0_start >= src0_end) {
+            return;
+        }
+
+        const int64_t nrows = src0_end - src0_start;
+
+        if (ne11 > 3) {
+            const int ncol_gemm = (int) (ne11 - ne11 % 4);
+            float * tmp = (float *) malloc((size_t) nrows * (size_t) ncol_gemm * sizeof(float));
+            if (tmp == NULL) {
+                return;
+            }
+            const float * scale      = (const float *) ((const uint8_t *) src0->data + (ne00 * ne01 / 4));
+            const float * act_scales = (const float *) ((const char *) src1_wdata + (ne11 * ne10));
+            const int32_t * act_sums   = (const int32_t *) ((const char *) act_scales + (ne11) * sizeof(float));
+            ggml_gemm_i2_i8_s(ne00, tmp, nrows,
+                (const char *) src0->data + src0_start * nb01 / 4,
+                (const char *) src1_wdata, ncol_gemm, nrows);
+            for (int col = 0; col < ncol_gemm; col++) {
+                for (int64_t row = 0; row < nrows; row++) {
+                    tmp[col * nrows + row] = (tmp[col * nrows + row] - act_sums[col]) / (act_scales[col]) * (*scale);
+                }
+                memcpy((float *)((char *) dst->data + (col * nb1)) + src0_start, tmp + col * nrows, (size_t) nrows * sizeof(float));
+            }
+            free(tmp);
+        }
+        for (int iter = (ne11 > 3) ? (int) (ne11 - ne11 % 4) : 0; iter < ne11; iter++) {
+            float * tmp = (float *) malloc((size_t) nrows * sizeof(float));
+            if (tmp == NULL) {
+                return;
+            }
+            const float * scale      = (const float *) ((const uint8_t *) src0->data + (ne00 * ne01 / 4));
+            const float * act_scales = (const float *) ((const char *) src1_wdata + (ne11 * ne10));
+            const int32_t * act_sums   = (const int32_t *) ((const char *) act_scales + (ne11) * sizeof(float));
+            ggml_gemv_i2_i8_s(ne00, tmp, ne01,
+                (const char *) src0->data + src0_start * nb01 / 4,
+                (const char *) src1_wdata + (src1_col_stride * iter),
+                1, nrows);
+            for (int64_t row = 0; row < nrows; row++) {
+                tmp[row] = (tmp[row] - act_sums[iter]) / (act_scales[iter]) * (*scale);
+            }
+            memcpy((float *)((char *) dst->data + (iter * nb1)) + src0_start, tmp, (size_t) nrows * sizeof(float));
+            free(tmp);
+        }
+        return;
+    }
 #endif
 
     // This is the size of the first dimension of the result, so we can iterate that way. (see the ASSERT above, these are the same numbers)

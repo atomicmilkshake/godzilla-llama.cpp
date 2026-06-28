@@ -1,6 +1,7 @@
 #include "ggml.h"
 #include "ggml-quants.h"
 #include "ggml-impl.h"
+#include "gemm-config.h"
 
 #include <assert.h>
 #include <math.h>
@@ -70,15 +71,46 @@ void quantize_row_i8_s(const float * x, void * y, int64_t n, float * act_scales,
 void ggml_gemv_i2_i8_s(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, const void * GGML_RESTRICT vy, int nr, int nc) {
     GGML_UNUSED(bs);
     GGML_UNUSED(nr);
+#if defined(ACT_PARALLEL)
+    // Match MS ggml-aarch64.c: ACT_PARALLEL Nx1 kernel is column-oriented; gemv must use nrc=1.
+    for (int64_t iir0 = 0; iir0 < nc; iir0 += 1) {
+        ggml_vec_dot_i2_i8_s(n, s + iir0, 1, (const char *) vx + iir0 * n / 4, n, vy, 0, 1);
+    }
+#else
     const int64_t blck_0 = 16;
     for (int64_t iir0 = 0; iir0 < nc; iir0 += blck_0) {
         ggml_vec_dot_i2_i8_s(n, s + iir0, 1, (const char *) vx + iir0 * n / 4, n, vy, 0, MIN(blck_0, nc - iir0));
     }
+#endif
 }
 
 void ggml_gemm_i2_i8_s(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, const void * GGML_RESTRICT vy, int nr, int nc) {
-    GGML_UNUSED(bs);
+#if defined(ACT_PARALLEL)
+#ifndef ROW_BLOCK_SIZE
+#define ROW_BLOCK_SIZE 4
+#endif
+#ifndef COL_BLOCK_SIZE
+#define COL_BLOCK_SIZE 128
+#endif
+    const int64_t row_block = ROW_BLOCK_SIZE;
+    const int64_t col_block = COL_BLOCK_SIZE;
+
+    for (int64_t c0 = 0; c0 < nc; c0 += col_block) {
+        const int64_t cur_c = (c0 + col_block <= nc) ? col_block : (nc - c0);
+        for (int64_t r0 = 0; r0 < nr; r0 += row_block) {
+            const int64_t cur_r = (r0 + row_block <= nr) ? row_block : (nr - r0);
+            const void * vy_r = (const uint8_t *) vy + r0 * n;
+            for (int64_t c = 0; c < cur_c; ++c) {
+                const int64_t col = c0 + c;
+                float * s_col = s + col;
+                const void * vx_col = (const uint8_t *) vx + col * n / 4;
+                ggml_vec_dot_i2_i8_s(n, s_col + r0 * bs, bs, vx_col, n, vy_r, n, (int) cur_r);
+            }
+        }
+    }
+#else
     for (int64_t iir0 = 0; iir0 < nc; iir0 += 4) {
         ggml_vec_dot_i2_i8_s(n, s + iir0 * nr, 1, (const char *) vx + iir0 * n / 4, n, (const char *) vy + iir0 * n, 0, MIN(4, nc - iir0));
     }
+#endif
 }
