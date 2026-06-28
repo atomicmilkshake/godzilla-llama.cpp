@@ -85,6 +85,32 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
                     ggml-cpu/llamafile/sgemm.h)
     endif()
 
+    if (GGML_BITNET_I2_S OR GGML_BITNET_X86_TL2 OR GGML_BITNET_ARM_TL1)
+        if (NOT (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU") OR
+            NOT (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
+            message(FATAL_ERROR "BitNet kernels require Clang or GCC (not MSVC alone). Use scripts/build_bitnet_cpu.ps1 or WSL.")
+        endif()
+        if (GGML_BITNET_I2_S)
+            target_compile_definitions(${GGML_CPU_NAME} PRIVATE GGML_BITNET_I2_S)
+            list(APPEND GGML_CPU_SOURCES
+                ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-mad.cpp)
+        endif()
+        if (GGML_BITNET_X86_TL2)
+            target_compile_definitions(${GGML_CPU_NAME} PRIVATE GGML_BITNET_X86_TL2)
+            list(APPEND GGML_CPU_SOURCES
+                ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-lut.cpp)
+        endif()
+        if (GGML_BITNET_ARM_TL1)
+            target_compile_definitions(${GGML_CPU_NAME} PRIVATE GGML_BITNET_ARM_TL1)
+            if (NOT GGML_BITNET_X86_TL2)
+                list(APPEND GGML_CPU_SOURCES
+                    ${LLAMA_VENDOR_BITNET_DIR}/src/ggml-bitnet-lut.cpp)
+            endif()
+        endif()
+        target_include_directories(${GGML_CPU_NAME} PRIVATE
+            ${LLAMA_VENDOR_BITNET_DIR}/include)
+    endif()
+
     if (GGML_CPU_HBM)
         find_library(memkind memkind REQUIRED)
 

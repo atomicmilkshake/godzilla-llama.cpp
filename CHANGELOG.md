@@ -2,6 +2,7 @@
 
 ## kv-god (unreleased, Godzilla fork)
 
+- **BitNet integration (branch `bitnet-god`, P0–P1)**: Vendor slice at `vendor/bitnet/` (MS pin `01eb415`); CMake `GGML_BITNET_I2_S` / `GGML_BITNET_X86_TL2` / `GGML_BITNET_ARM_TL1` (default OFF); enum IDs 56–59 for I2_S/I8_S/TL1/TL2; `scripts/build_bitnet_cpu.ps1`, `scripts/fetch-bitnet-model.ps1`, `docs/BITNET.md`. P0 dual-binary: `J:\LLM\start-bitnet-2b-godzilla-stack.bat` on `:8091` (Microsoft WSL build). P1 kernel link in progress — CPU-only BitNet build blocked on TriAttention GPU stub linkage without CUDA.
 - **TriAttention hardening**: host-KV GPU staging (`-nkvo`), `ggml_row_size` rowbytes for multi-stream KV, CUDA sync/error hardening, ISWA prune resource guards; new regression tests (`test-triattention-host-kv-staging`, `test-triattention-rowbytes-multistream`, `test-triattention-gpu-fault-inject`).
 - **Copilot streaming**: `--reasoning-promote-to-content` / `--no-reasoning-promote-to-content`; persistent per-task content coalescing when promote is off (word boundary or ≥32 chars; flush remainder on stream end); `test-server-copilot-coalesce`.
 - **Observability**: `--log-payloads` logs full request bodies (raw + parsed) at SRV_INF across chat/completions and related routes.
