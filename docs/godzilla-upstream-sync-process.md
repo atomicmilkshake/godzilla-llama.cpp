@@ -460,6 +460,10 @@ After main sync @ `a47992312`, three additional low-touch cherry-picks were appl
 Still **335 commits behind** `llama-org/master` (merge-base unchanged). **Still defer:** wholesale merge; mtmd #25013 (`clip.cpp` conflict); server-task / SSE / router refactors vs Copilot coalesce; `--reasoning-preserve` #25105 (needs reasoning/Cancelled with BeeLlama args).
 
 **Triage labels for backlog:** `security` (done: #24373), `ggml-cuda` (cpy/binbcast), `ggml-cpu-arm`, `server-isolated`, `conversion-only`, `model-arch-conflict`, `server-task-forbidden`.
+**Tranche 2 verification (follow-up):** ctest -R "triattention|copilot-coalesce" on CUDA `build/` → **9/9 PASS** before publish. origin/kv-god @ `5d90361b1` (tranche 2 SHAs + in-repo process doc); parallel-audit supplement below mirrors `J:\LLM\docs\godzilla-upstream-sync-process.md`.
+
+**Additional defer (backlog):** `3fc4e1052` (#20793 sched async H→D) — bench before port; BeeLlama bulk merge (0 delta); buun/tq3 blind merges; BitNet GPU `torch.load` (outside vendor slice).
+
 
 ### BitNet vendor track (`2a977581`) — pin current, no bump
 
