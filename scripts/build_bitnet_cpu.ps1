@@ -1,17 +1,20 @@
 #!/usr/bin/env pwsh
 # CPU-only godzilla build with Microsoft BitNet I2_S kernels (Clang required).
 param(
-    [string]$RepoRoot = "J:\LLM\godzilla-llama.cpp",
+    [string]$RepoRoot = "",
     [string]$BuildDir = "build-bitnet-cpu",
     [string]$Target = "llama-cli",
     [switch]$Reconfigure,
     [switch]$UseWsl
 )
 
+. (Join-Path $PSScriptRoot "godzilla-paths.ps1")
+
 $ErrorActionPreference = "Stop"
+if (-not $RepoRoot) { $RepoRoot = Get-GodzillaRepoRoot }
 
 function Invoke-WslBitnetBuild {
-    $wslRoot = ($RepoRoot -replace '\\', '/') -replace '^J:', '/mnt/j'
+    $wslRoot = Get-WslRepoPath -WinPath $RepoRoot
     $wslBuild = "$wslRoot/$BuildDir"
     $reconf = if ($Reconfigure) { "True" } else { "False" }
     $cmd = @"

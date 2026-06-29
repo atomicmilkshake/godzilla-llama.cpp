@@ -1202,8 +1202,12 @@ static bool common_ensure_triattention_stats(const std::string & gguf_path, std:
     }
 
     const char * script_env = std::getenv("LLAMA_ENSURE_TRIATTENTION_SCRIPT");
-    const std::string script = script_env ? script_env
-        : "J:\\LLM\\godzilla-llama.cpp\\scripts\\ensure-triattention.ps1";
+    if (!script_env || !script_env[0]) {
+        LOG_WRN("%s: TriAttention stats missing (%s); set LLAMA_ENSURE_TRIATTENTION_SCRIPT (see docs/LOCAL-SETUP.example.md)\n",
+                __func__, stats_path.c_str());
+        return false;
+    }
+    const std::string script = script_env;
 
     if (!fs::exists(script, ec)) {
         LOG_WRN("%s: TriAttention stats missing (%s); ensure script not found (%s)\n",

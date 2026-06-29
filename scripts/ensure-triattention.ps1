@@ -7,21 +7,15 @@ param(
     [string]$Device = "cuda"
 )
 
-$ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "godzilla-paths.ps1")
 
-# Prefer J: for HF cache — C: often lacks space for 12B+ BF16 checkpoints
-if (-not $env:HF_HOME) {
-    $hfHome = "J:\LLM\huggingface-cache"
-    $env:HF_HOME = $hfHome
-    $env:HF_HUB_CACHE = Join-Path $hfHome "hub"
-    $env:HF_DATASETS_CACHE = Join-Path $hfHome "datasets"
-    if (-not (Test-Path -LiteralPath $env:HF_HUB_CACHE)) {
-        New-Item -ItemType Directory -Force -Path $env:HF_HUB_CACHE | Out-Null
-    }
-    if (-not (Test-Path -LiteralPath $env:HF_DATASETS_CACHE)) {
-        New-Item -ItemType Directory -Force -Path $env:HF_DATASETS_CACHE | Out-Null
-    }
+$ErrorActionPreference = "Stop"
+$RepoRoot = Get-GodzillaRepoRoot
+
+if (-not $env:HF_HOME -and $env:HF_CACHE_DIR) {
+    $env:HF_HOME = $env:HF_CACHE_DIR
+    $env:HF_HUB_CACHE = Join-Path $env:HF_HOME "hub"
+    $env:HF_DATASETS_CACHE = Join-Path $env:HF_HOME "datasets"
 }
 
 if (Test-Path -LiteralPath $Output) {
@@ -34,13 +28,16 @@ if (-not (Test-Path -LiteralPath $Gguf)) {
 }
 
 $ResolvePy = Join-Path $PSScriptRoot "resolve-triattention-hf.py"
-$CalibratePy = "J:\LLM\TurboQuantExperimentation\scripts\calibrate-triattention.py"
-$VenvPy = "J:\LLM\TurboQuantExperimentation\venv-calibrate-win312\Scripts\python.exe"
-if (-not (Test-Path -LiteralPath $VenvPy)) {
-    $VenvPy = "J:\LLM\TurboQuantExperimentation\venv-calibrate\Scripts\python.exe"
+$CalibratePy = $env:TRIATTENTION_CALIBRATE_PY
+$VenvPy = $env:TRIATTENTION_PYTHON
+if (-not $CalibratePy) {
+    throw "TRIATTENTION_CALIBRATE_PY not set. See docs/LOCAL-SETUP.example.md"
+}
+if (-not $VenvPy) {
+    throw "TRIATTENTION_PYTHON not set. See docs/LOCAL-SETUP.example.md"
 }
 if (-not (Test-Path -LiteralPath $VenvPy)) {
-    throw "TriAttention calibration venv not found (venv-calibrate-win312 or venv-calibrate)"
+    throw "TRIATTENTION_PYTHON not found: $VenvPy"
 }
 if (-not (Test-Path -LiteralPath $CalibratePy)) {
     throw "Missing calibrator: $CalibratePy"

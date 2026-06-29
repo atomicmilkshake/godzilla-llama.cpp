@@ -3,7 +3,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Model,
-    [string]$RepoRoot = "J:\LLM\godzilla-llama.cpp",
+    [string]$RepoRoot = "",
     [string]$TriStats = "",
     [string]$WikiFile = "",
     [int]$CtxSize = 512,
@@ -14,7 +14,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$env:TURBO_INNERQ = "1"
+. (Join-Path $PSScriptRoot "godzilla-env.ps1")
+if (-not $RepoRoot) { $RepoRoot = $GodzillaRepoRoot }
 
 if ($ExtraArgs.Count -eq 0 -and $env:GODZILLA_KV_MATRIX_EXTRA) {
     $ExtraArgs = @($env:GODZILLA_KV_MATRIX_EXTRA -split '\s+' | Where-Object { $_ })
@@ -40,8 +41,8 @@ if (-not (Test-Path $WikiFile)) {
     Write-Host "Downloading wikitext-2-raw-v1 test split..." -ForegroundColor Cyan
     $wikiDir = Split-Path $WikiFile -Parent
     New-Item -ItemType Directory -Force -Path $wikiDir | Out-Null
-    $py = "J:\LLM\TurboQuantExperimentation\venv-calibrate\Scripts\python.exe"
-    if (-not (Test-Path $py)) { $py = (Get-Command python -ErrorAction SilentlyContinue).Source }
+    $py = $env:TRIATTENTION_PYTHON
+    if (-not $py -or -not (Test-Path $py)) { $py = (Get-Command python -ErrorAction SilentlyContinue).Source }
     if (-not $py) { throw "Python required to download wikitext" }
     $code = @"
 from datasets import load_dataset

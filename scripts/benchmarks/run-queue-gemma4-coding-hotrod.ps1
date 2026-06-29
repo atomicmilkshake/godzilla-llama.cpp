@@ -1,14 +1,19 @@
 #!/usr/bin/env pwsh
 # Wait for in-flight GPU benchmarks, then KV gate + §5 hot-rod cert for gemma4-coding.
 param(
-    [string]$RepoRoot = "J:\LLM\godzilla-llama.cpp",
-    [string]$ModelPath = "J:\MOODLES\gemma4-coding-Q4_K_M.gguf",
-    [string]$TriStats = "J:\LLM\Gemma4Models\gemma4-coding.triattention",
+    [string]$RepoRoot = "",
+    [string]$ModelPath = "",
+    [string]$TriStats = "",
     [int]$PollSeconds = 30
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "godzilla-env.ps1")
 $env:TURBO_INNERQ = "1"
+
+if (-not $RepoRoot) { $RepoRoot = $GodzillaRepoRoot }
+if (-not $ModelPath) { $ModelPath = Join-Path (Get-ModelsDir) "gemma4-coding-Q4_K_M.gguf" }
+if (-not $TriStats) { $TriStats = Join-Path (Get-TriCalibDir) "gemma4/gemma4-coding.triattention" }
 
 $LogDir = Join-Path $RepoRoot "logs\benchmarks"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null

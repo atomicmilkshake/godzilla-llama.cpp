@@ -8,11 +8,11 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "godzilla-env.ps1")
 
-$RepoRoot = "J:\LLM\godzilla-llama.cpp"
-$Journal = "J:\LLM\agent-journal.md"
-$Log = "J:\LLM\autopilot_gemma4_coding_perpetual.log"
-$ModelPath = "J:\MOODLES\gemma4-coding-Q4_K_M.gguf"
-$TriStats = "J:\LLM\Gemma4Models\gemma4-coding-v2.triattention"
+$RepoRoot = "$GodzillaRepoRoot"
+$Journal = "$env:GODZILLA_OPERATOR_JOURNAL"
+$Log = Join-Path $GodzillaLogDir "autopilot_gemma4_coding_perpetual.log"
+$ModelPath = Join-Path (Get-ModelsDir) "gemma4-coding-Q4_K_M.gguf"
+$TriStats = Join-Path (Get-TriCalibDir) "gemma4/gemma4-coding-v2.triattention"
 $ModelId = "gemma4-coding"
 $PresetId = "Gemma4-12B-Coder Fable5-Composer2.5 (Q4_K_M)"
 
@@ -130,7 +130,7 @@ try {
 
         Wait-GpuFree
         Write-Auto "Hot-rod cert §5"
-        Remove-Item "J:\LLM\soms\logs\godzilla_hotrod.cert.lock" -Force -ErrorAction SilentlyContinue
+        Remove-Item $HotrodCertLockPath -Force -ErrorAction SilentlyContinue
         & pwsh -NoProfile -File $HotRodScript -Only $ModelId 2>&1 |
             Tee-Object -FilePath ($kvLog + ".hotrod") -Append
         $hotrodExit = $LASTEXITCODE

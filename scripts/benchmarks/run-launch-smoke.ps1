@@ -1,8 +1,8 @@
 #!/usr/bin/env pwsh
 # Launch godzilla llama-server, wait for /health, run one completion, tear down.
 param(
-    [string]$Binary = "J:\LLM\godzilla-llama.cpp\build\bin\llama-server.exe",
-    [string]$Model = "J:\MOODLES\VibeThinker-3B.i1-Q4_K_M.gguf",
+    [string]$Binary = "",
+    [string]$Model = "",
     [string]$TriStats = "",
     [int]$Port = 8095,
     [int]$Ctx = 8192,
@@ -11,7 +11,12 @@ param(
     [int]$LaunchTimeoutSec = 120
 )
 
+. (Join-Path $PSScriptRoot "..\godzilla-paths.ps1")
+
 $ErrorActionPreference = "Stop"
+$RepoRoot = Get-GodzillaRepoRoot
+if (-not $Binary) { $Binary = Join-Path $RepoRoot "build\bin\llama-server.exe" }
+if (-not $Model) { $Model = Join-Path (Get-ModelsDir) "your-model.gguf" }
 $env:TURBO_INNERQ = "1"
 if (-not (Test-Path $Binary)) { throw "Missing binary: $Binary" }
 if (-not (Test-Path $Model)) { throw "Missing model: $Model" }
@@ -19,7 +24,7 @@ if (-not (Test-Path $Model)) { throw "Missing model: $Model" }
 Get-Process *llama-server* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
-$logDir = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "logs\benchmarks"
+$logDir = Join-Path $RepoRoot "logs\benchmarks"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"
 $log = Join-Path $logDir "launch_smoke_$ts.log"

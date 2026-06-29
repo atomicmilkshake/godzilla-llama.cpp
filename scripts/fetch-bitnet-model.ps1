@@ -1,12 +1,17 @@
 #!/usr/bin/env pwsh
-# Download BitNet-b1.58-2B-4T I2_S GGUF from Hugging Face into J:\MOODLES
+# Download BitNet-b1.58-2B-4T I2_S GGUF from Hugging Face into MODELS_DIR
 param(
-    [string]$DestDir = "J:\MOODLES\bitnet-b1.58-2B-4T",
+    [string]$DestDir = "",
     [string]$RepoId = "microsoft/bitnet-b1.58-2B-4T-gguf",
     [string]$Filename = "ggml-model-i2_s.gguf"
 )
 
+. (Join-Path $PSScriptRoot "godzilla-paths.ps1")
+
 $ErrorActionPreference = "Stop"
+if (-not $DestDir) {
+    $DestDir = Join-Path (Get-ModelsDir) "bitnet-b1.58-2B-4T"
+}
 New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
 
 python -c @"

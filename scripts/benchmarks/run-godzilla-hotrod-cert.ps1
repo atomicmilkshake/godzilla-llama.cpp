@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
-# Godzilla hot-rod certification (GuffPuffer/SOMS §5) on MEMORY-ALPHA for MOODLES sweep models.
+# Godzilla hot-rod certification (optional SOMS harness) for MODELS_DIR sweep models.
 #
-# "Hot rod" = the best a given model can actually be on this specific machine (MEMORY-ALPHA).
+# "Hot rod" = the best a given model can actually be on the operator GPU host.
 # We only ever test variants that have a realistic chance of being the peak for *that model* here.
 # Incompatible or inferior configs (e.g. turbo KV for some models) are excluded per model.
 #
@@ -25,12 +25,18 @@ function Resolve-ModelOnlyFilter {
     } | Where-Object { $_ })
 }
 
-$SomsRoot = "J:\LLM\soms"
+$SomsRoot = Get-SomsRoot
+if (-not $SomsRoot) {
+    throw "SOMS_ROOT not set (required for hot-rod certification). See docs/LOCAL-SETUP.example.md"
+}
 $SomsPy = Join-Path $SomsRoot "venv\Scripts\python.exe"
-$WatchScript = "J:\LLM\GuffPuffer\scripts\MatrixRunWatch.ps1"
+$WatchScript = $env:BENCHMARK_WATCH_SCRIPT
+if (-not $WatchScript -or -not (Test-Path -LiteralPath $WatchScript)) {
+    throw "BENCHMARK_WATCH_SCRIPT not set or not found. See docs/LOCAL-SETUP.example.md"
+}
 $LogDir = Join-Path $SomsRoot "logs\godzilla_hotrod"
 $QueueLog = Join-Path $SomsRoot "logs\godzilla_hotrod_queue.log"
-$SummaryPath = "J:\LLM\godzilla-llama.cpp\logs\benchmarks\prepublish_hotrod_summary.tsv"
+$SummaryPath = Join-Path $GodzillaRepoRoot "logs\benchmarks\prepublish_hotrod_summary.tsv"
 
 . $WatchScript
 New-Item -ItemType Directory -Force -Path $LogDir, (Split-Path $SummaryPath), (Join-Path $SomsRoot "logs") | Out-Null
@@ -65,7 +71,7 @@ $Models = @(
         PresetId = "VibeThinker-3B (Q4_K_M)"
         Harness = "qwen"
         Coding = $true
-        # Only viable variants on MEMORY-ALPHA. Turbo KV is incompatible (massive PPL regression).
+        # Only viable variants on operator hardware. Turbo KV is incompatible (massive PPL regression).
         # Hot rod = best this model can actually be here.
         Variants = @("baseline-8k")
         HeTimeout = 300; LaunchTimeout = 300
@@ -99,7 +105,7 @@ $Models = @(
         PresetId = "Huihui-gemma-4-12B-it-abliterated (Q4_K_M)"
         Harness = "gemma_hf"
         Coding = $true
-        # Baseline is the current viable choice for hot rod on MEMORY-ALPHA for this model.
+        # Baseline is the current viable choice for hot rod on operator hardware for this model.
         Variants = @("baseline-8k")
         HeTimeout = 300; LaunchTimeout = 300
     },
@@ -125,7 +131,7 @@ $Models = @(
         PresetId = "LiquidAI LFM2.5-8B-A1B (Q4_K_M)"
         Harness = "qwen"
         Coding = $true
-        # Only viable on MEMORY-ALPHA. Turbo KV showed problems in prior matrices.
+        # Only viable on operator hardware. Turbo KV showed problems in prior matrices.
         Variants = @("moe_ncpu32")
         HeTimeout = 300; LaunchTimeout = 600
     },

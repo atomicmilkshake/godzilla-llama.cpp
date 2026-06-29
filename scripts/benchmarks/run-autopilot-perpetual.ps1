@@ -8,10 +8,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "godzilla-env.ps1")
-$RepoRoot = "J:\LLM\godzilla-llama.cpp"
+$RepoRoot = "$GodzillaRepoRoot"
 $AutopilotLockPath = Join-Path $GodzillaLogDir "autopilot_perpetual.lock"
-$Journal = "J:\LLM\agent-journal.md"
-$Log = "J:\LLM\autopilot_perpetual.log"
+$Journal = "$env:GODZILLA_OPERATOR_JOURNAL"
+$Log = Join-Path $GodzillaLogDir "autopilot_perpetual.log"
 $Sweep = Join-Path $RepoRoot "scripts\benchmarks\run-prepublish-sweep.ps1"
 $HotRod = Join-Path $RepoRoot "scripts\benchmarks\run-godzilla-hotrod-cert.ps1"
 $Niah = Join-Path $RepoRoot "scripts\benchmarks\run-niah-8192-reverify.ps1"
@@ -127,7 +127,7 @@ do {
     if ($priorityTargets.Count -gt 0) {
         Write-Auto "Priority KV: $($priorityTargets -join ', ')"
         & pwsh -NoProfile -File $Sweep -Only ($priorityTargets -join ',') -HotRod:$false 2>&1 |
-            Tee-Object -FilePath "J:\LLM\autopilot_kv_priority_perpetual.log" -Append
+            Tee-Object -FilePath (Join-Path $GodzillaLogDir "autopilot_kv_priority_perpetual.log") -Append
         $cycleNotes.Add("Priority KV $($priorityTargets -join ',') exit=$LASTEXITCODE")
         $kvRows = Get-LatestKvRows
     }
@@ -139,7 +139,7 @@ do {
     if ($kvTargets.Count -gt 0) {
         Write-Auto "KV rerun: $($kvTargets -join ', ')"
         & pwsh -NoProfile -File $Sweep -Only ($kvTargets -join ',') -HotRod:$false 2>&1 |
-            Tee-Object -FilePath "J:\LLM\autopilot_kv_rerun_perpetual.log" -Append
+            Tee-Object -FilePath (Join-Path $GodzillaLogDir "autopilot_kv_rerun_perpetual.log") -Append
         $cycleNotes.Add("KV rerun $($kvTargets -join ',') exit=$LASTEXITCODE")
         $kvRows = Get-LatestKvRows
     }
@@ -158,7 +158,7 @@ do {
         Wait-GpuFree
         Write-Auto "Hot-rod cert: $($hotrodTargets -join ', ')"
         & pwsh -NoProfile -File $HotRod -Only ($hotrodTargets -join ',') 2>&1 |
-            Tee-Object -FilePath "J:\LLM\autopilot_hotrod_perpetual.log" -Append
+            Tee-Object -FilePath (Join-Path $GodzillaLogDir "autopilot_hotrod_perpetual.log") -Append
         $cycleNotes.Add("Hot-rod $($hotrodTargets -join ',') exit=$LASTEXITCODE")
     }
 
@@ -178,7 +178,7 @@ do {
         Wait-GpuFree
         Write-Auto "Pending KV sweep: $($pendingKv -join ', ')"
         & pwsh -NoProfile -File $Sweep -Only ($pendingKv -join ',') -HotRod:$false 2>&1 |
-            Tee-Object -FilePath "J:\LLM\autopilot_kv_pending_perpetual.log" -Append
+            Tee-Object -FilePath (Join-Path $GodzillaLogDir "autopilot_kv_pending_perpetual.log") -Append
         $cycleNotes.Add("Pending KV $($pendingKv -join ',') exit=$LASTEXITCODE")
     }
 

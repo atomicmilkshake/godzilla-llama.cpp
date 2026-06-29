@@ -20,12 +20,12 @@ function Resolve-ModelOnlyFilter {
     } | Where-Object { $_ })
 }
 
-$SomsRoot = "J:\LLM\soms"
+$SomsRoot = "$env:SOMS_ROOT"
 $SomsPy = Join-Path $SomsRoot "venv\Scripts\python.exe"
-$WatchScript = "J:\LLM\GuffPuffer\scripts\MatrixRunWatch.ps1"
+$WatchScript = "$env:BENCHMARK_WATCH_SCRIPT"
 $LogDir = Join-Path $SomsRoot "logs\godzilla_hotrod"
 $QueueLog = Join-Path $SomsRoot "logs\godzilla_hotrod_full_eval_queue.log"
-$SummaryPath = "J:\LLM\godzilla-llama.cpp\logs\benchmarks\hotrod_full_eval_summary.tsv"
+$SummaryPath = "$GodzillaRepoRoot\logs\benchmarks\hotrod_full_eval_summary.tsv"
 $HumanevalFull = Join-Path $SomsRoot "benchmarks\humaneval_full.jsonl"
 
 . $WatchScript

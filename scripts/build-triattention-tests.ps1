@@ -1,17 +1,20 @@
 #!/usr/bin/env pwsh
 # Build and run TriAttention unit tests (CPU + GPU parity).
+. (Join-Path $PSScriptRoot "godzilla-paths.ps1")
 $ErrorActionPreference = "Stop"
-$RepoRoot = "J:\LLM\godzilla-llama.cpp"
+$RepoRoot = Get-GodzillaRepoRoot
 $Vcvars = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
-$SdkRoot = if ($env:WDK_ROOT) { $env:WDK_ROOT } else { "S:\WADK102" }
+$SdkRoot = Get-WdkRoot
 $SdkVer = "10.0.26100.0"
-if (-not (Test-Path "$SdkRoot\Include\$SdkVer\ucrt\corecrt.h")) { $SdkVer = "10.0.22621.0" }
 
 cmd /c "`"$Vcvars`" >nul 2>&1 && set" | ForEach-Object {
     if ($_ -match "^(.*?)=(.*)$") { Set-Item -Path "env:$($matches[1])" -Value $matches[2] }
 }
-$env:INCLUDE = "$env:INCLUDE;$SdkRoot\Include\$SdkVer\ucrt;$SdkRoot\Include\$SdkVer\um;$SdkRoot\Include\$SdkVer\shared"
-$env:LIB = "$env:LIB;$SdkRoot\Lib\$SdkVer\ucrt\x64;$SdkRoot\Lib\$SdkVer\um\x64"
+if ($SdkRoot) {
+    if (-not (Test-Path "$SdkRoot\Include\$SdkVer\ucrt\corecrt.h")) { $SdkVer = "10.0.22621.0" }
+    $env:INCLUDE = "$env:INCLUDE;$SdkRoot\Include\$SdkVer\ucrt;$SdkRoot\Include\$SdkVer\um;$SdkRoot\Include\$SdkVer\shared"
+    $env:LIB = "$env:LIB;$SdkRoot\Lib\$SdkVer\ucrt\x64;$SdkRoot\Lib\$SdkVer\um\x64"
+}
 $env:CCACHE_DISABLE = "1"
 
 $targets = @(

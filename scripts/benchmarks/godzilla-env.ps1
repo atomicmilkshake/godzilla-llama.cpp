@@ -1,12 +1,18 @@
 #!/usr/bin/env pwsh
 # Shared Godzilla benchmark environment (dot-source from runners).
-$script:GodzillaRepoRoot = "J:\LLM\godzilla-llama.cpp"
-$script:SomsRoot = "J:\LLM\soms"
+. (Join-Path $PSScriptRoot "..\godzilla-paths.ps1")
+
+$script:GodzillaRepoRoot = Get-GodzillaRepoRoot
+$script:SomsRoot = Get-SomsRoot
 $script:GodzillaLogDir = Join-Path $GodzillaRepoRoot "logs\benchmarks"
 $script:GodzillaGpuLockPath = Join-Path $GodzillaLogDir "godzilla_gpu.lock"
 $script:PrepublishSweepLockPath = Join-Path $GodzillaLogDir "prepublish_sweep.lock"
 $script:GemmaAutopilotLockPath = Join-Path $GodzillaLogDir "gemma4_coding_autopilot.lock"
-$script:HotrodCertLockPath = Join-Path $SomsRoot "logs\godzilla_hotrod.cert.lock"
+$script:HotrodCertLockPath = if ($SomsRoot) {
+    Join-Path $SomsRoot "logs\godzilla_hotrod.cert.lock"
+} else {
+    Join-Path $GodzillaLogDir "godzilla_hotrod.cert.lock"
+}
 $env:TURBO_INNERQ = "1"
 
 function Get-GodzillaBinDir {
@@ -36,7 +42,6 @@ function Test-FileLockHeld {
         Remove-Item $Path -Force -ErrorAction SilentlyContinue
         return $false
     }
-    # Lock files may be plain PID or "PID:operation" (godzilla_gpu.lock).
     $ownerPid = ($line -split ':', 2)[0]
     $pidNum = 0
     [void][int]::TryParse($ownerPid, [ref]$pidNum)

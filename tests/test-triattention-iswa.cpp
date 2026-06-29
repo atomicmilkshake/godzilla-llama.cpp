@@ -7,8 +7,10 @@
 #include <string>
 #include <vector>
 
-static const char * ONDISK_V2_CAL =
-    "J:\\LLM\\Gemma4Models\\gemma4-coding-v2.triattention";
+static const char * ondisk_v2_cal_path() {
+    const char * p = std::getenv("GODZILLA_TRIATTENTION_TEST_CALIB");
+    return (p && p[0]) ? p : nullptr;
+}
 
 static void require(bool cond, const char * msg) {
     if (!cond) {
@@ -200,15 +202,16 @@ static bool file_exists(const char * path) {
 }
 
 static void test_ondisk_gemma4_v2_dual_init() {
-    if (!file_exists(ONDISK_V2_CAL)) {
+    const char * ondisk_cal = ondisk_v2_cal_path();
+    if (!ondisk_cal || !file_exists(ondisk_cal)) {
         std::fprintf(stderr,
-            "test-triattention-iswa: skip on-disk cal (missing %s)\n", ONDISK_V2_CAL);
+            "test-triattention-iswa: skip on-disk cal (set GODZILLA_TRIATTENTION_TEST_CALIB)\n");
         return;
     }
 
     const int32_t base_layers[] = {5, 11, 17};
     triattention_state * base_st = init_iswa_sub(
-        ONDISK_V2_CAL, false, base_layers, 3, 512, 1, 1000000.0);
+        ondisk_cal, false, base_layers, 3, 512, 1, 1000000.0);
     require(base_st != nullptr, "on-disk base ISWA init failed");
     require(base_st->cal->profile_tag == TRI_PROFILE_ISWA_BASE, "on-disk base tag mismatch");
     require(base_st->cal->head_dim == 512, "on-disk base head_dim should be 512");
@@ -217,7 +220,7 @@ static void test_ondisk_gemma4_v2_dual_init() {
 
     const int32_t swa_layers[] = {0, 1, 2, 3};
     triattention_state * swa_st = init_iswa_sub(
-        ONDISK_V2_CAL, true, swa_layers, 4, 256, 8, 10000.0);
+        ondisk_cal, true, swa_layers, 4, 256, 8, 10000.0);
     require(swa_st != nullptr, "on-disk SWA ISWA init failed");
     require(swa_st->cal->profile_tag == TRI_PROFILE_ISWA_SWA, "on-disk SWA tag mismatch");
     require(swa_st->cal->head_dim == 256, "on-disk SWA head_dim should be 256");

@@ -1,16 +1,20 @@
 #!/usr/bin/env pwsh
-# Godzilla CUDA build (MSVC + WDK UCRT fix for VS18 vcvars).
+# Godzilla CUDA build (MSVC + optional WDK UCRT fix for VS18 vcvars).
 param(
-    [string]$RepoRoot = "J:\LLM\godzilla-llama.cpp",
+    [string]$RepoRoot = "",
     [switch]$Reconfigure,
     [switch]$Clean,
     [string]$Target = "llama-server",
     [string]$CudaArch = "86",
     [int]$Jobs = 8,
-    [string]$SdkRoot = $(if ($env:WDK_ROOT) { $env:WDK_ROOT } else { "S:\WADK102" })
+    [string]$SdkRoot = ""
 )
 
+. (Join-Path $PSScriptRoot "godzilla-paths.ps1")
+
 $ErrorActionPreference = "Stop"
+if (-not $RepoRoot) { $RepoRoot = Get-GodzillaRepoRoot }
+if (-not $SdkRoot) { $SdkRoot = Get-WdkRoot }
 
 function Find-Vcvars64 {
     $candidates = @(
@@ -78,9 +82,13 @@ function Find-BuiltArtifact([string]$BuildDir, [string]$Name) {
 
 $Vcvars = Find-Vcvars64
 Import-Vcvars $Vcvars
-$SdkVer = Add-WdkUcrtPaths -Root $SdkRoot
+if ($SdkRoot) {
+    $SdkVer = Add-WdkUcrtPaths -Root $SdkRoot
+    Write-Host "Using WDK UCRT $SdkVer from $SdkRoot"
+} else {
+    Write-Host "WDK_ROOT not set; skipping explicit UCRT path augmentation"
+}
 Write-Host "Using vcvars: $Vcvars"
-Write-Host "Using WDK UCRT $SdkVer from $SdkRoot"
 
 $env:CCACHE_DISABLE = "1"
 

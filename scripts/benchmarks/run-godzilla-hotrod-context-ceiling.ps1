@@ -18,12 +18,12 @@ function Resolve-ModelOnlyFilter {
     } | Where-Object { $_ })
 }
 
-$SomsRoot = "J:\LLM\soms"
+$SomsRoot = "$env:SOMS_ROOT"
 $SomsPy = Join-Path $SomsRoot "venv\Scripts\python.exe"
-$WatchScript = "J:\LLM\GuffPuffer\scripts\MatrixRunWatch.ps1"
+$WatchScript = "$env:BENCHMARK_WATCH_SCRIPT"
 $LogDir = Join-Path $SomsRoot "logs\godzilla_hotrod"
 $QueueLog = Join-Path $SomsRoot "logs\godzilla_hotrod_context_ceiling_queue.log"
-$SummaryPath = "J:\LLM\godzilla-llama.cpp\logs\benchmarks\hotrod_context_ceiling_summary.tsv"
+$SummaryPath = "$GodzillaRepoRoot\logs\benchmarks\hotrod_context_ceiling_summary.tsv"
 $HumanevalSmall = Join-Path $SomsRoot "benchmarks\humaneval_small.jsonl"
 $Script:DescentRungs = @(200000, 131072, 65536, 32768, 16384)
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env pwsh
 # Godzilla pre-publish model sweep: KV matrix gate, then §5 hot-rod cert (HE sweep + speed + NIAH).
-# "Hot rod" = the best a model can be on this specific machine (MEMORY-ALPHA, RTX 3080 10GB).
+# "Hot rod" = the best a model can be on the operator GPU host (example: RTX 3080 10GB).
 # Use only viable configurations for each model; do not force incompatible features.
 param(
-    [string]$RepoRoot = "J:\LLM\godzilla-llama.cpp",
+    [string]$RepoRoot = "",
     [int]$CtxSize = 512,
     [switch]$SkipDone,
     [switch]$LaunchSmoke,
@@ -13,6 +13,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "godzilla-env.ps1")
+if (-not $RepoRoot) { $RepoRoot = $GodzillaRepoRoot }
+$ModelsDir = Get-ModelsDir
+$TriRoot = Get-TriCalibDir
+$GemmaTriDir = Join-Path $TriRoot "gemma4"
 
 function Resolve-ModelOnlyFilter {
     param([string[]]$Only)
@@ -22,34 +26,31 @@ function Resolve-ModelOnlyFilter {
     } | Where-Object { $_ })
 }
 
-$TriRoot = "J:\LLM\TurboQuant-Qwopus-v3-Setup"
-$GemmaTriDir = "J:\LLM\Gemma4Models"
-
 $Models = @(
     @{
         Id = "qwopus-4b-coder"; Label = "Qwopus3.5-4B-coder Q5_K_M"
-        Path = "J:\MOODLES\Qwopus3.5-4B-coder-Q5_K_M.gguf"
+        Path = (Join-Path $ModelsDir "Qwopus3.5-4B-coder-Q5_K_M.gguf")
         Tri = "$TriRoot\qwen3.5-4b.triattention"; PresetRef = "Qwopus3.5-4B-coder (Q5_K_M)"
         Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $true
     },
     @{
         Id = "qwopus-9b-coder"; Label = "Qwopus3.5-9B-coder-Exp Q4_K_M"
-        Path = "J:\MOODLES\Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf"
+        Path = (Join-Path $ModelsDir "Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf")
         Tri = "$TriRoot\qwopus3.5-9b-coder-exp.triattention"
         PresetRef = "Qwopus3.5-9B-coder-Exp Q4_K_M (Jackrong SWE-coding) (Q4_K_M)"
         Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $true
     },
     @{
         Id = "huihui-opus-9b"; Label = "Huihui Opus abliterated Q8_0"
-        Path = "J:\MOODLES\Huihui-Qwen3.5-9B-Claude-4.6-Opus-abliterated.Q8_0.gguf"
+        Path = (Join-Path $ModelsDir "Huihui-Qwen3.5-9B-Claude-4.6-Opus-abliterated.Q8_0.gguf")
         Tri = "$TriRoot\huihui-qwen35-9b-abliterated.triattention"
         PresetRef = "Huihui-Qwen3.5-9B-Claude-4.6-Opus-abliterated.Q8_0.gguf (Q8_0)"
         Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $true
     },
     @{
         Id = "vibethinker-3b"; Label = "VibeThinker-3B Q4_K_M"
-        Path = "J:\MOODLES\VibeThinker-3B.i1-Q4_K_M.gguf"
-        Tri = "J:\LLM\VibeThinker\vibethinker-3b.triattention"
+        Path = (Join-Path $ModelsDir "VibeThinker-3B.i1-Q4_K_M.gguf")
+        Tri = (Join-Path $TriRoot "vibethinker-3b.triattention")
         PresetRef = "VibeThinker-3B (Q4_K_M)"
         # Note: turbo variants cause catastrophic PPL collapse on this model (+850%+ vs f16 baseline on KV matrix 20260620_105529).
         # Hot-rod / sweep for godzilla uses baseline only (turbo not viable for quality gate).
@@ -57,21 +58,21 @@ $Models = @(
     },
     @{
         Id = "qwythos-9b-mythos"; Label = "Qwythos-9B Claude Mythos 5-1M Q6_K"
-        Path = "J:\MOODLES\Qwythos-9B-Claude-Mythos-5-1M-Q6_K.gguf"
+        Path = (Join-Path $ModelsDir "Qwythos-9B-Claude-Mythos-5-1M-Q6_K.gguf")
         Tri = "$TriRoot\qwythos-9b-mythos.triattention"
         PresetRef = "Qwythos-9B Claude Mythos 5-1M (Q6_K)"
         Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $false
     },
     @{
         Id = "negentropy-opus-9b"; Label = "Negentropy Opus 4.7 9B Q4_K_M"
-        Path = "J:\MOODLES\Negentropy-claude-opus-4.7-9B-Q4_K_M.gguf"
+        Path = (Join-Path $ModelsDir "Negentropy-claude-opus-4.7-9B-Q4_K_M.gguf")
         Tri = "$TriRoot\negentropy-opus-9b.triattention"
         PresetRef = "Negentropy-claude-opus-4.7-9B (Q4_K_M)"
         Variant = "turbo3-turbo4-tri-8k"; HeHarness = "qwen"; Coding = $true; Done = $true
     },
     @{
         Id = "fablevibes-14b-moe"; Label = "Qwen3.6-14B-A3B FableVibes Q4_K_M"
-        Path = "J:\MOODLES\Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf"
+        Path = (Join-Path $ModelsDir "Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf")
         Tri = "$TriRoot\qwen36-14b-fablevibes.triattention"
         PresetRef = "Qwen3.6-14B-A3B-FableVibes (Q4_K_M)"
         # Turbo KV compatibility for this MoE not yet confirmed (sweep run interrupted).
@@ -81,7 +82,7 @@ $Models = @(
     },
     @{
         Id = "huihui-gemma-4-12b"; Label = "Huihui-gemma-4-12B abliterated Q4_K_M"
-        Path = "J:\MOODLES\Huihui-gemma-4-12B-it-abliterated.Q4_K_M.gguf"
+        Path = (Join-Path $ModelsDir "Huihui-gemma-4-12B-it-abliterated.Q4_K_M.gguf")
         Tri = "$GemmaTriDir\huihui-gemma-4-12b.triattention"
         PresetRef = "Huihui-gemma-4-12B-it-abliterated (Q4_K_M)"
         # Turbo status TBD for this native Gemma4 (non-hybrid); defaulting to baseline per principle for now.
@@ -90,7 +91,7 @@ $Models = @(
     },
     @{
         Id = "gemma4-coding"; Label = "gemma4-coding Q4_K_M"
-        Path = "J:\MOODLES\gemma4-coding-Q4_K_M.gguf"
+        Path = (Join-Path $ModelsDir "gemma4-coding-Q4_K_M.gguf")
         Tri = "$GemmaTriDir\gemma4-coding-v2.triattention"
         PresetRef = "Gemma4-12B-Coder Fable5-Composer2.5 (Q4_K_M)"
         # Turbo incompatible: KV matrix showed +9.86% turbo, +31% tcq vs f16 (gate FAIL).
@@ -99,7 +100,7 @@ $Models = @(
     },
     @{
         Id = "lfm25-8b"; Label = "LFM2.5-8B-A1B Q4_K_M"
-        Path = "J:\MOODLES\LFM2.5-8B-A1B-Q4_K_M.gguf"
+        Path = (Join-Path $ModelsDir "LFM2.5-8B-A1B-Q4_K_M.gguf")
         Tri = "$TriRoot\lfm25-8b-a1b.triattention"
         PresetRef = "LiquidAI LFM2.5-8B-A1B (Q4_K_M)"
         # Turbo KV incompatible (previous matrices showed FAIL on turbo + context create issues on kvarn).
@@ -108,7 +109,7 @@ $Models = @(
     },
     @{
         Id = "qwen3-coder-30b"; Label = "Qwen3-Coder-30B-A3B IQ1_M"
-        Path = "J:\MOODLES\Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf"
+        Path = (Join-Path $ModelsDir "Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf")
         Tri = "$TriRoot\qwen3-coder-30b-a3b.triattention"
         PresetRef = "Qwen3-Coder-30B-A3B-Instruct-UD-IQ1_M.gguf (IQ1_M)"
         # Turbo KV incompatible (+8.57% on turbo3/turbo4, much worse on tcq; gate FAIL).

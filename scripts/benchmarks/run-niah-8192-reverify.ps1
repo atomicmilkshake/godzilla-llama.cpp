@@ -7,9 +7,9 @@ param(
 $ErrorActionPreference = "Stop"
 $env:TURBO_INNERQ = "1"
 
-$SomsRoot = "J:\LLM\soms"
+$SomsRoot = "$env:SOMS_ROOT"
 $SomsPy = Join-Path $SomsRoot "venv\Scripts\python.exe"
-$WatchScript = "J:\LLM\GuffPuffer\scripts\MatrixRunWatch.ps1"
+$WatchScript = "$env:BENCHMARK_WATCH_SCRIPT"
 $LogDir = Join-Path $SomsRoot "logs\godzilla_hotrod"
 $QueueLog = Join-Path $SomsRoot "logs\godzilla_hotrod_queue.log"
 $EvidenceDate = Get-Date -Format "yyyy-MM-dd"

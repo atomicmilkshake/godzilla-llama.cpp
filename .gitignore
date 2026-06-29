@@ -156,6 +156,8 @@ flake.lock
 # Godzilla local runtime artifacts (do not commit)
 logs/
 benchmarks/wikitext/
+/Testing/
+docs/LOCAL-SETUP.md
 
 # IDE
 

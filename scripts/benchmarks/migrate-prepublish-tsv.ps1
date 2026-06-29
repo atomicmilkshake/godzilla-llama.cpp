@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-$SummaryPath = "J:\LLM\godzilla-llama.cpp\logs\benchmarks\prepublish_sweep_summary.tsv"
+. (Join-Path $PSScriptRoot "godzilla-env.ps1")
+$SummaryPath = Join-Path $GodzillaLogDir "prepublish_sweep_summary.tsv"
 $TsvHeader = "model_id`tlabel`tcommit`tkv_gate`thotrod`tartifact`tnotes"
 if (-not (Test-Path $SummaryPath)) {
     $TsvHeader | Set-Content $SummaryPath -Encoding UTF8

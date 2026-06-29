@@ -7,11 +7,11 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "godzilla-env.ps1")
 
-$RepoRoot = "J:\LLM\godzilla-llama.cpp"
-$Gguf = "J:\MOODLES\Qwythos-9B-Claude-Mythos-5-1M-Q6_K.gguf"
-$Tri = "J:\LLM\TurboQuant-Qwopus-v3-Setup\qwythos-9b-mythos.triattention"
+$RepoRoot = "$GodzillaRepoRoot"
+$Gguf = Join-Path (Get-ModelsDir) "Qwythos-9B-Claude-Mythos-5-1M-Q6_K.gguf"
+$Tri = Join-Path (Get-TriCalibDir) "qwythos-9b-mythos.triattention"
 $ModelId = "qwythos-9b-mythos"
-$Log = "J:\LLM\autopilot_qwythos_queue.log"
+$Log = Join-Path $GodzillaLogDir "autopilot_qwythos_queue.log"
 $QueueLock = Join-Path $GodzillaLogDir "qwythos_queue.lock"
 $Sweep = Join-Path $RepoRoot "scripts\benchmarks\run-prepublish-sweep.ps1"
 $HotRod = Join-Path $RepoRoot "scripts\benchmarks\run-godzilla-hotrod-cert.ps1"
@@ -60,13 +60,13 @@ Write-Q "Ensuring TriAttention: $Tri"
 if ($LASTEXITCODE -ne 0) { Write-Q "TriAttention ensure failed exit=$LASTEXITCODE"; exit 1 }
 
 Write-Q "KV matrix (HotRod off)"
-& pwsh -NoProfile -File $Sweep -Only $ModelId -HotRod:$false 2>&1 | Tee-Object -FilePath "J:\LLM\autopilot_qwythos_kv.log" -Append
+& pwsh -NoProfile -File $Sweep -Only $ModelId -HotRod:$false 2>&1 | Tee-Object -FilePath (Join-Path $GodzillaLogDir "autopilot_qwythos_kv.log") -Append
 if ($LASTEXITCODE -ne 0) { Write-Q "KV sweep exit=$LASTEXITCODE"; exit 1 }
 
 Wait-BenchmarkIdle "Pre-hot-rod idle"
 
 Write-Q "Hot-rod cert"
-& pwsh -NoProfile -File $HotRod -Only $ModelId 2>&1 | Tee-Object -FilePath "J:\LLM\autopilot_qwythos_hotrod.log" -Append
+& pwsh -NoProfile -File $HotRod -Only $ModelId 2>&1 | Tee-Object -FilePath (Join-Path $GodzillaLogDir "autopilot_qwythos_hotrod.log") -Append
 Write-Q "Done exit=$LASTEXITCODE"
 
 } finally {
