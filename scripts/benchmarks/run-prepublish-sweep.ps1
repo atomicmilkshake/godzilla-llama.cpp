@@ -241,7 +241,15 @@ foreach ($m in $Models) {
     if ($kvGate -eq "PASS" -and $HotRod) {
         Wait-GodzillaGpuFree -OnWait { Write-Host "  Waiting for GPU before hot-rod..." -ForegroundColor DarkYellow }
         Write-Host "  Hot-rod cert (§5: HE sweep + speed + NIAH)..." -ForegroundColor Cyan
+        # Release sweep file lock so hot-rod cert can acquire GPU lock (it defers while prepublish_sweep.lock is held).
+        if (Test-Path $SweepLockPath) {
+            $owner = Get-Content $SweepLockPath -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($owner -eq "$PID") { Remove-Item $SweepLockPath -Force -ErrorAction SilentlyContinue }
+        }
+        $env:GODZILLA_PREPUBLISH_SWEEP_CHILD = "1"
         & pwsh -NoProfile -File $HotRodScript -Only $m.Id
+        Remove-Item Env:GODZILLA_PREPUBLISH_SWEEP_CHILD -ErrorAction SilentlyContinue
+        if (-not (Test-Path $SweepLockPath)) { Set-Content -Path $SweepLockPath -Value $PID -Encoding ASCII }
         $hotrodExit = $LASTEXITCODE
         $hotrodGate = if ($hotrodExit -eq 0) { "DONE" } else { "FAIL" }
         if ($hotrodExit -ne 0) { $sweepFailed = $true }

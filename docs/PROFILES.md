@@ -254,17 +254,17 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 - Viable: baseline preferred for cert; turbo/tri acceptable per HE.
 
 **fablevibes-14b-moe:**
-- KV gate: **PASS** (`kv_matrix_20260620_223424.txt`; baseline-8k + `-ncmoe 32`).
-- Hot-rod: **NOT_CERTIFIED** (0/40 peak in `prepublish_hotrod_summary.tsv`; HE sweep needed on baseline-8k).
+- KV gate: **PASS** (`kv_matrix_20260629_110733.txt`; all non-tri configs ≤2% vs f16; `-ncmoe 32`).
+- Hot-rod: **NOT_CERTIFIED** — baseline-8k HE **27/40** (`prepublish_godzilla_hotrod_fablevibes-14b-moe_2026-06-29.jsonl`; 1 below §5 promotion threshold 28/40).
 - MoE path uses `-ncmoe 32`.
 - Tri path: `$TRIATTENTION_CALIB_DIR/qwen36-14b-fablevibes.triattention`
-- Viability: baseline-8k only for godzilla hot-rod retry; turbo pending full KV confirmation ≤2%.
+- Viability: **KV-viable** on baseline-8k + MoE offload; not hot-rod certified on MEMORY-ALPHA.
 
 **huihui-gemma-4-12b:**
-- KV gate: **FAIL** (`kv_matrix_20260621_080418.txt`; baseline-8k run).
-- Native Gemma4 (non-hybrid SWA); TriAttention cal at `$TRIATTENTION_CALIB_DIR/huihui-gemma-4-12b.triattention`.
-- Hot-rod: not attempted (KV gate fail).
-- Viability: baseline-8k only wired; re-run KV after cal refresh or engine fix before hot-rod cert.
+- KV gate: **FAIL** (`kv_matrix_20260629_130711.txt`; turbo +55%, tcq +117% vs f16; kvarn3/kvarn4 improve but turbo family fails gate).
+- Native Gemma4 (non-hybrid SWA); TriAttention cal at `$TRIATTENTION_CALIB_DIR/gemma4/huihui-gemma-4-12b.triattention` (present; re-confirmed 2026-06-29).
+- Hot-rod: **not attempted** (turbo KV incompatible per gate).
+- Viability: **baseline/kvarn3/kvarn4 only**; turbo/tcq excluded (same pattern as gemma4-coding / vibethinker).
 
 **gemma4-coding (re-triage context):**
 - Turbo quality regression confirmed (+9.86%); hybrid ISWA requires v2 .triattention per dedicated engine patch plan.
@@ -275,13 +275,12 @@ All wiring respects the "only use features that pass KV gate for that model" pri
 
 See prepublish sweep plan for gates and godzilla-comprehensive-fix-plan.md for harness/TSV status (**BENCH-01 resolved** in `6c159c9a6`).
 
-## 2026-06-29 status (godzilla-continue-development Stream B partial)
+## 2026-06-29 status (godzilla-continue-development Stream B complete)
 
 **P0 certified (hot-rod §5):** qwopus-9b-coder, huihui-opus-9b, gemma4-coding (37/40).  
-**Also certified:** qwopus-4b, negentropy-opus-9b, qwythos-9b-mythos.  
-**Blocked / incomplete:** fablevibes-14b-moe (KV PASS, hot-rod 0/40 — retry needed); huihui-gemma-4-12b (KV FAIL).  
-**Viability-only:** vibethinker-3b (baseline-8k; turbo excluded).  
-Prepublish plan **not archived** — new-wave gates incomplete.
+**Also certified:** qwopus-4b, negentropy-opus-9b, qwythos-9b-mythos (**7 total**).  
+**New-wave viability (not certified):** fablevibes-14b-moe (KV PASS, HE 27/40); huihui-gemma-4-12b (turbo KV FAIL, baseline/kvarn only); vibethinker-3b (baseline-8k; turbo excluded).  
+Prepublish plan **archived** 2026-06-29 — see `docs/completed-plans/godotzilla-prepublish-model-sweep-plan_COMPLETED_2026-06-29.md`.
 
 ## Certified models summary table (from prepublish_hotrod_summary.tsv cleaned 2026-06-20)
 

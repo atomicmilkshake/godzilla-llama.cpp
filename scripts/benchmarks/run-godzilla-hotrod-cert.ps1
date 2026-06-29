@@ -246,7 +246,7 @@ if (-not (Test-Path $SummaryPath)) {
     "model_id`tpreset_ref`tpeak_he`tspeed_frontier`tniah`thotrod_cert`tevidence" | Set-Content $SummaryPath -Encoding UTF8
 }
 
-if (Test-FileLockHeld -Path $PrepublishSweepLockPath) {
+if (-not $env:GODZILLA_PREPUBLISH_SWEEP_CHILD -and (Test-FileLockHeld -Path $PrepublishSweepLockPath)) {
     Write-Error "prepublish KV sweep active — defer hot-rod cert until GPU sweep completes"
     exit 1
 }
