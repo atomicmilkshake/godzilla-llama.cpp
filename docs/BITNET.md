@@ -125,7 +125,31 @@ Microsoft ships a **separate** W2A8 PyTorch stack under `$BITNET_REF_ROOT\gpu\` 
 
 **Not supported** without WSL: no `.dll` build, no MSVC path, PyTorch CUDA + xformers + nvcc expect Linux. Use WSL2 with CUDA (same pattern as P0 WSL `llama-server`).
 
-### Setup (this workspace)
+### WSL pip pins (`requirements-wsl.txt`)
+
+Microsoft's `gpu/requirements.txt` uses open lower bounds. For reproducible WSL CUDA 13.0 stacks, pin after the cu130 xformers reinstall step:
+
+| Package | Pinned version (verified 2026-06-28, RTX 3080 / sm_86) |
+|---------|--------------------------------------------------------|
+| `torch` | `2.12.1+cu130` (PyTorch cu130 index) |
+| `xformers` | `0.0.35` (reinstall from `https://download.pytorch.org/whl/cu130`) |
+| `transformers` | `4.57.6` |
+| `sentencepiece` | `0.2.1` |
+| `tiktoken` | `0.12.0` |
+| `einops` | `0.8.2` |
+| `blobfile` | `3.1.0` |
+| `fire` | `0.7.1` |
+
+Example one-liner after `pip install -r requirements.txt`:
+
+```bash
+pip install 'torch==2.12.1' xformers==0.0.35 \
+  --index-url https://download.pytorch.org/whl/cu130 --force-reinstall
+```
+
+Copy the table into a local `$BITNET_REF_ROOT/gpu/requirements-wsl.txt` if you want a checked-in operator file (not in godzilla repo).
+
+### Setup (operator workspace)
 
 ```powershell
 # One-time: venv, pip deps, nvcc kernel (auto sm_XX), HF download + convert, kernel test
@@ -162,8 +186,20 @@ python generate.py ./checkpoints/ --chat_format   # non-interactive smoke
 - **Verified on this machine (2026-06-28):** RTX 3080 (sm_86), WSL, torch `2.12.1+cu130`, xformers `0.0.35` (reinstall from PyTorch cu130 index). `test.py` kernel benchmarks pass; `generate.py --chat_format` completes (~104 tok/s decode after compile).
 - After `pip install -r requirements.txt`, run `pip install xformers --index-url https://download.pytorch.org/whl/cu130 --force-reinstall` if xformers reports missing CUDA support.
 - Set `NO_CUDA_GRAPHS=1` in env if CUDA graph capture fails on older drivers.
-- No Flask/OpenAI server in `gpu/`; keep P0 `:8091` for HTTP reference until a wrapper is added.
+- **HTTP wrapper deferred:** A minimal Flask/FastAPI OpenAI shim on `:8092` is not shipped in godzilla (MS `gpu/` has no server). Use P0 `:8091` (MS fork) or P2 `:8090` (godzilla CPU I2_S) for HTTP until a wrapper is added upstream or in operator workspace.
+- `GENERATION QUALITY WILL BE DEGRADED` in load log is from missing `tokenizer.ggml.pre` in the GGUF (MS parity); it is **not** an `i2_s` type failure.
 - GPU stack is experimental throughput research; production BitNet on godzilla remains **CPU I2_S**.
+
+### WSL release binary (GitHub asset)
+
+After `build_bitnet_cpu.ps1 -UseWsl -Target llama-server`:
+
+```powershell
+pwsh -File scripts/package-bitnet-cpu-wsl.ps1 -Tag kv-god-YYYYMMDD
+gh release upload kv-god-YYYYMMDD release/godotzilla-bitnet-cpu-wsl-x64-kv-god-YYYYMMDD.zip --clobber
+```
+
+Linux x64 only (WSL2 or native). Requires `libomp5`. Model weights are **not** included — fetch via `scripts/fetch-bitnet-model.ps1`.
 
 ## TL2 (P2)
 
