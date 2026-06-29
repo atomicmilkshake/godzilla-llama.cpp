@@ -48,10 +48,8 @@ function Wait-GpuFree {
 
 function Update-KvSummaryPass([string]$Artifact) {
     $commit = git -C $RepoRoot rev-parse --short HEAD 2>$null
-    if (-not (Test-Path $KvSummary)) {
-        "model_id`tlabel`tcommit`tkv_gate`thotrod`tartifact`tnotes" | Set-Content $KvSummary -Encoding UTF8
-    }
-    Add-Content $KvSummary "$ModelId`t$PresetId Q4_K_M`t$commit`tPASS`tQUEUED`t$Artifact`tautopilot_kv_pass"
+    Upsert-PrepublishSweepTsvRow -Path $KvSummary -ModelId $ModelId `
+        -Row ("{0}`t{1}`t{2}`tPASS`tQUEUED`t{3}`tautopilot_kv_pass" -f $ModelId, "$PresetId Q4_K_M", $commit, $Artifact)
 }
 
 if (Test-Path $LockFile) {

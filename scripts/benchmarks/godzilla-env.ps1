@@ -15,6 +15,84 @@ $script:HotrodCertLockPath = if ($SomsRoot) {
 }
 $env:TURBO_INNERQ = "1"
 
+# prepublish_sweep_summary.tsv: 7 columns (BENCH-01 schema)
+$script:PrepublishSweepTsvHeader = "model_id`tlabel`tcommit`tkv_gate`thotrod`tartifact`tnotes"
+$script:PrepublishSweepTsvColCount = 7
+
+function Get-PrepublishSweepTsvHeader {
+    return $script:PrepublishSweepTsvHeader
+}
+
+function Convert-PrepublishSweepLegacyRow {
+    param([string]$Row)
+    if ([string]::IsNullOrWhiteSpace($Row)) { return $null }
+    $cols = $Row -split "`t"
+    if ($cols.Count -eq $script:PrepublishSweepTsvColCount) { return $Row }
+    if ($cols.Count -eq 6) {
+        return ("{0}`t{1}`t{2}`t{3}`tSKIP`t{4}`t{5}" -f $cols[0], $cols[1], $cols[2], $cols[3], $cols[4], $cols[5])
+    }
+    throw "prepublish_sweep_summary.tsv row for '$($cols[0])' has $($cols.Count) columns; expected $script:PrepublishSweepTsvColCount (legacy 6-col rows are migrated automatically)."
+}
+
+function Ensure-PrepublishSweepTsvSchema {
+    param([string]$Path)
+    New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
+    $header = Get-PrepublishSweepTsvHeader
+    if (-not (Test-Path $Path)) {
+        $header | Set-Content $Path -Encoding UTF8
+        return
+    }
+    $lines = Get-Content $Path -Encoding UTF8
+    if ($lines.Count -eq 0) {
+        $header | Set-Content $Path -Encoding UTF8
+        return
+    }
+    $startIdx = 0
+    if ($lines[0] -eq $header) {
+        $startIdx = 1
+    } elseif (($lines[0] -split "`t").Count -eq 6 -and ($lines[0] -split "`t")[0] -eq 'model_id') {
+        # Legacy 6-column header without hotrod column
+        $startIdx = 1
+    }
+    $out = [System.Collections.Generic.List[string]]::new()
+    $out.Add($header)
+    foreach ($row in ($lines | Select-Object -Skip $startIdx)) {
+        $normalized = Convert-PrepublishSweepLegacyRow -Row $row
+        if ($normalized) { $out.Add($normalized) }
+    }
+    if ($lines[0] -ne $header -or $out.Count -ne ($lines.Count - $startIdx + 1)) {
+        $out | Set-Content $Path -Encoding UTF8
+    }
+}
+
+function Upsert-PrepublishSweepTsvRow {
+    param(
+        [string]$Path,
+        [string]$ModelId,
+        [string]$Row
+    )
+    $normalized = Convert-PrepublishSweepLegacyRow -Row $Row
+    if (($normalized -split "`t").Count -ne $script:PrepublishSweepTsvColCount) {
+        throw "Upsert row for '$ModelId' must have $script:PrepublishSweepTsvColCount tab-separated columns."
+    }
+    Ensure-PrepublishSweepTsvSchema -Path $Path
+    $lines = Get-Content $Path -Encoding UTF8
+    $out = [System.Collections.Generic.List[string]]::new()
+    $out.Add($lines[0])
+    $replaced = $false
+    foreach ($line in $lines | Select-Object -Skip 1) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $id = ($line -split "`t")[0]
+        if ($id -eq $ModelId) {
+            if (-not $replaced) { $out.Add($normalized); $replaced = $true }
+        } else {
+            $out.Add((Convert-PrepublishSweepLegacyRow -Row $line))
+        }
+    }
+    if (-not $replaced) { $out.Add($normalized) }
+    $out | Set-Content $Path -Encoding UTF8
+}
+
 function Get-GodzillaBinDir {
     Join-Path $GodzillaRepoRoot "build\bin"
 }

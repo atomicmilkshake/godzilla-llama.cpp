@@ -254,18 +254,22 @@ Wait-GodzillaGpuFree -OnWait { Write-Host "Waiting for GPU before hot-rod cert..
 Enter-GodzillaGpuLock -Operation "hotrod-cert"
 
 $LockFile = Join-Path $SomsRoot "logs\godzilla_hotrod.cert.lock"
+$exitCode = 0
+try {
 if (Test-Path $LockFile) {
     $lockPid = 0
     [void][int]::TryParse((Get-Content $LockFile -ErrorAction SilentlyContinue | Select-Object -First 1), [ref]$lockPid)
     if ($lockPid -and (Get-Process -Id $lockPid -ErrorAction SilentlyContinue)) {
         Write-Error "Hot-rod cert already running (PID $lockPid). Use one instance; wait or remove stale lock at $LockFile"
-        exit 1
+        $exitCode = 1
+        return
     }
     Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
 }
 if (Test-MatrixSuiteBusy) {
     Write-Error "run_matrix_suite.py already active. Kill zombies (Reset-MatrixZombies) before hot-rod cert."
-    exit 1
+    $exitCode = 1
+    return
 }
 $PID | Set-Content $LockFile -Encoding ascii
 
@@ -299,6 +303,10 @@ foreach ($m in $Models) {
             -RowIntent "speed_frontier" -Harness $m.Harness -HeTimeout $m.HeTimeout `
             -LaunchTimeout $m.LaunchTimeout -Evidence $evidence -LogFile $speedLog
         Write-MatrixQueue -QueueLog $QueueLog -Msg ("PHASE4 speed exit={0} log={1}" -f $speedExit, $speedLog)
+        if ($speedExit -ne 0) {
+            Write-MatrixQueue -QueueLog $QueueLog -Msg ("BLOCK {0} speed_frontier failed exit={1}" -f $m.PresetId, $speedExit)
+            $anyNotCertified = $true
+        }
     } else {
         Write-MatrixQueue -QueueLog $QueueLog -Msg ("BLOCK {0} no promotion peak >=28/40" -f $m.PresetId)
     }
@@ -323,7 +331,11 @@ foreach ($m in $Models) {
 }
 
 Write-Host "`nHot rod summary: $SummaryPath" -ForegroundColor Green
-if ($anyNotCertified) { exit 1 }
+if ($anyNotCertified) { $exitCode = 1 }
 } finally {
     Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
 }
+} finally {
+    Exit-GodzillaGpuLock
+}
+exit $exitCode

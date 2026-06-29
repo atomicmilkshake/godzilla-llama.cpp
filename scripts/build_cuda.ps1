@@ -7,7 +7,8 @@ param(
     [string]$Target = "llama-server",
     [string]$CudaArch = "86",
     [int]$Jobs = 8,
-    [string]$SdkRoot = ""
+    [string]$SdkRoot = "",
+    [switch]$WithTests
 )
 
 . (Join-Path $PSScriptRoot "godzilla-paths.ps1")
@@ -37,6 +38,14 @@ function Import-Vcvars([string]$Vcvars) {
     if (-not $clExe) {
         throw "vcvars64 failed: cl.exe not found in PATH after sourcing $Vcvars"
     }
+}
+
+function Test-UcrtStddefHeader {
+    foreach ($inc in ($env:INCLUDE -split ';')) {
+        if (-not $inc) { continue }
+        if (Test-Path (Join-Path $inc 'stddef.h')) { return $true }
+    }
+    return $false
 }
 
 function Add-WdkUcrtPaths([string]$Root) {
@@ -85,8 +94,22 @@ Import-Vcvars $Vcvars
 if ($SdkRoot) {
     $SdkVer = Add-WdkUcrtPaths -Root $SdkRoot
     Write-Host "Using WDK UCRT $SdkVer from $SdkRoot"
+} elseif (-not (Test-UcrtStddefHeader)) {
+    throw @"
+Cannot find stddef.h in MSVC INCLUDE paths (common with Visual Studio 18 without WDK UCRT).
+
+Set `$env:WDK_ROOT to your Windows Kits 10 root, or pass -SdkRoot <path>.
+See docs/LOCAL-SETUP.example.md for the WDK_ROOT table and profile snippet.
+
+Example:
+  `$env:WDK_ROOT = 'C:\Program Files (x86)\Windows Kits\10'
+  pwsh -File scripts/build_cuda.ps1 -Target llama-server
+"@
 } else {
-    Write-Host "WDK_ROOT not set; skipping explicit UCRT path augmentation"
+    Write-Host "WDK_ROOT not set; UCRT stddef.h found in MSVC INCLUDE paths"
+}
+if ($SdkRoot -and -not (Test-UcrtStddefHeader)) {
+    throw "WDK/SDK at '$SdkRoot' did not expose stddef.h. Verify WDK_ROOT (see docs/LOCAL-SETUP.example.md)."
 }
 Write-Host "Using vcvars: $Vcvars"
 
@@ -108,14 +131,13 @@ try {
             "-DGGML_CUDA_FA=ON", "-DGGML_CUDA_FA_ALL_QUANTS=ON",
             "-DGGML_CCACHE=OFF", "-DCMAKE_BUILD_TYPE=Release",
             "-DCMAKE_CUDA_ARCHITECTURES=$CudaArch"
-        )
+        ) + $(if ($WithTests) { @("-DLLAMA_BUILD_TESTS=ON") } else { @() })
         if ($cfgExit -ne 0) { throw "cmake configure failed (exit $cfgExit)" }
     }
 
-    $buildExit = Invoke-Cmake @(
-        "--build", "build", "--config", "Release",
-        "-j", "$Jobs", "--target", $Target
-    )
+    $buildArgs = @("--build", "build", "--config", "Release", "-j", "$Jobs")
+    if (-not $WithTests) { $buildArgs += @("--target", $Target) }
+    $buildExit = Invoke-Cmake $buildArgs
     if ($buildExit -ne 0) { throw "cmake build failed for target '$Target' (exit $buildExit)" }
 
     $artifact = Find-BuiltArtifact -BuildDir $buildDir -Name $Target

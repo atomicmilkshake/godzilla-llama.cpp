@@ -132,7 +132,20 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $SummaryPath = Join-Path $LogDir "prepublish_sweep_summary.tsv"
 $SweepLockPath = Join-Path $LogDir "prepublish_sweep.lock"
 $GemmaAutopilotLock = Join-Path $LogDir "gemma4_coding_autopilot.lock"
-$TsvHeader = "model_id`tlabel`tcommit`tkv_gate`thotrod`tartifact`tnotes"
+
+function Ensure-TsvSchema {
+    param([string]$Path)
+    Ensure-PrepublishSweepTsvSchema -Path $Path
+}
+
+function Upsert-TsvRow {
+    param(
+        [string]$Path,
+        [string]$ModelId,
+        [string]$Row
+    )
+    Upsert-PrepublishSweepTsvRow -Path $Path -ModelId $ModelId -Row $Row
+}
 
 function Test-SweepLockHeld {
     if (-not (Test-Path $SweepLockPath)) { return $false }
@@ -162,52 +175,6 @@ function Exit-SweepLock {
     Exit-GodzillaGpuLock
 }
 
-function Ensure-TsvSchema {
-    param([string]$Path)
-    if (-not (Test-Path $Path)) {
-        $TsvHeader | Set-Content $Path -Encoding UTF8
-        return
-    }
-    $first = Get-Content $Path -TotalCount 1 -Encoding UTF8
-    if ($first -eq $TsvHeader) { return }
-    $rows = Get-Content $Path -Encoding UTF8 | Select-Object -Skip 1
-    $migrated = [System.Collections.Generic.List[string]]::new()
-    $migrated.Add($TsvHeader)
-    foreach ($row in $rows) {
-        if ([string]::IsNullOrWhiteSpace($row)) { continue }
-        $cols = $row -split "`t"
-        if ($cols.Count -eq 6) {
-            $migrated.Add(("{0}`t{1}`t{2}`t{3}`tSKIP`t{4}`t{5}" -f $cols[0], $cols[1], $cols[2], $cols[3], $cols[4], $cols[5]))
-        } elseif ($cols.Count -ge 7) {
-            $migrated.Add($row)
-        }
-    }
-    $migrated | Set-Content $Path -Encoding UTF8
-}
-
-function Upsert-TsvRow {
-    param(
-        [string]$Path,
-        [string]$ModelId,
-        [string]$Row
-    )
-    Ensure-TsvSchema -Path $Path
-    $lines = Get-Content $Path -Encoding UTF8
-    $out = [System.Collections.Generic.List[string]]::new()
-    $out.Add($lines[0])
-    $replaced = $false
-    foreach ($line in $lines | Select-Object -Skip 1) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        $id = ($line -split "`t")[0]
-        if ($id -eq $ModelId) {
-            if (-not $replaced) { $out.Add($Row); $replaced = $true }
-        } else {
-            $out.Add($line)
-        }
-    }
-    if (-not $replaced) { $out.Add($Row) }
-    $out | Set-Content $Path -Encoding UTF8
-}
 $EnsureTri = Join-Path $RepoRoot "scripts\ensure-triattention.ps1"
 $KvMatrix = Join-Path $RepoRoot "scripts\benchmarks\run-kv-matrix.ps1"
 $LaunchSmokeScript = Join-Path $RepoRoot "scripts\benchmarks\run-launch-smoke.ps1"
