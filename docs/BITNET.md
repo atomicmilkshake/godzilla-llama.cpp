@@ -148,7 +148,7 @@ nvcc -std=c++17 -Xcudafe --diag_suppress=177 --compiler-options -fPIC -lineinfo 
 cd ..
 python test.py
 mkdir -p checkpoints
-huggingface-cli download microsoft/bitnet-b1.58-2B-4T-bf16 --local-dir ./checkpoints/bitnet-b1.58-2B-4T-bf16
+hf download microsoft/bitnet-b1.58-2B-4T-bf16 --local-dir ./checkpoints/bitnet-b1.58-2B-4T-bf16
 python convert_safetensors.py --safetensors_file ./checkpoints/bitnet-b1.58-2B-4T-bf16/model.safetensors \
   --output checkpoints/model_state.pt --model_name 2B
 python convert_checkpoint.py --input ./checkpoints/model_state.pt
@@ -159,6 +159,8 @@ python generate.py ./checkpoints/ --chat_format   # non-interactive smoke
 ### Smoke / limits
 
 - Non-interactive smoke: `python generate.py ./checkpoints/` (default prompt `Hello, my name is`).
+- **Verified on this machine (2026-06-28):** RTX 3080 (sm_86), WSL, torch `2.12.1+cu130`, xformers `0.0.35` (reinstall from PyTorch cu130 index). `test.py` kernel benchmarks pass; `generate.py --chat_format` completes (~104 tok/s decode after compile).
+- After `pip install -r requirements.txt`, run `pip install xformers --index-url https://download.pytorch.org/whl/cu130 --force-reinstall` if xformers reports missing CUDA support.
 - Set `NO_CUDA_GRAPHS=1` in env if CUDA graph capture fails on older drivers.
 - No Flask/OpenAI server in `gpu/`; keep P0 `:8091` for HTTP reference until a wrapper is added.
 - GPU stack is experimental throughput research; production BitNet on godzilla remains **CPU I2_S**.
