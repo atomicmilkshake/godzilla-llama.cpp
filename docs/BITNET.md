@@ -6,10 +6,10 @@ Microsoft **I2_S / TL1 / TL2** CPU kernels are vendored under `vendor/bitnet/` a
 
 | Phase | Endpoint | Binary | Status |
 |-------|----------|--------|--------|
-| **P0** | `:8091` | `$BITNET_REF_ROOT` Microsoft fork (WSL Clang) | Operational |
+| **P0** | `:8091` | `J:\LLM\BitNet` Microsoft fork (WSL Clang) | Operational |
 | **P1** | dev | `build-bitnet-cpu` with `GGML_BITNET_I2_S=ON` | Build + load OK; greedy parity vs MS (use `llama-completion --no-conversation`) |
 | **P2** | `:8090` | Unified godzilla + `start-bitnet-godzilla.bat` | Preset **#47** in master.ps1 (no TriAttention) |
-| **GPU** | *(CLI)* | `$BITNET_REF_ROOT\gpu` PyTorch + `libbitnet.so` | Separate stack; WSL only; no HTTP server |
+| **GPU** | *(CLI)* | `J:\LLM\BitNet\gpu` PyTorch + `libbitnet.so` | Separate stack; WSL only; no HTTP server |
 
 ## P2 unified launcher (`start-bitnet-godzilla.bat`)
 
@@ -96,7 +96,7 @@ Optional TQ1/TQ2 CUDA mmq for BitNet GPU experiments is **not implemented** (P4)
 
 ## PyTorch GPU (Microsoft `gpu/`)
 
-Microsoft ships a **separate** W2A8 PyTorch stack under `$BITNET_REF_ROOT\gpu\` (pin `01eb415` on `main`). It is **not** integrated into ggml/`llama-server` and does **not** share checkpoints with I2_S GGUF.
+Microsoft ships a **separate** W2A8 PyTorch stack under `J:\LLM\BitNet\gpu\` (pin `01eb415` on `main`). It is **not** integrated into ggml/`llama-server` and does **not** share checkpoints with I2_S GGUF.
 
 | | **CPU I2_S (P0–P2)** | **PyTorch GPU (`gpu/`)** |
 |---|---|---|
@@ -129,16 +129,16 @@ Microsoft ships a **separate** W2A8 PyTorch stack under `$BITNET_REF_ROOT\gpu\` 
 
 ```powershell
 # One-time: venv, pip deps, nvcc kernel (auto sm_XX), HF download + convert, kernel test
-pwsh -File <workspace-scripts>/setup-bitnet-gpu-pytorch.ps1
+pwsh -File J:\LLM\scripts\setup-bitnet-gpu-pytorch.ps1
 
 # Interactive chat (WSL)
-<operator-launcher>.bat
+J:\LLM\start-bitnet-gpu-pytorch.bat
 ```
 
 Manual WSL steps (equivalent):
 
 ```bash
-cd $BITNET_REF_ROOT/gpu
+cd /mnt/j/LLM/BitNet/gpu
 python3 -m venv venv-bitnet-gpu && source venv-bitnet-gpu/bin/activate
 pip install -r requirements.txt
 cd bitnet_kernels
