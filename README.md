@@ -5,6 +5,7 @@
 > The fork that collected and perfected the best KV work (TurboQuant + TriAttention + KVarN + spiritbuun dequant), the best weight work (ik_llama), the best speculative decoding (BeeLlama + AtomicBot-ai/NJannasch), and made them play together.
 
 **Maintainer:** [atomicmilkshake](https://github.com/atomicmilkshake)  
+**Security:** see [SECURITY.md](SECURITY.md) · local paths: [docs/LOCAL-SETUP.example.md](docs/LOCAL-SETUP.example.md)  
 **Base:** [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp) (`beellama-upstream`)  
 **Active integration branch:** `kv-god` (TriAttention on BeeLlama TurboQuant/TCQ stack)
 
@@ -44,8 +45,8 @@ $Vcvars = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Bu
 cmd /c "`"$Vcvars`" >nul 2>&1 && set" | ForEach-Object {
     if ($_ -match "^(.*?)=(.*)$") { Set-Item "env:$($matches[1])" $matches[2] }
 }
-$env:INCLUDE += ";S:\WADK102\Include\10.0.26100.0\ucrt"
-$env:LIB     += ";S:\WADK102\Lib\10.0.26100.0\ucrt\x64"
+$env:INCLUDE += ";$WDK_ROOT\Include\10.0.26100.0\ucrt"
+$env:LIB     += ";$WDK_ROOT\Lib\10.0.26100.0\ucrt\x64"
 
 cmake -S . -B build -G Ninja `
   -DGGML_CUDA=ON -DGGML_NATIVE=ON -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON `
@@ -57,15 +58,15 @@ cmake --build build -j 8 --target llama-server
 
 ```powershell
 .\build\bin\llama-server.exe `
-  -m J:\MOODLES\your-model.gguf `
+  -m $MODELS_DIR/your-model.gguf `
   --cache-type-k turbo3 --cache-type-v turbo4 `
   --flash-attn on `
-  --triattention-stats J:\LLM\VibeThinker\vibethinker-3b.triattention `
+  --triattention-stats $TRIATTENTION_CALIB_DIR/vibethinker-3b.triattention `
   --triattention-budget 2048 --triattention-window 128 `
   -c 32768 --port 8090
 ```
 
-Calibration: `J:\LLM\TurboQuantExperimentation\calibrate.py` (see workspace TriAttention rule).
+Calibration: set `TRIATTENTION_PYTHON` and `TRIATTENTION_CALIBRATE_PY` (see [docs/LOCAL-SETUP.example.md](docs/LOCAL-SETUP.example.md)).
 
 ### VSCode Copilot / agent mode (Qwopus-style)
 
@@ -73,7 +74,7 @@ For remote Copilot through Caddy, keep reasoning in `reasoning_content` only and
 
 ```powershell
 .\build\bin\llama-server.exe `
-  -m J:\MOODLES\Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf `
+  -m $MODELS_DIR/Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf `
   -c 262144 -ngl 99 --flash-attn on -nkvo --kv-unified `
   --host 0.0.0.0 --port 8090 --parallel 1 `
   --alias "Qwopus Coder,Godzilla Test" --jinja `
@@ -106,7 +107,7 @@ Upstream sync: `beellama-upstream` → periodic merge into `main`, then rebase i
 
 ## Roadmap
 
-Full phased plan: [J:\LLM\docs\godzilla-llama-cpp-plan.md](../docs/godotzilla-llama-cpp-plan.md)
+Phased roadmap is tracked in project issues and `docs/`; operator-specific plans stay outside this repo.
 
 | Phase | Focus | Status |
 |-------|-------|--------|

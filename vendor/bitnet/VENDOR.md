@@ -21,16 +21,16 @@ This directory holds a **pinned copy** of Microsoft bitnet.cpp CPU kernel source
 
 ## Local build note (P0 dual-binary)
 
-P0 validation uses the **full** clone at `J:\LLM\BitNet` (WSL Clang build; Windows requires VS **ClangCL** component). Godzilla integration (P1+) compiles only this vendor slice behind `GGML_BITNET_*` CMake flags.
+P0 validation uses the **full** clone at `$BITNET_REF_ROOT` (WSL Clang build; Windows requires VS **ClangCL** component). Godzilla integration (P1+) compiles only this vendor slice behind `GGML_BITNET_*` CMake flags.
 
 ## WSL const fix (BitNet clone only)
 
-Clang 14 on WSL required one const-correctness fix in `J:\LLM\BitNet\src\ggml-bitnet-mad.cpp` line 811 (`const int8_t * y_col`). Vendor copy here remains **unmodified** until P1 port applies the same fix if needed.
+Clang 14 on WSL required one const-correctness fix in `$BITNET_REF_ROOT\src\ggml-bitnet-mad.cpp` line 811 (`const int8_t * y_col`). Vendor copy here remains **unmodified** until P1 port applies the same fix if needed.
 
 ## Model weights
 
-- **P0:** `J:\LLM\BitNet\models\BitNet-b1.58-2B-4T\ggml-model-i2_s.gguf` (HF `microsoft/bitnet-b1.58-2B-4T-gguf`)
-- **P2 target:** `J:\MOODLES\bitnet-b1.58-2B-4T\ggml-model-i2_s.gguf` (via `scripts/fetch-bitnet-model.ps1`)
+- **P0:** `$BITNET_REF_ROOT\models\BitNet-b1.58-2B-4T\ggml-model-i2_s.gguf` (HF `microsoft/bitnet-b1.58-2B-4T-gguf`)
+- **P2 target:** `$MODELS_DIR/bitnet-b1.58-2B-4T\ggml-model-i2_s.gguf` (via `scripts/fetch-bitnet-model.ps1`)
 
 ## Do not merge
 

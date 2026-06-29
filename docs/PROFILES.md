@@ -48,9 +48,9 @@ TurboQuant KV + TriAttention eviction. Requires per-model `.triattention` calibr
 Generate calibration:
 
 ```powershell
-J:\LLM\TurboQuantExperimentation\venv-calibrate\Scripts\python.exe `
-  J:\LLM\TurboQuantExperimentation\calibrate.py `
-  --model WeiboAI/VibeThinker-3B --output J:\LLM\VibeThinker\vibethinker-3b.triattention `
+<calibration-tooling>/venv-calibrate\Scripts\python.exe `
+  <calibration-tooling>/calibrate.py `
+  --model WeiboAI/VibeThinker-3B --output $TRIATTENTION_CALIB_DIR/vibethinker-3b.triattention `
   --device cuda --n-tokens 2048
 ```
 
@@ -77,7 +77,7 @@ TriAttention + DFlash: use `turbo-tri` flags on target; draft KV pruning is Phas
 ## SOMS matrix (VibeThinker-3B)
 
 ```powershell
-pwsh -File J:\LLM\soms\scripts\run_vibethinker_godzilla_spin.ps1
+pwsh -File $SOMS_ROOT/scripts\run_vibethinker_godzilla_spin.ps1
 ```
 
 Variants: `baseline-8k` on engine `godzilla` (turbo variants removed per KV gate failure).
@@ -106,7 +106,7 @@ Variants: `baseline-8k` on engine `godzilla` (turbo variants removed per KV gate
 **Turbo + TriAttention variant (also cleared promotion):**
 ```
 -ngl 99 --flash-attn on -c 8192 -ctk turbo3 -ctv turbo4 --no-warmup --jinja \
-  --triattention-stats J:\LLM\TurboQuant-Qwopus-v3-Setup\qwopus3.5-9b-coder-exp.triattention \
+  --triattention-stats $TRIATTENTION_CALIB_DIR/qwopus3.5-9b-coder-exp.triattention \
   --triattention-budget 8192 --triattention-hard-prefix 4096
 ```
 
@@ -227,7 +227,7 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 -ngl 99 --flash-attn on -c 8192 --parallel 1 -b 4096 -ub 128 --jinja --temp 0.2 --top-p 0.95
 ```
 
-**TriAttention calibration used:** J:\LLM\TurboQuant-Qwopus-v3-Setup\negentropy-opus-9b.triattention (per roster)
+**TriAttention calibration used:** $TRIATTENTION_CALIB_DIR/negentropy-opus-9b.triattention (per roster)
 
 **Recommendation:** Baseline-8k is the certified hot-rod path. Turbo stacks produced acceptable HE in the run but were not the peak; use only if KV pressure requires (full matrix showed small delta). TriAttention viable on baseline for quality.
 
@@ -244,7 +244,7 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 **vibethinker-3b:**
 - KV gate: FAIL on all turbo/tcq (e.g. turbo3/turbo4 +850% PPL vs f16=1313); kvarn8 near baseline (-0.18%).
 - Hot-rod: Skipped (turbo variants incompatible); baseline-8k is only viable stack.
-- Tri path: J:\LLM\VibeThinker\vibethinker-3b.triattention present.
+- Tri path: $TRIATTENTION_CALIB_DIR/vibethinker-3b.triattention present.
 - Action in roster/sweep: Turbo variants removed from godzilla block; Variant forced to baseline-8k.
 
 **negentropy-opus-9b:**
@@ -256,7 +256,7 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 **fablevibes-14b-moe:**
 - KV run started (f16 PPL ~17.81; turbo3/turbo4 ~17.93 ~+0.67% at cutoff); incomplete due to halt.
 - MoE path uses -ncmoe 32.
-- Tri path: J:\LLM\TurboQuant-Qwopus-v3-Setup\qwen36-14b-fablevibes.triattention
+- Tri path: $TRIATTENTION_CALIB_DIR/qwen36-14b-fablevibes.triattention
 - Viability: Turbo removed from godzilla roster pending full KV confirmation <=2%; baseline-8k + ncpu32 only for now. Sweep halted before hot-rod.
 
 **huihui-gemma-4-12b:**

@@ -155,7 +155,11 @@ flake.lock
 
 # Godzilla local runtime artifacts (do not commit)
 logs/
+diagnostics/
 benchmarks/wikitext/
+credentials/
+*.credentials
+*.pem
 /Testing/
 docs/LOCAL-SETUP.md
 

@@ -1,7 +1,7 @@
 # BitNet ggml cherry-pick checklist (Eddie-Wang → godzilla)
 
-**Diff base:** `J:\LLM\BitNet\3rdparty\llama.cpp` @ `1f86f058` (Eddie-Wang fork in MS BitNet)  
-**Target:** `J:\LLM\godzilla-llama.cpp` branch `bitnet-god`  
+**Diff base:** `$BITNET_REF_ROOT\3rdparty\llama.cpp` @ `1f86f058` (Eddie-Wang fork in MS BitNet)  
+**Target:** `<GODZILLA_ROOT>` branch `bitnet-god`  
 **Vendor pin:** see [VENDOR.md](VENDOR.md)
 
 ---
@@ -98,7 +98,7 @@ Script: `scripts/build_bitnet_cpu.ps1` (P1) — ClangCL or documents WSL fallbac
 
 - [ ] `ctest -R "triattention|copilot-coalesce"` 9/9 PASS with `GGML_BITNET_*=OFF`
 - [ ] I2_S `llama-cli` loads `ggml-model-i2_s.gguf` without unknown quant type
-- [ ] Greedy decode token match ≥95% vs Microsoft `J:\LLM\BitNet` reference on fixed prompt
+- [ ] Greedy decode token match ≥95% vs Microsoft `$BITNET_REF_ROOT` reference on fixed prompt
 
 ---
 

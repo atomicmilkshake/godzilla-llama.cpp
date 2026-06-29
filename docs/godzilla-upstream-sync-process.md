@@ -1,9 +1,9 @@
 # Godzilla upstream sync process
 
-**Repo:** `J:\LLM\godzilla-llama.cpp`  
+**Repo:** `<GODZILLA_ROOT>`  
 **Primary integration branch:** `kv-god`  
 **Canonical remote:** `origin` → https://github.com/atomicmilkshake/godzilla-llama.cpp.git  
-**Workspace journal:** `J:\LLM\agent-journal.md` (append after every sync session)
+**Workspace journal:** `<operator-private-journal>` (append after every sync session)
 
 This document is the repeatable workflow for checking upstreams, triaging diffs, applying safe ports, running regression gates, and recording results. Related integration plans: [godzilla-llama-cpp-plan.md](godzilla-llama-cpp-plan.md), [bitnet-godzilla-integration-plan.md](bitnet-godzilla-integration-plan.md).
 
@@ -13,11 +13,11 @@ This document is the repeatable workflow for checking upstreams, triaging diffs,
 
 | Remote | URL / path | Tracking branch | Role |
 |--------|------------|-----------------|------|
-| **`upstream`** / **`beellama-upstream`** | https://github.com/Anbeeld/beellama.cpp.git · `J:\LLM\beellama.cpp` | `main` | **Primary lineage** — TurboQuant/TCQ KV, DFlash/MTP, adaptive speculative decoding, BeeLlama CLI/server args, reasoning-loop guard |
+| **`upstream`** / **`beellama-upstream`** | https://github.com/Anbeeld/beellama.cpp.git · `<beellama-upstream-clone>` | `main` | **Primary lineage** — TurboQuant/TCQ KV, DFlash/MTP, adaptive speculative decoding, BeeLlama CLI/server args, reasoning-loop guard |
 | **`llama-org`** | https://github.com/ggml-org/llama.cpp.git | `master` | **Reference upstream** — ggml core, CUDA backends, models, generic server; **cherry-pick or manual port only** (no wholesale merge) |
 | **`bitnet-upstream`** | https://github.com/microsoft/BitNet.git | `main` | **Vendor slice source** — CPU I2_S/TL kernels copied into `vendor/bitnet/` (not full repo merge) |
 | **`origin`** | https://github.com/atomicmilkshake/godzilla-llama.cpp.git | `kv-god` | **Canonical published fork** — push target after gates pass |
-| `buun-source` | `J:\LLM\buun-llama-cpp` | `master` | TriAttention + buun turbo-quant shim lineage (integration reference) |
+| `buun-source` | `<buun-upstream-clone>` | `master` | TriAttention + buun turbo-quant shim lineage (integration reference) |
 | `tq3-source` | https://github.com/turbo-tan/llama.cpp-tq3.git | `main` | TurboQuant TQ3 CUDA reference (overlaps BeeLlama/buun) |
 
 ### Sync priority order
@@ -31,12 +31,12 @@ This document is the repeatable workflow for checking upstreams, triaging diffs,
 ### One-time remote setup
 
 ```powershell
-cd J:\LLM\godzilla-llama.cpp
+cd <GODZILLA_ROOT>
 git remote add upstream         https://github.com/Anbeeld/beellama.cpp.git
 git remote add llama-org        https://github.com/ggml-org/llama.cpp.git
 git remote add bitnet-upstream  https://github.com/microsoft/BitNet.git
-git remote add beellama-upstream J:\LLM\beellama.cpp
-git remote add buun-source      J:\LLM\buun-llama-cpp
+git remote add beellama-upstream <beellama-upstream-clone>
+git remote add buun-source      <buun-upstream-clone>
 git remote add tq3-source       https://github.com/turbo-tan/llama.cpp-tq3.git
 git remote set-url origin       https://github.com/atomicmilkshake/godzilla-llama.cpp.git
 ```
@@ -121,14 +121,14 @@ These paths and features are **godzilla-specific** or carry fork-local semantics
 
 ### A — Preflight
 
-1. Read `J:\LLM\agent-journal.md` tail; confirm branch `kv-god`.
+1. Read `<operator-private-journal>` tail; confirm branch `kv-god`.
 2. `git status` — stash or commit WIP: `git stash push -m "pre-upstream-sync"`.
 3. Note current HEAD SHA as rollback anchor.
 
 ### B — Fetch remotes
 
 ```powershell
-cd J:\LLM\godzilla-llama.cpp
+cd <GODZILLA_ROOT>
 git fetch upstream beellama-upstream llama-org bitnet-upstream buun-source tq3-source origin
 ```
 
@@ -199,27 +199,27 @@ Run **before and after** any apply. Do not push until all required gates pass.
 
 ### G — Journal + push
 
-1. Append `J:\LLM\agent-journal.md`: inventory table, applied SHAs, deferred list, gate results, rollback SHA.
+1. Append `<operator-private-journal>`: inventory table, applied SHAs, deferred list, gate results, rollback SHA.
 2. `git push origin kv-god` when operator approves and gates are green.
 
 ---
 
 ## 4. Test gates
 
-Run from `J:\LLM\godzilla-llama.cpp` unless noted.
+Run from `<GODZILLA_ROOT>` unless noted.
 
 ### Gate 0 — CUDA build (after ggml/server/CUDA changes)
 
 Stop any running `llama-server` first (Windows DLL lock).
 
 ```powershell
-pwsh -File J:\LLM\godzilla-llama.cpp\scripts\build_cuda.ps1 -Target llama-server
+pwsh -File <GODZILLA_ROOT>\scripts\build_cuda.ps1 -Target llama-server
 ```
 
 Optional: rebuild test binaries before ctest:
 
 ```powershell
-cmake --build J:\LLM\godzilla-llama.cpp\build -j 8 `
+cmake --build <GODZILLA_ROOT>\build -j 8 `
   --target test-triattention-gpu-parity test-server-copilot-coalesce
 ```
 
@@ -228,7 +228,7 @@ cmake --build J:\LLM\godzilla-llama.cpp\build -j 8 `
 Default CUDA `build/` with **BitNet OFF** (`GGML_BITNET_*` unset):
 
 ```powershell
-cd J:\LLM\godzilla-llama.cpp\build
+cd <GODZILLA_ROOT>\build
 ctest -R "triattention|copilot-coalesce" --output-on-failure
 # Expect: 9/9 PASS
 ```
@@ -243,17 +243,17 @@ ctest -R "triattention|copilot-coalesce|bitnet" --output-on-failure
 ### Gate 2 — BitNet I2_S (when `vendor/bitnet/` or BitNet ggml hooks touched)
 
 ```powershell
-pwsh -File J:\LLM\godzilla-llama.cpp\scripts\build_bitnet_cpu.ps1 -UseWsl -Target llama-completion
-cd J:\LLM\godzilla-llama.cpp\build-bitnet-cpu
+pwsh -File <GODZILLA_ROOT>\scripts\build_bitnet_cpu.ps1 -UseWsl -Target llama-completion
+cd <GODZILLA_ROOT>\build-bitnet-cpu
 ctest -R test-bitnet-i2s-quant --output-on-failure
 ```
 
 **Greedy parity vs Microsoft reference** (WSL; exact token match required before deprecating `:8091`):
 
 ```bash
-MODEL=/mnt/j/MOODLES/bitnet-b1.58-2B-4T/ggml-model-i2_s.gguf
-MS=/mnt/j/LLM/BitNet/build/bin/llama-cli
-GZ=/mnt/j/LLM/godzilla-llama.cpp/build-bitnet-cpu/bin/llama-completion
+MODEL=$MODELS_DIR/bitnet-b1.58-2B-4T/ggml-model-i2_s.gguf
+MS=$BITNET_REF_ROOT/build/bin/llama-cli
+GZ=$WSL_GODZILLA_ROOT/build-bitnet-cpu/bin/llama-completion
 $MS -m "$MODEL" -p "Hello" -n 16 -ngl 0 --temp 0 --no-warmup --no-display-prompt -t 4
 $GZ -m "$MODEL" -p "Hello" -n 16 -ngl 0 --temp 0 --fit off --no-warmup --no-display-prompt --no-conversation --single-turn -t 4
 ```
@@ -265,10 +265,10 @@ Re-run Gate 1 on default CUDA `build/` with BitNet OFF after any BitNet work.
 ### Gate 3 — Server launch smoke (required before release / after server changes)
 
 ```powershell
-pwsh -File J:\LLM\godzilla-llama.cpp\scripts\benchmarks\run-launch-smoke.ps1 `
-  -Binary "J:\LLM\godzilla-llama.cpp\build\bin\llama-server.exe" `
-  -Model "J:\MOODLES\VibeThinker-3B.i1-Q4_K_M.gguf" `
-  -TriStats "J:\LLM\VibeThinker\vibethinker-3b.triattention" `
+pwsh -File <GODZILLA_ROOT>\scripts\benchmarks\run-launch-smoke.ps1 `
+  -Binary "<GODZILLA_ROOT>\build\bin\llama-server.exe" `
+  -Model "$MODELS_DIR/VibeThinker-3B.i1-Q4_K_M.gguf" `
+  -TriStats "$TRIATTENTION_CALIB_DIR/vibethinker-3b.triattention" `
   -Port 8095
 ```
 
@@ -343,7 +343,7 @@ git stash pop
 ### Windows (PowerShell) — full pre-sync inventory
 
 ```powershell
-cd J:\LLM\godzilla-llama.cpp
+cd <GODZILLA_ROOT>
 git fetch upstream beellama-upstream llama-org bitnet-upstream origin
 $HEAD = git rev-parse HEAD
 $MB = git merge-base $HEAD upstream/main
@@ -360,12 +360,12 @@ pwsh -File scripts\benchmarks\run-launch-smoke.ps1 -Port 8095
 ### WSL (bash) — fetch + ctest + BitNet parity
 
 ```bash
-cd /mnt/j/LLM/godzilla-llama.cpp
+cd $WSL_GODZILLA_ROOT
 git fetch upstream llama-org bitnet-upstream origin
 MB=$(git merge-base HEAD llama-org/master)
 git log --oneline ${MB}..llama-org/master --grep='security|CVE' -i --no-merges | head -20
 cd build && ctest -R 'triattention|copilot-coalesce' --output-on-failure
-pwsh.exe -File /mnt/j/LLM/godzilla-llama.cpp/scripts/build_bitnet_cpu.ps1 -UseWsl
+pwsh.exe -File $WSL_GODZILLA_ROOT/scripts/build_bitnet_cpu.ps1 -UseWsl
 ```
 
 ### Cherry-pick workflow (either shell)
@@ -460,7 +460,7 @@ After main sync @ `a47992312`, three additional low-touch cherry-picks were appl
 Still **335 commits behind** `llama-org/master` (merge-base unchanged). **Still defer:** wholesale merge; mtmd #25013 (`clip.cpp` conflict); server-task / SSE / router refactors vs Copilot coalesce; `--reasoning-preserve` #25105 (needs reasoning/Cancelled with BeeLlama args).
 
 **Triage labels for backlog:** `security` (done: #24373), `ggml-cuda` (cpy/binbcast), `ggml-cpu-arm`, `server-isolated`, `conversion-only`, `model-arch-conflict`, `server-task-forbidden`.
-**Tranche 2 verification (follow-up):** ctest -R "triattention|copilot-coalesce" on CUDA `build/` → **9/9 PASS** before publish. origin/kv-god @ `5d90361b1` (tranche 2 SHAs + in-repo process doc); parallel-audit supplement below mirrors `J:\LLM\docs\godzilla-upstream-sync-process.md`.
+**Tranche 2 verification (follow-up):** ctest -R "triattention|copilot-coalesce" on CUDA `build/` → **9/9 PASS** before publish. origin/kv-god @ `5d90361b1` (tranche 2 SHAs + in-repo process doc); parallel-audit supplement below mirrors `docs/godotzilla-upstream-sync-process.md`.
 
 **Additional defer (backlog):** `3fc4e1052` (#20793 sched async H→D) — bench before port; BeeLlama bulk merge (0 delta); buun/tq3 blind merges; BitNet GPU `torch.load` (outside vendor slice).
 
@@ -470,20 +470,20 @@ Still **335 commits behind** `llama-org/master` (merge-base unchanged). **Still 
 | Check | Result |
 |-------|--------|
 | Pin in `vendor/bitnet/VENDOR.md` | `01eb415772c342d9f20dc42772f1583ae1e5b102` |
-| `bitnet-upstream/main` / local `J:\LLM\BitNet` @ `main` | **Same SHA** — 0 commits since pin |
+| `bitnet-upstream/main` / local `$BITNET_REF_ROOT` @ `main` | **Same SHA** — 0 commits since pin |
 | Vendor bump | **Not recommended** this session; no MS delta; re-run Gates 1–2 only after MS moves `main` |
 
 **I2_S smoke (WSL / `build-bitnet-cpu`):**
 
 ```powershell
-pwsh -File J:\LLM\godzilla-llama.cpp\scripts\build_bitnet_cpu.ps1 -UseWsl
-cd J:\LLM\godzilla-llama.cpp\build-bitnet-cpu
+pwsh -File <GODZILLA_ROOT>\scripts\build_bitnet_cpu.ps1 -UseWsl
+cd <GODZILLA_ROOT>\build-bitnet-cpu
 ctest -R test-bitnet-i2s-quant --output-on-failure
 ```
 
 Greedy parity vs Microsoft reference: see §4 Gate 2 (`llama-completion --no-conversation --single-turn`, ReLU² FFN).
 
-**ik_llama.cpp (`J:\LLM\ik_llama.cpp`) — adopt vs avoid**
+**ik_llama.cpp (`<ik-llama-clone>`) — adopt vs avoid**
 
 - **Use as reference** for `quant-god` weight-quant ideas (`src/llama-quantize.cpp`, iqk paths) — not a merge source for BitNet inference.
 - **Do not** port `iqk_mul_mat` / iqk BitNet hooks into godzilla wholesale; godzilla BitNet CPU path is **`vendor/bitnet/` + `GGML_BITNET_I2_S` in `ggml-cpu.c`** per `CHERRY_PICK_CHECKLIST.md`.
@@ -491,5 +491,5 @@ Greedy parity vs Microsoft reference: see §4 Gate 2 (`llama-completion --no-con
 
 ### Sync doc writer (`25ac5d33`)
 
-Canonical process doc authored by main sync worker (`6426b57a`) at `J:\LLM\docs\godzilla-upstream-sync-process.md`; README pointer on `kv-god` @ `a47992312`. In-repo copy for operators: `godzilla-llama.cpp/docs/godotzilla-upstream-sync-process.md` (mirror of workspace doc).
+Canonical process doc authored by main sync worker (`6426b57a`) at `docs/godotzilla-upstream-sync-process.md`; README pointer on `kv-god` @ `a47992312`. In-repo copy for operators: `godzilla-llama.cpp/docs/godotzilla-upstream-sync-process.md` (mirror of workspace doc).
 

@@ -1,11 +1,14 @@
 #!/usr/bin/env pwsh
 # Probe godzilla llama-server binary: version, CUDA DLL, capability flags.
 param(
-    [string]$Binary = "J:\LLM\godzilla-llama.cpp\build\bin\llama-server.exe"
+    [string]$Binary = ""
 )
 
+. (Join-Path $PSScriptRoot "..\godzilla-paths.ps1")
+
 $ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$RepoRoot = Get-GodzillaRepoRoot
+if (-not $Binary) { $Binary = Join-Path $RepoRoot "build\bin\llama-server.exe" }
 $LogDir = Join-Path $RepoRoot "logs\benchmarks"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $Out = Join-Path $LogDir ("preflight_{0}.json" -f (Get-Date -Format "yyyyMMdd_HHmmss"))

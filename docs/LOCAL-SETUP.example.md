@@ -30,6 +30,8 @@ Copy this file to a private location (or export variables in your shell profile)
 | `LLAMA_API_KEY` | `llama-server --api-key` / Bearer auth |
 | `HF_TOKEN` | Hugging Face downloads (`--hf-token`) |
 | `POE_API_KEY` | External integrations only — never commit |
+| `BENCHMARK_WATCH_SCRIPT` | Optional path to benchmark watchdog script (hot-rod harness) |
+| `GODZILLA_OPERATOR_JOURNAL` | Optional private journal path (autopilot scripts) |
 
 ## PowerShell profile snippet
 
