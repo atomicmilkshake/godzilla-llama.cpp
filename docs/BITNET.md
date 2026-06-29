@@ -10,6 +10,20 @@ Microsoft **I2_S / TL1 / TL2** CPU kernels are vendored under `vendor/bitnet/` a
 | **P1** | dev | `build-bitnet-cpu` with `GGML_BITNET_I2_S=ON` | Build + load OK; greedy parity vs MS (use `llama-completion --no-conversation`) |
 | **P2** | `:8090` | Unified godzilla + `start-bitnet-godzilla.bat` | Preset **#47** in master.ps1 (no TriAttention) |
 
+## P2 unified launcher (`start-bitnet-godzilla.bat`)
+
+- **Binary:** `godzilla-llama.cpp/build-bitnet-cpu/bin/llama-server` (WSL) or `bin/llama-server.exe` (Windows ClangCL).
+- **Model:** prefers `J:\MOODLES\bitnet-b1.58-2B-4T\ggml-model-i2_s.gguf`; falls back to `J:\LLM\BitNet\models\...`.
+- **Context:** `-c 4096` (matches `n_ctx_train`; avoids cap warning).
+- **Not** the Microsoft fork binary on `:8091` — that stack is P0 reference only.
+
+```powershell
+J:\LLM\start-bitnet-godzilla.bat
+curl http://127.0.0.1:8090/v1/models
+```
+
+Load log must **not** show `unknown type i2_s` (requires godzilla build with `GGML_BITNET_I2_S=ON` and `LLAMA_FTYPE_MOSTLY_I2_S` ftype case).
+
 ## Ports (Caddy)
 
 | Port | Stack | Notes |
@@ -48,6 +62,8 @@ Build notes (Microsoft clone):
 
 ```powershell
 pwsh -File J:\LLM\godzilla-llama.cpp\scripts\build_bitnet_cpu.ps1 -UseWsl -Target llama-cli
+# Server (preset 47 / start-bitnet-godzilla.bat):
+pwsh -File J:\LLM\godzilla-llama.cpp\scripts\build_bitnet_cpu.ps1 -UseWsl -Target llama-server
 ```
 
 ### Enum IDs
