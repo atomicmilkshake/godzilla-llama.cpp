@@ -102,7 +102,7 @@ Results land in `logs/benchmarks/`.
 | `quant-god` | ik_llama weight quant backports |
 | `spec-god` | TriAttention-aware speculative decoding |
 
-Upstream sync: `beellama-upstream` → periodic merge into `main`, then rebase integration branches. Full inventory, cherry-pick workflow, test gates, and BitNet pin procedure: [docs/godotzilla-upstream-sync-process.md](../docs/godotzilla-upstream-sync-process.md).
+Upstream sync: `beellama-upstream` → periodic merge into `main`, then rebase integration branches. Full procedure: [docs/godotzilla-upstream-sync-process.md](docs/godotzilla-upstream-sync-process.md).
 
 ## Roadmap
 
