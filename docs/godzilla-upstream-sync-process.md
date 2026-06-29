@@ -24,7 +24,7 @@ This document is the repeatable workflow for checking upstreams, triaging diffs,
 
 1. **BeeLlama** (`upstream/main`) → merge into `main`, then into `kv-god` when behind.
 2. **llama.cpp** (`llama-org/master`) → security/bugfix cherry-picks or targeted manual ports.
-3. **BitNet** → refresh `vendor/bitnet/` pin per [vendor/bitnet/VENDOR.md](../vendor/bitnet/VENDOR.md).
+3. **BitNet** → refresh `vendor/bitnet/` pin per [vendor/bitnet/VENDOR.md](../godzilla-llama.cpp/vendor/bitnet/VENDOR.md).
 4. **buun** → TriAttention-only fixes with explicit checklist.
 5. **Push** `origin/kv-god` when all gates pass.
 
@@ -88,7 +88,7 @@ These paths and features are **godzilla-specific** or carry fork-local semantics
 
 | Path | Notes |
 |------|-------|
-| `vendor/bitnet/` | Entire pinned slice — see [VENDOR.md](../vendor/bitnet/VENDOR.md) |
+| `vendor/bitnet/` | Entire pinned slice — see [VENDOR.md](../godzilla-llama.cpp/vendor/bitnet/VENDOR.md) |
 | `src/models/bitnet.cpp` | Godzilla graph (`LLM_FFN_RELU_SQR` for b1.58) |
 | `GGML_BITNET_*` CMake, types **56–59** | Behind flags; OFF on default CUDA `build/` |
 | `docs/BITNET.md`, `scripts/build_bitnet_cpu.ps1`, `scripts/fetch-bitnet-model.ps1` | Build + parity docs |
@@ -285,7 +285,7 @@ Invoke-WebRequest -Uri "http://127.0.0.1:8090/v1/models" -UseBasicParsing   # ex
 
 ## 5. BitNet vendor pin
 
-Full procedure: **[vendor/bitnet/VENDOR.md](../vendor/bitnet/VENDOR.md)**
+Full procedure: **[godzilla-llama.cpp/vendor/bitnet/VENDOR.md](../godzilla-llama.cpp/vendor/bitnet/VENDOR.md)**
 
 Summary:
 
@@ -397,11 +397,12 @@ cd build && ctest -R "triattention|copilot-coalesce" --output-on-failure
 
 ## 9. Related docs
 
-- Workspace plans: `J:\LLM\docs\godzilla-llama-cpp-plan.md`, `J:\LLM\docs\bitnet-godzilla-integration-plan.md`
-- [BITNET.md](BITNET.md) — BitNet parity + merge checklist
-- [TRIATTENTION.md](TRIATTENTION.md) — TriAttention CLI/API
-- [vendor/bitnet/VENDOR.md](../vendor/bitnet/VENDOR.md) — BitNet pin record
-- [vendor/bitnet/CHERRY_PICK_CHECKLIST.md](../vendor/bitnet/CHERRY_PICK_CHECKLIST.md) — Eddie-Wang → godzilla port map
+- [godzilla-llama-cpp-plan.md](godzilla-llama-cpp-plan.md) — phased roadmap
+- [bitnet-godzilla-integration-plan.md](bitnet-godzilla-integration-plan.md) — BitNet hybrid D→A plan
+- [godzilla-llama.cpp/docs/BITNET.md](../godzilla-llama.cpp/docs/BITNET.md) — BitNet parity + merge checklist
+- [godzilla-llama.cpp/docs/TRIATTENTION.md](../godzilla-llama.cpp/docs/TRIATTENTION.md) — TriAttention CLI/API
+- [vendor/bitnet/VENDOR.md](../godzilla-llama.cpp/vendor/bitnet/VENDOR.md) — BitNet pin record
+- [vendor/bitnet/CHERRY_PICK_CHECKLIST.md](../godzilla-llama.cpp/vendor/bitnet/CHERRY_PICK_CHECKLIST.md) — Eddie-Wang → godzilla port map
 
 ---
 
@@ -417,3 +418,74 @@ Inventory at `kv-god` @ `4e81393dd` (post cherry-picks; BitNet merged @ `4be1354
 | buun `buun-source/master` | 62 | TriAttention source |
 
 Applied llama.cpp ports: `c8458d96d`, `f5e4b8bf9`, `7c352a69c`, `232e0d78e`, `4e81393dd` (security #24373 manual). Gates: `ctest -R "triattention|copilot-coalesce"` **9/9 PASS**.
+
+---
+
+## Parallel audit supplements (2026-06-28)
+
+Subagent run IDs (Cursor): main sync `6426b57a`, BeeLlama `e157c39b`, llama.cpp `cbed3115`, BitNet vendor `2a977581`, sync doc writer `25ac5d33`. Only the BeeLlama track produced a full standalone report in-session; BitNet and llama.cpp workers did not emit final transcripts but follow-on commits landed on `kv-god`.
+
+### BeeLlama track (`e157c39b`) — GREEN, fully current
+
+| Metric | Value |
+|--------|-------|
+| Merge-base `kv-god` ∩ `upstream/main` | `85e22ea0b` (= BeeLlama tip) |
+| Behind BeeLlama | **0** |
+| Ahead of BeeLlama | **41** (strict superset) |
+| BeeLlama commits to port | **0** |
+
+**Godzilla-only footprint (since merge-base):** ~166 paths across TriAttention, KVarN/TurboQuant KV, BitNet vendor, Copilot coalesce, bench harness, and five llama-org cherry-picks BeeLlama does not yet carry.
+
+| Area | Representative paths | Notes |
+|------|---------------------|-------|
+| TriAttention | `src/llama-triattention*`, `ggml-cuda/triattention-score.*`, `tests/test-triattention-*` | Never blind-merge from llama.cpp server/ggml bulk |
+| KVarN / KV | `src/llama-kvarn*`, `src/llama-kv-cache-kvarn*`, `ggml-cuda/kvarn.*` | High conflict if BeeLlama KV moves |
+| TurboQuant / buun | `ggml-turbo-quant.c`, `turbo-quant*.cuh`, buun fattn deltas | Enum types 42–55 |
+| BitNet | `vendor/bitnet/**`, `src/models/bitnet.cpp` | ReLU² FFN; types 56–59 |
+| Copilot | `tools/server/server-task.cpp`, `tests/test-server-copilot-coalesce.cpp` | Do not take upstream `server-task` wholesale |
+| DFlash / MTP | (none in `upstream/main..kv-god` diff) | **Inherited** from BeeLlama — not a godzilla-only fork line |
+
+**Hot zones when BeeLlama advances:** `src/llama-kv-cache*.cpp`, `src/llama-context.cpp`, `src/llama-graph.cpp`, `ggml-cuda/fattn*`, `ggml.c` / `ggml-quants.*`, `tools/server/server*.cpp`, `common/arg.cpp`, `include/llama.h`.
+
+### llama.cpp track (`cbed3115`) — selective ports (post main sync)
+
+After main sync @ `a47992312`, three additional low-touch cherry-picks were applied on `kv-god`:
+
+| Commit | Subject | Touch |
+|--------|---------|-------|
+| `fd12cc2ee` | ggml CUDA binary-op integer overflows (#24706) | `ggml/src/ggml-cuda/binbcast.cu` |
+| `86f282625` | `LLM_KV` for `quantization_version` / `file_type` (#24802) | `src/llama-quant.cpp` |
+| `34786e6a5` | `rope_parameters` handling in converters (#24833) | `conversion/*.py` |
+
+Still **335 commits behind** `llama-org/master` (merge-base unchanged). **Still defer:** wholesale merge; mtmd #25013 (`clip.cpp` conflict); server-task / SSE / router refactors vs Copilot coalesce; `--reasoning-preserve` #25105 (needs reasoning/Cancelled with BeeLlama args).
+
+**Triage labels for backlog:** `security` (done: #24373), `ggml-cuda` (cpy/binbcast), `ggml-cpu-arm`, `server-isolated`, `conversion-only`, `model-arch-conflict`, `server-task-forbidden`.
+
+### BitNet vendor track (`2a977581`) — pin current, no bump
+
+| Check | Result |
+|-------|--------|
+| Pin in `vendor/bitnet/VENDOR.md` | `01eb415772c342d9f20dc42772f1583ae1e5b102` |
+| `bitnet-upstream/main` / local `J:\LLM\BitNet` @ `main` | **Same SHA** — 0 commits since pin |
+| Vendor bump | **Not recommended** this session; no MS delta; re-run Gates 1–2 only after MS moves `main` |
+
+**I2_S smoke (WSL / `build-bitnet-cpu`):**
+
+```powershell
+pwsh -File J:\LLM\godzilla-llama.cpp\scripts\build_bitnet_cpu.ps1 -UseWsl
+cd J:\LLM\godzilla-llama.cpp\build-bitnet-cpu
+ctest -R test-bitnet-i2s-quant --output-on-failure
+```
+
+Greedy parity vs Microsoft reference: see §4 Gate 2 (`llama-completion --no-conversation --single-turn`, ReLU² FFN).
+
+**ik_llama.cpp (`J:\LLM\ik_llama.cpp`) — adopt vs avoid**
+
+- **Use as reference** for `quant-god` weight-quant ideas (`src/llama-quantize.cpp`, iqk paths) — not a merge source for BitNet inference.
+- **Do not** port `iqk_mul_mat` / iqk BitNet hooks into godzilla wholesale; godzilla BitNet CPU path is **`vendor/bitnet/` + `GGML_BITNET_I2_S` in `ggml-cpu.c`** per `CHERRY_PICK_CHECKLIST.md`.
+- MS GPU / PyTorch stack changes in full `microsoft/BitNet` remain **out of scope** for the vendor slice.
+
+### Sync doc writer (`25ac5d33`)
+
+Canonical process doc authored by main sync worker (`6426b57a`) at `J:\LLM\docs\godzilla-upstream-sync-process.md`; README pointer on `kv-god` @ `a47992312`. In-repo copy for operators: `godzilla-llama.cpp/docs/godotzilla-upstream-sync-process.md` (mirror of workspace doc).
+
