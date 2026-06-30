@@ -263,7 +263,7 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 **huihui-gemma-4-12b:**
 - KV gate: **FAIL** (`kv_matrix_20260629_130711.txt`; turbo +55%, tcq +117% vs f16; kvarn3/kvarn4 improve but turbo family fails gate).
 - Native Gemma4 (non-hybrid SWA); TriAttention cal at `$TRIATTENTION_CALIB_DIR/gemma4/huihui-gemma-4-12b.triattention` (present; re-confirmed 2026-06-29).
-- Hot-rod: **NOT_CERTIFIED** — baseline-8k HE **20/40**; kvarn4-8k **INFRA_ABORT** (2026-06-29) was **server SWA checkpoint restore bug**, not `gemma_hf` harness — stale checkpoint `pos_max=329` restored when `pos_next=39` → `common_context_seq_rm` abort @ HE 7/40; fix in `server-context.cpp` (`n_swa > 0` checkpoint gate). Re-cert pending rebuild + kvarn4-8k retry.
+- Hot-rod: **NOT_CERTIFIED** — peak HE **20/40** (baseline-8k, 2026-06-30). kvarn4-8k: **INFRA_ABORT** — original SWA checkpoint bug fixed @ `677b25e02` (`server-context.cpp` + roster `--ctx-checkpoints 0`); llama-server rebuilt 2026-06-30; ctest **9/9 PASS**. Post-fix kvarn4 HE retries still abort: server survives HE1–2 then silent crash mid-decode on HE3 (connection refused; no `GGML_ABORT` in log — `huihui-gemma-4-12b_kvarn4-8k_he_swa677b_20260630.log`). kvarn4 full HE score **not obtained**; below §5 cert bar (28/40).
 - Viability: **baseline/kvarn3/kvarn4 only** for serving (no turbo/tcq); not hot-rod viable on MEMORY-ALPHA until harness/model quality improves.
 
 **gemma4-coding (re-triage context):**
@@ -300,7 +300,7 @@ See prepublish sweep plan for gates and godzilla-comprehensive-fix-plan.md for h
 
 **P0 certified (hot-rod §5):** qwopus-9b-coder, huihui-opus-9b, gemma4-coding (37/40).  
 **Also certified:** qwopus-4b, negentropy-opus-9b, qwythos-9b-mythos, **fablevibes-14b-moe** (28/40 @ kvarn4-8k) (**8 total**).  
-**New-wave viability (pending cert):** huihui-gemma-4-12b (KV turbo FAIL; baseline HE 20/40, kvarn4 harness abort — **not certified**); vibethinker-3b (baseline-8k; turbo excluded).  
+**New-wave viability (pending cert):** huihui-gemma-4-12b (KV turbo FAIL; baseline HE **20/40**; kvarn4 multi-turn crash — **not certified**); vibethinker-3b (baseline-8k; turbo excluded).  
 Prepublish plan **archived** 2026-06-29 — see `docs/completed-plans/godotzilla-prepublish-model-sweep-plan_COMPLETED_2026-06-29.md`.
 
 ## Certified models summary table (from prepublish_hotrod_summary.tsv cleaned 2026-06-20)
