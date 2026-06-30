@@ -97,7 +97,8 @@ $Models = @(
         PresetId = "Qwen3.6-14B-A3B-FableVibes (Q4_K_M)"
         Harness = "qwen"
         Coding = $true
-        Variants = @("baseline-8k")
+        # KV PASS @ -ncmoe 32; baseline-8k HE 27/40 — retry alternates for §5 cert (28/40).
+        Variants = @("moe_ncpu32", "kvarn4-8k", "kvarn3-8k", "turbo3-turbo4-tri-moe")
         HeTimeout = 240; LaunchTimeout = 300
     },
     @{
@@ -105,8 +106,8 @@ $Models = @(
         PresetId = "Huihui-gemma-4-12B-it-abliterated (Q4_K_M)"
         Harness = "gemma_hf"
         Coding = $true
-        # Baseline is the current viable choice for hot rod on operator hardware for this model.
-        Variants = @("baseline-8k")
+        # Turbo KV fails gate; hot-rod on baseline/kvarn only (no turbo).
+        Variants = @("baseline-8k", "kvarn4-8k")
         HeTimeout = 300; LaunchTimeout = 300
     },
     @{
