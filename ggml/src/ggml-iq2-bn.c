@@ -49,7 +49,30 @@ static void quantize_row_iq2_bn_impl(const float * GGML_RESTRICT x, void * GGML_
 }
 
 void quantize_row_iq2_bn_ref(const float * GGML_RESTRICT x, block_iq2_bn * GGML_RESTRICT y, int64_t k) {
-    quantize_row_iq2_bn_impl(x, y, k);
+    assert(k % QK_IQ1BN == 0);
+
+    const int nblock = (int) (k / QK_IQ1BN);
+
+    float max = 0.0f;
+    for (int64_t j = 0; j < k; ++j) {
+        const float a = fabsf(x[j]);
+        if (a > max) {
+            max = a;
+        }
+    }
+
+    const float thresh = 0.5f * max;
+    uint8_t L[QK_IQ1BN];
+
+    for (int ib = 0; ib < nblock; ++ib) {
+        const float * xb = x + (int64_t) QK_IQ1BN * ib;
+        for (int j = 0; j < QK_IQ1BN; ++j) {
+            L[j] = fabsf(xb[j]) < thresh ? 1 : (xb[j] < 0 ? 0 : 2);
+        }
+        for (int j = 0; j < IQ2_BN_NJ; ++j) {
+            y[ib].qs[j] = (uint8_t) (L[j] | (L[j + IQ2_BN_NJ] << 2) | (L[j + 2 * IQ2_BN_NJ] << 4) | (L[j + 3 * IQ2_BN_NJ] << 6));
+        }
+    }
 }
 
 void quantize_row_iq2_bn(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {
@@ -78,14 +101,30 @@ void dequantize_row_iq2_bn(const block_iq2_bn * GGML_RESTRICT x, float * GGML_RE
 }
 
 void dequantize_row_iq2_bn_packed(const void * GGML_RESTRICT x, float * GGML_RESTRICT y, int64_t k) {
-    dequantize_row_iq2_bn((const block_iq2_bn *) ((const char *) x + IQ2_BN_ROW_META), y, k);
+    const float d = *(const float *) x;
+    const float m = -d;
+
+    const block_iq2_bn * blocks = (const block_iq2_bn *) ((const char *) x + IQ2_BN_ROW_META);
+    assert(k % QK_IQ1BN == 0);
+
+    const int nblock = (int) (k / QK_IQ1BN);
+
+    for (int i = 0; i < nblock; ++i) {
+        for (int j = 0; j < IQ2_BN_NJ; ++j) {
+            y[j + 0           ] = d * ((blocks[i].qs[j] >> 0) & 3) + m;
+            y[j + 1 * IQ2_BN_NJ] = d * ((blocks[i].qs[j] >> 2) & 3) + m;
+            y[j + 2 * IQ2_BN_NJ] = d * ((blocks[i].qs[j] >> 4) & 3) + m;
+            y[j + 3 * IQ2_BN_NJ] = d * ((blocks[i].qs[j] >> 6) & 3) + m;
+        }
+        y += QK_IQ1BN;
+    }
 }
 
 void quantize_row_q8_K64_ref(const float * GGML_RESTRICT x, block_q8_K64 * GGML_RESTRICT y, int64_t k) {
-    assert(k >= 8 * QK_IQ1BN);
+    assert(k % QK_IQ1BN == 0);
 
     float * dptr = (float *) y;
-    int8_t * qs = (int8_t *) (dptr + 8);
+    int8_t * qs = (int8_t *) (dptr + 4);
 
     float aux[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     for (int j = 0; j < k; j += 16) {
@@ -101,17 +140,12 @@ void quantize_row_q8_K64_ref(const float * GGML_RESTRICT x, block_q8_K64 * GGML_
         aux[i] = dptr[i] > 0.0f ? 1.0f / dptr[i] : 0.0f;
     }
 
-    int32_t sum[4] = { 0, 0, 0, 0 };
     for (int j = 0; j < k; j += 16) {
         for (int i = 0; i < 4; ++i) {
             for (int l = 0; l < 4; ++l) {
                 qs[j + 4 * i + l] = (int8_t) iq2_bn_nearest_int(aux[i] * x[j + 4 * i + l]);
-                sum[i] += qs[j + 4 * i + l];
             }
         }
-    }
-    for (int i = 0; i < 4; ++i) {
-        dptr[4 + i] = dptr[i] * (float) sum[i];
     }
 }
 
@@ -130,6 +164,7 @@ void vec_dot_iq2_bn_q8_K64(int n, float * s, size_t bs, const void * vx, size_t 
 
     #define IQ2_BN_VEC_DOT_NJ (QK_IQ1BN / 4)
 
+    const float scale = *(const float *) vx;
     const block_iq2_bn * x = (const block_iq2_bn *) ((const char *) vx + IQ2_BN_ROW_META);
     const int nblock = n / QK_IQ1BN;
 
@@ -156,5 +191,5 @@ void vec_dot_iq2_bn_q8_K64(int n, float * s, size_t bs, const void * vx, size_t 
     for (int j = 0; j < 4; ++j) {
         sumf += d[j] * (sum[4 * j + 0] + 0.25f * sum[4 * j + 1] + 0.0625f * sum[4 * j + 2] + 0.015625f * sum[4 * j + 3] - sum0[j]);
     }
-    *s = sumf;
+    *s = scale * sumf;
 }
