@@ -7,6 +7,7 @@
 #include "ggml-cpu-impl.h"
 #include "ggml-impl.h"
 #include "quants.h"
+#include "ggml-quants.h"
 #ifdef GGML_BITNET_I2_S
 #include "ggml-quants.h"
 #endif
@@ -492,6 +493,15 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
         .vec_dot                  = (ggml_vec_dot_t) ggml_vec_dot_tq4_1s_q8_0,
         .vec_dot_type             = GGML_TYPE_Q8_0,
         .nrows                    = 1,
+    },
+    [GGML_TYPE_IQ2_BN] = {
+        .from_float               = quantize_row_iq2_bn,
+        .vec_dot                  = vec_dot_iq2_bn_q8_K64,
+        .vec_dot_type             = GGML_TYPE_Q8_K64,
+        .nrows                    = 1,
+    },
+    [GGML_TYPE_Q8_K64] = {
+        .from_float               = quantize_row_q8_K64,
     },
 #ifdef GGML_BITNET_I2_S
     [GGML_TYPE_I2_S] = {

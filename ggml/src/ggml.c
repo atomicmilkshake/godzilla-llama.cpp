@@ -891,8 +891,15 @@ static const struct ggml_type_traits type_traits[GGML_TYPE_COUNT] = {
         .blck_size                = QK_IQ2BN,
         .type_size                = sizeof(block_iq2_bn),
         .is_quantized             = true,
-        .to_float                 = (ggml_to_float_t) dequantize_row_iq2_bn,
+        .to_float                 = (ggml_to_float_t) dequantize_row_iq2_bn_packed,
         .from_float_ref           = (ggml_from_float_t) quantize_row_iq2_bn_ref,
+    },
+    [GGML_TYPE_Q8_K64] = {
+        .type_name                = "q8_K64",
+        .blck_size                = 64,
+        .type_size                = sizeof(block_q8_K64),
+        .is_quantized             = true,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_q8_K64_ref,
     },
     [GGML_TYPE_Q2_K] = {
         .type_name                = "q2_K",
@@ -1462,7 +1469,11 @@ size_t ggml_row_size(enum ggml_type type, int64_t ne) {
     assert(type >= 0);
     assert(type < GGML_TYPE_COUNT);
     assert(ne % ggml_blck_size(type) == 0);
-    return ggml_type_size(type)*ne/ggml_blck_size(type);
+    size_t row_size = ggml_type_size(type)*ne/ggml_blck_size(type);
+    if (type == GGML_TYPE_IQ2_BN) {
+        row_size += 4; // ik row max prefix (row_meta)
+    }
+    return row_size;
 }
 
 double ggml_type_sizef(enum ggml_type type) {

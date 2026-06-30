@@ -387,10 +387,19 @@ static_assert(sizeof(block_tq4_1s) == 20, "wrong tq4_1s block size");
 
 // ik_llama BitNet/TriLM 2.0 bpw (row-interleaved ternary packing; distinct from MS I2_S)
 #define QK_IQ2BN 64
+#define QK_IQ1BN QK_IQ2BN
+#define QR1_BN 8
+#define QI1_BN (QK_IQ1BN / (4 * QR1_BN))
 typedef struct {
     uint8_t qs[QK_IQ2BN / 4];
 } block_iq2_bn;
 static_assert(sizeof(block_iq2_bn) == QK_IQ2BN / 4, "wrong iq2_bn block size/padding");
+
+typedef struct {
+    float  d;
+    int8_t qs[64];
+} block_q8_K64;
+static_assert(sizeof(block_q8_K64) == sizeof(float) + 64, "wrong q8_K64 block size/padding");
 
 // TurboQuant 3-bit MSE-only: 3-bit PolarQuant indices (no QJL)
 // Storage block size = 128 values.

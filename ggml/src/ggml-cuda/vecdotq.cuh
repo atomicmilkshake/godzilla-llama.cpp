@@ -1330,6 +1330,47 @@ static __device__ __forceinline__ float vec_dot_iq4_nl_q8_1(
     return d * sumi;
 }
 
+#define VDR_IQ2_BN_Q8_1_MMVQ 2
+
+static __device__ __forceinline__ float vec_dot_iq2_bn_q8_1(
+    const void * __restrict__ vbq, const block_q8_1 * __restrict__ bq8_1, const int & kbx, const int & iqs) {
+
+    const float scale = *(const float *) vbq;
+    const block_iq2_bn * bq2 = (const block_iq2_bn *) ((const char *) vbq + sizeof(float)) + kbx;
+
+#if defined(GGML_USE_HIP) && defined(__HIP_PLATFORM_AMD__)
+    int sumi1 = 0, sumi2 = 0, sumi3 = 0, sumi4 = 0;
+    const int8_t * q8l = bq8_1[0].qs + 8*iqs;
+    const int8_t * q8h = bq8_1[1].qs + 8*iqs;
+    const uint8_t * qs  = bq2->qs + 8*iqs;
+    for (int j = 0; j < 8; ++j) {
+        sumi1 += q8l[j+ 0] * (qs[j] & 0x03);
+        sumi2 += q8l[j+16] * (qs[j] & 0x0c);
+        sumi3 += q8h[j+ 0] * (qs[j] & 0x30);
+        sumi4 += q8h[j+16] * (qs[j] & 0xc0);
+    }
+    const float2 d8l = __half22float2(bq8_1[0].ds);
+    const float2 d8h = __half22float2(bq8_1[1].ds);
+    return scale * (d8l.x * (sumi1 + 0.25f*sumi2) + 0.0625f * d8h.x*(sumi3 + 0.25f*sumi4) - 0.5f*d8l.y - 0.5f*d8h.y);
+#else
+    const int * qs  = (const int *) bq2->qs + 2*iqs;
+    const int * q8l = (const int *) bq8_1[0].qs + 2*iqs;
+    const int * q8h = (const int *) bq8_1[1].qs + 2*iqs;
+    int sumi1 = 0, sumi2 = 0, sumi3 = 0, sumi4 = 0;
+    for (int j = 0; j < 2; ++j) {
+        const int vl = qs[j];
+        const int vh = qs[j] >> 4;
+        sumi1 = ggml_cuda_dp4a(vl & 0x03030303, q8l[j+0], sumi1);
+        sumi2 = ggml_cuda_dp4a(vl & 0x0c0c0c0c, q8l[j+4], sumi2);
+        sumi3 = ggml_cuda_dp4a(vh & 0x03030303, q8h[j+0], sumi3);
+        sumi4 = ggml_cuda_dp4a(vh & 0x0c0c0c0c, q8h[j+4], sumi4);
+    }
+    const float2 d8l = __half22float2(bq8_1[0].ds);
+    const float2 d8h = __half22float2(bq8_1[1].ds);
+    return scale * (d8l.x * (sumi1 + 0.25f*sumi2) + d8h.x * (sumi3 + 0.25f * sumi4) - 0.5f*d8l.y - 0.5f*d8h.y);
+#endif
+}
+
 #define VDR_IQ4_XS_Q8_1_MMVQ 4
 #define VDR_IQ4_XS_Q8_1_MMQ  4
 
