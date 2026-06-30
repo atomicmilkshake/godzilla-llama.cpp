@@ -255,16 +255,16 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 
 **fablevibes-14b-moe:**
 - KV gate: **PASS** (`kv_matrix_20260629_110733.txt`; all non-tri configs ≤2% vs f16; `-ncmoe 32`).
-- Hot-rod: **NOT_CERTIFIED** — baseline-8k HE **27/40** (`prepublish_godzilla_hotrod_fablevibes-14b-moe_2026-06-29.jsonl`; 1 below §5 promotion threshold 28/40).
-- MoE path uses `-ncmoe 32`.
+- Hot-rod: **CERTIFIED** — peak **kvarn4-8k** HE **28/40** (`prepublish_godzilla_hotrod_fablevibes-14b-moe_2026-06-29.jsonl`; speed **34.9 tok/s**; NIAH 4096 pass). Alternate sweep: baseline/moe_ncpu32/tri-moe **27/40**; kvarn3-8k also **28/40** (tie; kvarn4 chosen as peak stack).
+- MoE path uses `-ncmoe 32` (baseline uses `-ngl 60`; kvarn4 uses `-ngl 60 -ctk kvarn4 -ctv kvarn4`).
 - Tri path: `$TRIATTENTION_CALIB_DIR/qwen36-14b-fablevibes.triattention`
-- Viability: **KV-viable** on baseline-8k + MoE offload; not hot-rod certified on MEMORY-ALPHA.
+- Viability: **Production hot-rod stack = kvarn4-8k + MoE offload** on MEMORY-ALPHA.
 
 **huihui-gemma-4-12b:**
 - KV gate: **FAIL** (`kv_matrix_20260629_130711.txt`; turbo +55%, tcq +117% vs f16; kvarn3/kvarn4 improve but turbo family fails gate).
 - Native Gemma4 (non-hybrid SWA); TriAttention cal at `$TRIATTENTION_CALIB_DIR/gemma4/huihui-gemma-4-12b.triattention` (present; re-confirmed 2026-06-29).
-- Hot-rod: **not attempted** (turbo KV incompatible per gate).
-- Viability: **baseline/kvarn3/kvarn4 only**; turbo/tcq excluded (same pattern as gemma4-coding / vibethinker).
+- Hot-rod: **NOT_CERTIFIED** — baseline-8k HE **20/40**; kvarn4-8k sweep **INFRA_ABORT** (gemma_hf harness `test_harness_error` streak @ 2026-06-29 retry).
+- Viability: **baseline/kvarn3/kvarn4 only** for serving (no turbo/tcq); not hot-rod viable on MEMORY-ALPHA until harness/model quality improves.
 
 **gemma4-coding (re-triage context):**
 - Turbo quality regression confirmed (+9.86%); hybrid ISWA requires v2 .triattention per dedicated engine patch plan.
@@ -275,11 +275,32 @@ All wiring respects the "only use features that pass KV gate for that model" pri
 
 See prepublish sweep plan for gates and godzilla-comprehensive-fix-plan.md for harness/TSV status (**BENCH-01 resolved** in `6c159c9a6`).
 
+## Certified hot-rod: FableVibes 14B MoE (godzilla)
+
+**Certification date:** 2026-06-29  
+**Engine commit:** 614ec18d2 (kv-god)  
+**Model:** Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf (~8.5 GB)  
+**Hardware:** RTX 3080 10 GB, `TURBO_INNERQ=1`
+
+**Results (SOMS hot-rod §5):**
+- Peak promotion HE (qwen harness): **28/40** (`kvarn4-8k`)
+- Speed frontier: **34.9 tok/s** (`kvarn4-8k`)
+- NIAH limit: **4096 pass**
+
+**Certified launch args (kvarn4-8k + MoE offload):**
+```
+-ngl 60 --n-cpu-moe 32 -fa 1 -ctk kvarn4 -ctv kvarn4 -c 8192 --jinja --temp 0.2 --top-p 0.95
+```
+
+**Evidence:**
+- `soms/evidence/prepublish_godzilla_hotrod_fablevibes-14b-moe_2026-06-29.jsonl`
+- `logs/benchmarks/prepublish_hotrod_summary.tsv`
+
 ## 2026-06-29 status (godzilla-continue-development Stream B complete)
 
 **P0 certified (hot-rod §5):** qwopus-9b-coder, huihui-opus-9b, gemma4-coding (37/40).  
-**Also certified:** qwopus-4b, negentropy-opus-9b, qwythos-9b-mythos (**7 total**).  
-**New-wave viability (not certified):** fablevibes-14b-moe (KV PASS, HE 27/40); huihui-gemma-4-12b (turbo KV FAIL, baseline/kvarn only); vibethinker-3b (baseline-8k; turbo excluded).  
+**Also certified:** qwopus-4b, negentropy-opus-9b, qwythos-9b-mythos, **fablevibes-14b-moe** (28/40 @ kvarn4-8k) (**8 total**).  
+**New-wave viability (pending cert):** huihui-gemma-4-12b (KV turbo FAIL; baseline HE 20/40, kvarn4 harness abort — **not certified**); vibethinker-3b (baseline-8k; turbo excluded).  
 Prepublish plan **archived** 2026-06-29 — see `docs/completed-plans/godotzilla-prepublish-model-sweep-plan_COMPLETED_2026-06-29.md`.
 
 ## Certified models summary table (from prepublish_hotrod_summary.tsv cleaned 2026-06-20)
