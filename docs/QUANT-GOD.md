@@ -49,15 +49,18 @@ Do **not** merge `quant-god` → `kv-god` until enum audit + ctest gates are gre
 
 | Gate | Status | Notes |
 |------|--------|-------|
-| `test-quantize-fns` IQ2_BN round-trip | **PASS** | row-meta scaled dequant; starter RMSE gate 0.010 |
-| `test-quantize-fns` IQ2_BN vec_dot | **PASS** | `vec_dot_iq2_bn_q8_K64` + `Q8_K64`; starter dot gate 0.15 |
-| CUDA `mmvq` / `convert` compile | **PASS** | `mmvq.cu`, `convert.cu` nvcc @ `build-qg` sm86 |
+| `test-quantize-fns` IQ2_BN round-trip | **PASS** | row-meta scaled dequant; starter RMSE gate 0.010; re-verified CPU-only @ `2543f8a8a` |
+| `test-quantize-fns` IQ2_BN vec_dot | **PASS** | `vec_dot_iq2_bn_q8_K64` + `Q8_K64`; starter dot gate 0.15; re-verified CPU-only @ `2543f8a8a` |
+| CUDA `mmvq` / `convert` compile | **PASS** | nvcc sm86: `mmvq.cu` + `convert.cu` (IQ2_BN `vec_dot_iq2_bn_q8_1`, `dequantize_block_iq2_bn`) green with WDK `-SdkRoot` (e.g. `S:\WADK102`) |
+| Full CUDA link (`ggml-cuda.dll`) + CUDA `test-quantize-fns` | **PENDING** | Full ninja link blocked when `build/` locked or parallel CUDA builds contend; use isolated `-B` out-of-tree dir + low `-j` |
 | `kv-god` ctest `triattention\|copilot-coalesce` | **NOT RUN** | quant-god branch; run on `kv-god` before merge |
 | Enum 60–61 audit vs BitNet 56–59 / Turbo 42–55 | **OPEN** | No collision; formal audit before merge |
 | `row_meta` ggml field (ik parity) | **PARTIAL** | `ggml_row_size` +4 hack; no `row_meta_size` trait |
 | `llama-quant` ftype wiring | **DEFERRED** | Starter stub only |
 | End-to-end IQ2_BN GGUF inference | **DEFERRED** | No certified IQ2_BN model on godzilla yet |
 
-**Verdict:** **Not merge-ready** to `kv-god` (enum audit, kv-god ctest on merge candidate, tighter vec_dot parity vs ik, `llama-quant` wiring). Safe to keep developing on `quant-god`; CUDA vec_dot path unblocks GPU `MUL_MAT` smoke next.
+**Verdict:** **Not merge-ready** to `kv-god` (enum audit, kv-god ctest 9/9 on merge candidate, full CUDA link smoke, tighter vec_dot parity vs ik, `llama-quant` wiring). Safe to keep developing on `quant-god`; CUDA IQ2_BN kernels compile — next: isolated full CUDA link + GPU `MUL_MAT` smoke.
+
+**Branch HEAD:** `2543f8a8a` (`origin/quant-god`, pushed). Prior CUDA commit: `e4b1f77e7`.
 
 **kv-god delta:** `quant-god` based on `kv-god` @ `0f55d003b` + IQ2_BN starter; `kv-god` has advanced (Stream B harness/docs @ `fd0f132d4`) — rebase before merge discussion.
