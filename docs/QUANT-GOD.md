@@ -41,3 +41,19 @@ ctest -R "triattention|copilot-coalesce" --test-dir build
 ## Merge policy
 
 Do **not** merge `quant-god` → `kv-god` until enum audit + CUDA inference path + ctest gates are green. BitNet vendor and TurboQuant enums 42–55 must remain stable on `kv-god`.
+
+## Merge readiness (2026-06-29)
+
+| Gate | Status | Notes |
+|------|--------|-------|
+| `test-quantize-fns` IQ2_BN round-trip | **PASS** | CPU quant/dequant @ `6af1ccf81`; vec_dot skipped |
+| `kv-god` ctest `triattention\|copilot-coalesce` | **PASS** | Verified on `kv-god` @ `997abec34` without quant merge |
+| Enum 60 audit vs BitNet 56–59 / Turbo 42–55 | **OPEN** | No collision; formal audit before merge |
+| CPU `vec_dot_iq2_bn_q8_K64` | **BLOCKED** | No `Q8_K64` type in godzilla ggml yet |
+| CUDA `mmvq` / dequant kernels | **BLOCKED** | ik CUDA path not ported |
+| `row_meta` float prefix (ik parity) | **DEFERRED** | godzilla ggml has no row_meta |
+| `llama-quant` ftype wiring | **DEFERRED** | Starter stub only |
+
+**Verdict:** **Not merge-ready** to `kv-god`. Safe to keep on `quant-god` @ `6af1ccf81` for CPU smoke; next port is `Q8_K64` + `vec_dot_iq2_bn_q8_K64` before any merge discussion.
+
+**kv-god delta:** `quant-god` is based on `kv-god` @ `0f55d003b` + IQ2_BN commit `bfb0678f4`; `kv-god` has since advanced to `997abec34` (Stream B harness/docs only — no quant conflicts).
