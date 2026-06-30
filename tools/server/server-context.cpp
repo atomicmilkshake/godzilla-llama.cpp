@@ -5271,8 +5271,8 @@ private:
                                                 func_name, (slot).id, ((slot).task ? (slot).task->id : -1), cur.pos_min, cur.pos_max, pos_min_thold);
                                             // for hybrid/recurrent models (DeltaNet, Mamba), pos_min always equals
                                             // the full sequence length, so the SWA-based pos_min check always fails.
-                                            // use pos_max <= pos_next instead to find the most recent valid checkpoint.
-                                            if (llama_model_is_recurrent(model_tgt) || llama_model_is_hybrid(model_tgt)) {
+                                            // SWA models (e.g. Gemma4): pos_max > pos_next corrupts KV — use pos_max <= pos_next.
+                                            if (llama_model_is_recurrent(model_tgt) || llama_model_is_hybrid(model_tgt) || n_swa > 0) {
                                                 return cur.pos_max <= pos_next;
                                             }
                                             return cur.pos_min < pos_min_thold || cur.pos_min == 0;
@@ -5280,6 +5280,11 @@ private:
                                     );
 
                                     bool do_reset = it == slot.prompt.checkpoints.rend();
+
+                                    if (!do_reset && it->pos_max > pos_next) {
+                                        SLT_WRN(slot, "checkpoint pos_max (%d) > pos_next (%d) — skipping restore\n", it->pos_max, pos_next);
+                                        do_reset = true;
+                                    }
 
                                     if (!do_reset) {
                                         // restore the context checkpoint

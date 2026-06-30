@@ -263,7 +263,7 @@ See the prepublish sweep plan and godzilla Phase 1.4 for full context.
 **huihui-gemma-4-12b:**
 - KV gate: **FAIL** (`kv_matrix_20260629_130711.txt`; turbo +55%, tcq +117% vs f16; kvarn3/kvarn4 improve but turbo family fails gate).
 - Native Gemma4 (non-hybrid SWA); TriAttention cal at `$TRIATTENTION_CALIB_DIR/gemma4/huihui-gemma-4-12b.triattention` (present; re-confirmed 2026-06-29).
-- Hot-rod: **NOT_CERTIFIED** — baseline-8k HE **20/40**; kvarn4-8k sweep **INFRA_ABORT** (gemma_hf harness `test_harness_error` streak @ 2026-06-29 retry).
+- Hot-rod: **NOT_CERTIFIED** — baseline-8k HE **20/40**; kvarn4-8k **INFRA_ABORT** (2026-06-29) was **server SWA checkpoint restore bug**, not `gemma_hf` harness — stale checkpoint `pos_max=329` restored when `pos_next=39` → `common_context_seq_rm` abort @ HE 7/40; fix in `server-context.cpp` (`n_swa > 0` checkpoint gate). Re-cert pending rebuild + kvarn4-8k retry.
 - Viability: **baseline/kvarn3/kvarn4 only** for serving (no turbo/tcq); not hot-rod viable on MEMORY-ALPHA until harness/model quality improves.
 
 **gemma4-coding (re-triage context):**
