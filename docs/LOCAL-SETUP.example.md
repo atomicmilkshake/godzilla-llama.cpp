@@ -53,7 +53,7 @@ $env:WDK_ROOT = "C:\Program Files (x86)\Windows Kits\10"
 pwsh -File scripts/build_cuda.ps1 -Target llama-server
 ```
 
-GitHub Actions can supply the same path via the `WDK_ROOT` repository secret (see `.github/workflows/kv-god-ctest.yml`).
+GitHub Actions can supply the same path via the `WDK_ROOT` repository secret (see `.github/workflows/main-ctest.yml`).
 
 ## WSL parity (BitNet)
 

@@ -1,12 +1,12 @@
-name: kv-god ctest gate
+name: main ctest gate
 
 on:
   push:
-    branches: [kv-god]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: kv-god-ctest-${{ github.ref }}
+  group: main-ctest-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v${{ env.CUDA_VERSION }}
-          key: cuda-windows-${{ env.CUDA_VERSION }}-kv-god-ctest
+          key: cuda-windows-${{ env.CUDA_VERSION }}-main-ctest
 
       - name: Install CUDA Toolkit
         if: steps.cache-cuda.outputs.cache-hit != 'true'

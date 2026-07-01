@@ -21,6 +21,16 @@ Set of LLM REST APIs and a web UI to interact with llama.cpp.
 
 For the full list of features, please refer to [server's changelog](https://github.com/ggml-org/llama.cpp/issues/9291)
 
+## Godzilla notes (hybrid models + Cadre)
+
+**Hybrid Qwen3.5 / SSM models** with `--kv-ram`, YaRN (`--rope-scaling yarn`, `--yarn-orig-ctx`, `-c` > `n_ctx_train`), and `--parallel 1`:
+
+- Pass **`--allow-extended-ctx`** so slot context is not clamped to `n_ctx_train` under YaRN.
+- **Prompt-cache shrink** between unrelated sessions can fail recurrent re-expand; godzilla continues in shrunk mode instead of aborting (2026-07-01 fix in `server-context.cpp`).
+- **Idle-slot cache save** (`slot_save_and_clear`) runs recurrent shrink before save and expand after — important when Cadre reuses one slot across sequential HumanEval problems.
+
+Cadre managed server, flags, and verification: [docs/CADRE-INTEGRATION.md](../../docs/CADRE-INTEGRATION.md).
+
 ## Usage
 
 <!-- HELP_START -->

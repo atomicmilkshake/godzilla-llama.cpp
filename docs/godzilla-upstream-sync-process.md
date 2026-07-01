@@ -1,7 +1,7 @@
 # Godzilla upstream sync process
 
 **Repo:** `<GODZILLA_ROOT>`  
-**Primary integration branch:** `kv-god`  
+**Primary integration branch:** `main`  
 **Canonical remote:** `origin` → https://github.com/atomicmilkshake/godzilla-llama.cpp.git  
 **Workspace journal:** `<operator-private-journal>` (append after every sync session)
 
@@ -16,17 +16,17 @@ This document is the repeatable workflow for checking upstreams, triaging diffs,
 | **`upstream`** / **`beellama-upstream`** | https://github.com/Anbeeld/beellama.cpp.git · `<beellama-upstream-clone>` | `main` | **Primary lineage** — TurboQuant/TCQ KV, DFlash/MTP, adaptive speculative decoding, BeeLlama CLI/server args, reasoning-loop guard |
 | **`llama-org`** | https://github.com/ggml-org/llama.cpp.git | `master` | **Reference upstream** — ggml core, CUDA backends, models, generic server; **cherry-pick or manual port only** (no wholesale merge) |
 | **`bitnet-upstream`** | https://github.com/microsoft/BitNet.git | `main` | **Vendor slice source** — CPU I2_S/TL kernels copied into `vendor/bitnet/` (not full repo merge) |
-| **`origin`** | https://github.com/atomicmilkshake/godzilla-llama.cpp.git | `kv-god` | **Canonical published fork** — push target after gates pass |
+| **`origin`** | https://github.com/atomicmilkshake/godzilla-llama.cpp.git | `main` | **Canonical published fork** — push target after gates pass |
 | `buun-source` | `<buun-upstream-clone>` | `master` | TriAttention + buun turbo-quant shim lineage (integration reference) |
 | `tq3-source` | https://github.com/turbo-tan/llama.cpp-tq3.git | `main` | TurboQuant TQ3 CUDA reference (overlaps BeeLlama/buun) |
 
 ### Sync priority order
 
-1. **BeeLlama** (`upstream/main`) → merge into `main`, then into `kv-god` when behind.
+1. **BeeLlama** (`upstream/main`) → merge into `main` when behind.
 2. **llama.cpp** (`llama-org/master`) → security/bugfix cherry-picks or targeted manual ports.
 3. **BitNet** → refresh `vendor/bitnet/` pin per [vendor/bitnet/VENDOR.md](../godzilla-llama.cpp/vendor/bitnet/VENDOR.md).
 4. **buun** → TriAttention-only fixes with explicit checklist.
-5. **Push** `origin/kv-god` when all gates pass.
+5. **Push** `origin/main` when all gates pass.
 
 ### One-time remote setup
 
@@ -121,7 +121,7 @@ These paths and features are **godzilla-specific** or carry fork-local semantics
 
 ### A — Preflight
 
-1. Read `<operator-private-journal>` tail; confirm branch `kv-god`.
+1. Read `<operator-private-journal>` tail; confirm branch `main`.
 2. `git status` — stash or commit WIP: `git stash push -m "pre-upstream-sync"`.
 3. Note current HEAD SHA as rollback anchor.
 
@@ -188,7 +188,7 @@ git cherry-pick --abort
 
 | Source | Method |
 |--------|--------|
-| BeeLlama behind > 0 | `git checkout main; git merge upstream/main; git checkout kv-god; git merge main` |
+| BeeLlama behind > 0 | `git checkout main; git merge upstream/main` |
 | llama.cpp | Cherry-pick or manual file port (one logical change per commit) |
 | BitNet | Vendor pin refresh (§6) — not git merge of full repo |
 | buun | TriAttention fixes per buun checklist |
@@ -200,7 +200,7 @@ Run **before and after** any apply. Do not push until all required gates pass.
 ### G — Journal + push
 
 1. Append `<operator-private-journal>`: inventory table, applied SHAs, deferred list, gate results, rollback SHA.
-2. `git push origin kv-god` when operator approves and gates are green.
+2. `git push origin main` when operator approves and gates are green.
 
 ---
 
@@ -319,13 +319,13 @@ git reset --hard <known-good-sha>   # e.g. pre-sync HEAD from journal
 
 ```powershell
 git revert <sha>
-git push origin kv-god
+git push origin main
 ```
 
 ### Branch isolation (large risky port)
 
 ```powershell
-git checkout -b sync/llama-cpp-<date> kv-god
+git checkout -b sync/llama-cpp-<date> main
 # apply ports + gates on branch; merge --no-ff when green
 ```
 
@@ -371,7 +371,7 @@ pwsh.exe -File $WSL_GODZILLA_ROOT/scripts/build_bitnet_cpu.ps1 -UseWsl
 ### Cherry-pick workflow (either shell)
 
 ```powershell
-git checkout kv-god
+git checkout main
 git cherry-pick -x <upstream-sha>
 # resolve conflicts preserving §2 inventory
 git add -A && git cherry-pick --continue
@@ -384,7 +384,7 @@ cd build && ctest -R "triattention|copilot-coalesce" --output-on-failure
 
 | Trigger | Action |
 |---------|--------|
-| **Before tagging a release** or pushing `kv-god` to `origin` | Full workflow §3 + Gates 0–3 |
+| **Before tagging a release** or pushing `main` to `origin` | Full workflow §3 + Gates 0–3 |
 | **BeeLlama announces a release** or `git rev-list --count HEAD..upstream/main` > 0 | BeeLlama merge + gates |
 | **llama.cpp security advisory** or CVE affecting ggml/server | Triage §3D; cherry-pick security commits within 1 week |
 | **Monthly maintenance** (even if behind = 0) | Fetch + inventory + Gate 1; log "no-op" in journal |

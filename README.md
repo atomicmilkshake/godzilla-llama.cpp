@@ -7,7 +7,7 @@
 **Maintainer:** [atomicmilkshake](https://github.com/atomicmilkshake)  
 **Security:** see [SECURITY.md](SECURITY.md) · local paths: [docs/LOCAL-SETUP.example.md](docs/LOCAL-SETUP.example.md)  
 **Base:** [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp) (`beellama-upstream`)  
-**Active integration branch:** `kv-god` (TriAttention on BeeLlama TurboQuant/TCQ stack)
+**Active branch:** `main` (single integration line — TriAttention, TurboQuant/TCQ, IQ2_BN, KVarN)
 
 ## Godzilla stack (target architecture)
 
@@ -17,12 +17,12 @@ Model Loading
 │
 Inference Graph
 ├── KV Cache Quantization (TurboQuant/TCQ + spiritbuun dequant/norm)         [Phase 1]
-├── KV Pruning / Eviction (TriAttention GPU scoring + compaction)            [kv-god ✓]
+├── KV Pruning / Eviction (TriAttention GPU scoring + compaction)            [main ✓]
 ├── Speculative Decoding (DFlash/MTP + model-specific heads + Tri-aware)     [Phase 3]
 └── Backend Execution (CUDA/HIP/Metal/CPU + hybrid offload)                  [ongoing]
 ```
 
-## What works today (`kv-god`)
+## What works today (`main`)
 
 Cherry-picked from [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buun-llama-cpp) onto BeeLlama `main` @ `85e22ea0b`:
 
@@ -31,7 +31,7 @@ Cherry-picked from [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buu
 - CUDA scoring kernel: `ggml/src/ggml-cuda/triattention-score.cu`
 - Docs: [docs/TRIATTENTION.md](docs/TRIATTENTION.md), [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md)
 
-Inherited from BeeLlama (unchanged on `kv-god` until later phases):
+Inherited from BeeLlama:
 
 - TurboQuant / TCQ KV types (`turbo2`, `turbo3`, `turbo4`, `turbo2_tcq`, `turbo3_tcq`)
 - DFlash speculative decoding, adaptive draft control, reasoning-loop protection
@@ -85,6 +85,22 @@ For remote Copilot through Caddy, keep reasoning in `reasoning_content` only and
 
 Build helper: `pwsh -File scripts/build_cuda.ps1 -Target llama-server` (stop any running `llama-server` first on Windows to avoid DLL lock).
 
+### Extended context + KV-RAM (hybrid Qwen3.5 / Cadre)
+
+For YaRN beyond `n_ctx_train` (e.g. `-c 524288` with `--yarn-orig-ctx 262144`), pass `--allow-extended-ctx` so slot init respects the requested context instead of clamping to training size. Pair with `--kv-ram` to keep large KV in system RAM on 10 GB GPUs.
+
+```powershell
+.\build\bin\llama-server.exe `
+  -m $MODELS_DIR/your-hybrid-thinking.gguf `
+  --allow-extended-ctx --kv-ram --flash-attn on `
+  --rope-scaling yarn --yarn-orig-ctx 262144 -c 524288 `
+  --parallel 1 --jinja --reasoning on --reasoning-budget 8192 `
+  --no-reasoning-promote-to-content `
+  --host 0.0.0.0 --port 8090
+```
+
+Cadre integration (managed server, HumanEval): see [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md). Rebuild helper: `V:\cadre\scripts\rebuild-godzilla.bat`.
+
 ## Benchmarks
 
 ```powershell
@@ -94,16 +110,11 @@ pwsh -File scripts/benchmarks/run-kv-matrix.ps1 -Model path\to\model.gguf
 
 Results land in `logs/benchmarks/`.
 
-## Branching model
+## Branch policy
 
-| Branch | Purpose |
-|--------|---------|
-| `main` | BeeLlama-stable baseline (releases) |
-| `kv-god` | TurboQuant + TriAttention + KVarN integration |
-| `quant-god` | ik_llama weight quant backports |
-| `spec-god` | TriAttention-aware speculative decoding |
+**Single branch:** all Godzilla work lands on `main`. Legacy topic branches (`kv-god`, `quant-god`, `spec-god`, `bitnet-god`) were consolidated 2026-07-01; IQ2_BN from `quant-god` is merged and kept.
 
-Upstream sync: `beellama-upstream` → periodic merge into `main`, then rebase integration branches. Full procedure: [docs/godotzilla-upstream-sync-process.md](docs/godotzilla-upstream-sync-process.md).
+Upstream sync: `beellama-upstream/main` → merge into `main`. Full procedure: [docs/godotzilla-upstream-sync-process.md](docs/godotzilla-upstream-sync-process.md).
 
 ## Roadmap
 
@@ -111,9 +122,9 @@ Phased roadmap is tracked in project issues and `docs/`; operator-specific plans
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 0 | Repo + branches + TriAttention port | **in progress** |
+| 0 | Repo + branches + TriAttention port | **done** (`main` only) |
 | 1 | KV domination (spiritbuun dequant, KVarN, profiles) | queued |
-| 2 | ik_llama weight quants + MoE | queued |
+| 2 | ik_llama weight quants + MoE | **starter** (IQ2_BN on `main`) |
 | 3 | Speculative + TriAttention coexistence | queued |
 | 4 | Embedded polish + CPU turbo path | queued |
 | 5 | Docs, prebuilts, upstream discipline | ongoing |

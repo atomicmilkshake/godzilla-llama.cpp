@@ -1,11 +1,13 @@
-# quant-god — ik_llama weight quant starter
+# IQ2_BN weight quant (merged into `main`)
 
-**Branch:** `quant-god` (forked from `kv-god`)  
+**Status:** `quant-god` merged into `main` on **2026-07-01** (IQ2_BN **kept** — ctest 9/9 after merge).  
 **Phase:** Godzilla Phase 2 weight quants ([godzilla-llama-cpp-plan.md](../../docs/godotzilla-llama-cpp-plan.md))
+
+> Historical branch name: `quant-god`. All new work uses `main` only.
 
 ## Scope (Stream D starter)
 
-This branch ports **ik_llama.cpp** weight-quant ideas without touching the Microsoft BitNet vendor slice on `kv-god`.
+Ports **ik_llama.cpp** weight-quant ideas without touching the Microsoft BitNet vendor slice.
 
 | Item | Status |
 |------|--------|
@@ -18,7 +20,7 @@ This branch ports **ik_llama.cpp** weight-quant ideas without touching the Micro
 
 ## ik_llama reference mapping
 
-| ik_llama.cpp | godzilla quant-god |
+| ik_llama.cpp | godzilla `main` |
 |--------------|-------------------|
 | `GGML_TYPE_IQ2_BN = 135` | `GGML_TYPE_IQ2_BN = 60` (after BitNet 56–59) |
 | `GGML_TYPE_Q8_K64 = 136` | `GGML_TYPE_Q8_K64 = 61` |
@@ -37,7 +39,7 @@ pwsh -File scripts/build_cuda.ps1 -SdkRoot S:\WADK102 -WithTests -Target test-qu
 
 
 
-**Isolated quant-god CUDA tree (`build-qg`):** use when `build/` is owned by `kv-god` work — do not run parallel ninja on `build/` and `build-qg`.
+**Isolated CUDA tree (`build-qg`):** optional side build for quant-only experiments — do not run parallel ninja on `build/` and `build-qg`.
 
 ```powershell
 # After vcvars + WDK UCRT (see scripts/build_cuda.ps1)
@@ -45,15 +47,15 @@ cmake --build build-qg --config Release -j 4 --target ggml-cuda
 .\build-qg\bin\test-quantize-fns.exe
 ```
 
-`kv-god` CUDA regression (unchanged by this branch):
+`main` CUDA regression:
 
 ```powershell
 ctest -R "triattention|copilot-coalesce" --test-dir build
 ```
 
-## Merge policy
+## Merge policy (2026-07-01)
 
-Do **not** merge `quant-god` → `kv-god` until enum audit + ctest gates are green. BitNet vendor and TurboQuant enums 42–55 must remain stable on `kv-god`.
+IQ2_BN merged to `main` after enum audit (60–61 vs BitNet 56–59 / Turbo 42–55 — no collision) and **ctest 9/9** on merge candidate. BitNet vendor and TurboQuant enums 42–55 remain stable on `main`.
 
 ## Merge readiness (2026-06-30)
 
@@ -64,14 +66,12 @@ Do **not** merge `quant-god` → `kv-god` until enum audit + ctest gates are gre
 | CUDA `mmvq` / `convert` compile | **PASS** | nvcc sm86: `mmvq.cu` + `convert.cu` (IQ2_BN `vec_dot_iq2_bn_q8_1`, `dequantize_block_iq2_bn`) green with WDK `-SdkRoot` (e.g. `S:\WADK102`) |
 | Full CUDA link (`ggml-cuda.dll`) | **PASS** | `build-qg/bin/ggml-cuda.dll` linked @ `7e64e8c23` (2026-06-30 04:50, ~134 MB); single-writer `cmake --build build-qg -j 4 --target ggml-cuda` + WDK `S:\WADK102` |
 | CUDA `test-quantize-fns` (build-qg) | **PASS** | `build-qg/bin/test-quantize-fns.exe` exit 0 incl. `iq2_bn` + `q8_K64` (CPU quant paths; CUDA DLL present) |
-| `kv-god` ctest `triattention\|copilot-coalesce` | **NOT RUN** | quant-god branch; run on `kv-god` before merge |
+| `main` ctest `triattention\|copilot-coalesce` | **PASS 9/9** | After merge @ `14d6b1b77`; re-verified post-stability commits 2026-07-01 |
 | Enum 60–61 audit vs BitNet 56–59 / Turbo 42–55 | **OPEN** | No collision; formal audit before merge |
 | `row_meta` ggml field (ik parity) | **PARTIAL** | `ggml_row_size` +4 hack; no `row_meta_size` trait |
 | `llama-quant` ftype wiring | **DEFERRED** | Starter stub only |
 | End-to-end IQ2_BN GGUF inference | **DEFERRED** | No certified IQ2_BN model on godzilla yet |
 
-**Verdict:** **Not merge-ready** to `kv-god` (enum audit, kv-god ctest 9/9 on merge candidate, tighter vec_dot parity vs ik, `llama-quant` wiring, GPU `MUL_MAT` IQ2_BN smoke). Safe on `quant-god`; full `ggml-cuda.dll` link + `test-quantize-fns` green in `build-qg` — next: GPU `MUL_MAT` smoke, rebase onto `kv-god`.
+**Verdict:** **Merged and kept** on `main`. Remaining deferred: tighter vec_dot parity vs ik, `llama-quant` ftype wiring, end-to-end IQ2_BN GGUF inference, GPU `MUL_MAT` IQ2_BN smoke.
 
-**Branch HEAD:** `7e64e8c23` (`origin/quant-god`). CUDA link log: `J:\LLM\diagnostics\quant-god-build-qg-ggml-cuda-20260630-035520.log`.
-
-**kv-god delta:** `quant-god` based on `kv-god` @ `0f55d003b` + IQ2_BN starter; `kv-god` has advanced (Stream B harness/docs @ `fd0f132d4`) — rebase before merge discussion.
+**Merge commit:** `14d6b1b77` (`merge quant-god IQ2_BN into main`). Stability + `--allow-extended-ctx` on `main` @ `2a55d3c4d` (2026-07-01).

@@ -1,6 +1,14 @@
 # Changelog
 
-## kv-god (unreleased, Godzilla fork)
+## main (unreleased, Godzilla fork)
+
+### 2026-07-01
+
+- **Single-branch consolidation:** `main` is the only published integration branch; merged `quant-god` IQ2_BN; legacy topic branches retired after publish.
+- **Cadre stability:** survive recurrent expand failure after prompt-cache shrink; recurrent shrink/expand around idle-slot cache save. Verified Cadre HumanEval solo-coder 5/5. See [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md).
+- **`--allow-extended-ctx`:** slot init respects YaRN when `-c` > `n_ctx_train`.
+
+### Prior integration (kv-god lineage, now on `main`)
 
 - **BitNet integration (branch `bitnet-god`, P0–P2)**: Vendor slice at `vendor/bitnet/` (MS pin `01eb415`); CMake `GGML_BITNET_I2_S` / `GGML_BITNET_X86_TL2` / `GGML_BITNET_ARM_TL1` (default OFF); enum IDs 56–59; GGUF type remap 36–39→56–59 when BitNet enabled; `LLM_ARCH_BITNET_B158` for `bitnet-b1.58` GGUF; I2_S MAD + quants in `vendor/bitnet/src/`; CPU-only build via `scripts/build_bitnet_cpu.ps1` with `llama-triattention-gpu-stub.cpp` when `GGML_CUDA=OFF`. P0 `:8091` MS WSL stack unchanged. P1: model load + unit test `test-bitnet-i2s-quant`; greedy decode parity vs MS still in progress. Preset **#47** documented in `docs/BITNET.md` (master.ps1 outside repo).
 - **TriAttention hardening**: host-KV GPU staging (`-nkvo`), `ggml_row_size` rowbytes for multi-stream KV, CUDA sync/error hardening, ISWA prune resource guards; new regression tests (`test-triattention-host-kv-staging`, `test-triattention-rowbytes-multistream`, `test-triattention-gpu-fault-inject`).
