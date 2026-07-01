@@ -447,7 +447,9 @@ extern "C" {
         GGML_TYPE_I8_S    = 57, // BitNet activation type for I2_S vec_dot
         GGML_TYPE_TL1     = 58, // BitNet TL1 LUT (ARM)
         GGML_TYPE_TL2     = 59, // BitNet TL2 LUT (x86)
-        GGML_TYPE_COUNT   = 60,
+        GGML_TYPE_IQ2_BN  = 60, // ik_llama BitNet/TriLM 2.0 bpw (not MS I2_S)
+        GGML_TYPE_Q8_K64  = 61, // ik_llama activation quant for IQ2_BN vec_dot
+        GGML_TYPE_COUNT   = 62,
     };
 
     // precision

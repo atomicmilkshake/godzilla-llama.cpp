@@ -278,7 +278,7 @@ See prepublish sweep plan for gates and godzilla-comprehensive-fix-plan.md for h
 ## Certified hot-rod: FableVibes 14B MoE (godzilla)
 
 **Certification date:** 2026-06-29  
-**Engine commit:** 614ec18d2 (kv-god)  
+**Engine commit:** 614ec18d2 (main)  
 **Model:** Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf (~8.5 GB)  
 **Hardware:** RTX 3080 10 GB, `TURBO_INNERQ=1`
 
