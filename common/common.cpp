@@ -1281,6 +1281,11 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
         return;
     }
 
+    // Model type is only known after load; recompute context params so hybrid/recurrent
+    // targets get n_rs_seq=1 for partial seq_rm rollback (see common_context_params_to_llama).
+    const bool needs_reeval = llama_model_is_recurrent(model) || llama_model_is_hybrid(model);
+    cparams = common_context_params_to_llama(params, needs_reeval);
+
     const llama_vocab * vocab = llama_model_get_vocab(model);
 
     // load and optionally apply lora adapters
@@ -1604,9 +1609,21 @@ done:
     return res;
 }
 
-void common_context_seq_rm(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+bool common_context_seq_rm_safe(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+    if (ctx == nullptr) {
+        return false;
+    }
+
     auto * mem = llama_get_memory(ctx);
-    if (!llama_memory_seq_rm(mem, seq_id, p0, p1)) {
+    if (mem == nullptr) {
+        return false;
+    }
+
+    return llama_memory_seq_rm(mem, seq_id, p0, p1);
+}
+
+void common_context_seq_rm(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+    if (!common_context_seq_rm_safe(ctx, seq_id, p0, p1)) {
         GGML_ABORT("%s", string_format("failed to remove sequence %d with p0=%d, p1=%d\n", seq_id, p0, p1).c_str());
     }
 }
@@ -1673,12 +1690,16 @@ struct llama_model_params common_model_params_to_llama(common_params & params) {
     return mparams;
 }
 
-struct llama_context_params common_context_params_to_llama(const common_params & params) {
+struct llama_context_params common_context_params_to_llama(const common_params & params, bool needs_reeval) {
     auto cparams = llama_context_default_params();
 
     cparams.n_ctx             = params.n_ctx;
     cparams.n_seq_max         = params.n_parallel;
     cparams.n_rs_seq          = params.speculative.need_n_rs_seq();
+    // hybrid/recurrent targets without MTP still need a minimal rollback depth for partial seq_rm
+    if (needs_reeval && cparams.n_rs_seq == 0) {
+        cparams.n_rs_seq = 1;
+    }
     cparams.n_outputs_max     = std::max(params.n_outputs_max, 0);
     cparams.n_batch           = params.n_batch;
     cparams.n_ubatch          = params.n_ubatch;

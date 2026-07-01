@@ -133,6 +133,11 @@ if (Python3_Interpreter_FOUND)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-hip-shuffle-compat-static.py)
     set_property(TEST test-hip-shuffle-compat-static PROPERTY LABELS hip)
+    add_test(
+        NAME test-hybrid-slot-erase
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools/server/tests
+        COMMAND ${Python3_EXECUTABLE} -m pytest -v ${PROJECT_SOURCE_DIR}/tests/server/test_hybrid_slot_erase.py)
+    set_property(TEST test-hybrid-slot-erase PROPERTY LABELS model python)
 endif()
 
 # build test-tokenizer-0 target once and add many tests

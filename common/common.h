@@ -1070,7 +1070,7 @@ using common_init_result_ptr = std::unique_ptr<common_init_result>;
 common_init_result_ptr common_init_from_params(common_params & params, bool model_only = false);
 
 struct llama_model_params     common_model_params_to_llama  (      common_params & params);
-struct llama_context_params   common_context_params_to_llama(const common_params & params);
+struct llama_context_params   common_context_params_to_llama(const common_params & params, bool needs_reeval = false);
 struct ggml_threadpool_params ggml_threadpool_params_from_cpu_params(const common_cpu_params & params);
 
 // clear LoRA adapters from context, then apply new list of adapters
@@ -1093,6 +1093,9 @@ enum common_context_seq_rm_type {
 // check if the llama_context can remove sequences
 // note: clears the memory of the context
 common_context_seq_rm_type common_context_can_seq_rm(llama_context * ctx);
+
+// returns false on failure instead of aborting
+bool common_context_seq_rm_safe(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1);
 
 // aborts execution on failure
 void common_context_seq_rm (llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1);

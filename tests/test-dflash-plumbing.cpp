@@ -1253,6 +1253,21 @@ int main(int argc, char ** argv) {
     ok &= expect(server_context.find("void recurrent_expand_after_prompt_cache(const char * reason)") != std::string::npos &&
                  server_context.find("recurrent_expand_after_prompt_cache(\"after prompt cache save/load\")") != std::string::npos,
         "server must expand recurrent backup cells again before normal prefill graph reservation");
+    ok &= expect(server_context.find("static bool context_seq_rm_safe(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1)") != std::string::npos,
+        "hybrid slot clear must use safe sequence removal instead of aborting on memory errors");
+    ok &= expect(server_context.find("bool slot_clear_hybrid_safe(server_slot & slot, const char * reason)") != std::string::npos &&
+                 server_context.find("never GGML_ABORT") != std::string::npos &&
+                 server_context.find("slot_clear_hybrid_safe(*slot, \"slot erase\")") != std::string::npos &&
+                 server_context.find("slot_clear_hybrid_safe(s, \"before new task\")") != std::string::npos &&
+                 server_context.find("slot_clear_hybrid_safe(slot, \"after idle slot save\")") != std::string::npos,
+        "hybrid slot clear must be used for erase, idle save, and new-task paths without aborting the server");
+    ok &= expect(server_context.find("shrunk recurrent state to %d cells for slot clear") != std::string::npos &&
+                 server_context.find("expanded recurrent state to %d cells after slot clear") != std::string::npos &&
+                 server_context.find("failed to expand recurrent state to %d cells after slot clear") != std::string::npos,
+        "hybrid slot clear must shrink before erase and retry expand with degraded fallback");
+    ok &= expect(server_context.find("continuing in shrunk mode (%d cells)") != std::string::npos &&
+                 server_context.find("failed to expand recurrent state to %d cells after prompt cache") != std::string::npos,
+        "hybrid recurrent expand failures must degrade to shrunk mode instead of killing the server");
     ok &= expect(server_context.find("llama_seq_id seq_id_backup = -1") != std::string::npos &&
                  server_context.find("slot.seq_id_backup = seq_backup") != std::string::npos &&
                  server_context.find("const llama_seq_id seq_backup = slot.seq_id_backup") != std::string::npos,
@@ -1269,7 +1284,8 @@ int main(int argc, char ** argv) {
     ok &= expect(context_cpp.find("sched_need_reserve = true") != std::string::npos, "context recurrent resize must reserve a fresh scheduler graph after tensor reallocation");
     ok &= expect(server_context.find("dflash_profit_controller") == std::string::npos, "DFlash profit controller must use the normal adaptive depth probe path");
     ok &= expect(server_context.find("dflash_fixed_verify_shape") == std::string::npos, "DFlash profit controller must not override adaptive depth decisions");
-    ok &= expect(server_context.find("continuing would corrupt recurrent replay") != std::string::npos, "server must abort instead of continuing after recurrent backup expansion failure");
+    ok &= expect(server_context.find("continuing would corrupt recurrent replay") != std::string::npos,
+        "in-flight speculative recurrent backup must still abort when expand fails mid-draft");
     ok &= expect(graph_h.find("cparams.cb_eval              == other.cparams.cb_eval") == std::string::npos,
         "graph reuse must not key on eval callback runtime state");
     ok &= expect(graph_h.find("cparams.cb_eval_user_data    == other.cparams.cb_eval_user_data") == std::string::npos,

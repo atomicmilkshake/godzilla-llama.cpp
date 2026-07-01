@@ -195,9 +195,9 @@ bool llama_memory_recurrent::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos
                     cell.pos = p0 - 1;
                     return true;
                 }
-                LLAMA_LOG_WARN("%s: RS-ROLLBACK-OVERFLOW seq=%d p0=%d cell.pos=%d rollback=%d > n_rs_seq=%d -> CANNOT ROLLBACK\n",
+                LLAMA_LOG_WARN("%s: RS-ROLLBACK-OVERFLOW seq=%d p0=%d cell.pos=%d rollback=%d > n_rs_seq=%d -> full sequence clear\n",
                                __func__, seq_id, (int)p0, (int)cell.pos, (int)rollback, (int)n_rs_seq);
-                return false;
+                return seq_rm(seq_id, 0, -1);
             }
             // invalidate tails which will be cleared
             if (p0 <= cell.pos && cell.pos < p1) {

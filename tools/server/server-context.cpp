@@ -2015,6 +2015,126 @@ private:
         SRV_INF("mmproj→MTP swap done in %" PRId64 " ms\n", (ggml_time_us() - t0) / 1000);
     }
 
+    static bool context_seq_rm_safe(llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+        if (ctx == nullptr) {
+            return true;
+        }
+
+        auto * mem = llama_get_memory(ctx);
+        if (mem == nullptr) {
+            return false;
+        }
+
+        return llama_memory_seq_rm(mem, seq_id, p0, p1);
+    }
+
+    static bool prompt_checkpoint_update_tgt_safe(
+            common_prompt_checkpoint & ckpt,
+            llama_context * ctx,
+            llama_seq_id seq_id,
+            llama_state_seq_flags flags) {
+        if (ctx == nullptr) {
+            return true;
+        }
+
+        const size_t ckpt_size = llama_state_seq_get_size_ext(ctx, seq_id, flags);
+
+        ckpt.data_tgt.resize(ckpt_size);
+
+        const size_t n = llama_state_seq_get_data_ext(ctx, ckpt.data_tgt.data(), ckpt_size, seq_id, flags);
+        if (n != ckpt_size) {
+            SRV_WRN("checkpoint size mismatch: expected %zu, got %zu — skipping tgt checkpoint update\n", ckpt_size, n);
+            ckpt.data_tgt.clear();
+            return false;
+        }
+
+        return true;
+    }
+
+    // Safe hybrid/recurrent slot clear: never GGML_ABORT; returns false on hard seq_rm failure.
+    bool slot_clear_hybrid_safe(server_slot & slot, const char * reason) {
+        if (slot.is_processing()) {
+            SLT_WRN(slot, "refusing slot clear while processing (%s)\n", reason);
+            return false;
+        }
+
+        bool did_shrink = false;
+
+        if (slot.has_draft_backup) {
+            const llama_seq_id seq_backup = slot.seq_id_backup;
+            if (seq_backup >= 0 && !context_seq_rm_safe(ctx_tgt, seq_backup, -1, -1)) {
+                SLT_WRN(slot, "failed to clear draft backup seq %d (%s)\n", (int) seq_backup, reason);
+                return false;
+            }
+            slot.has_draft_backup = false;
+            slot.has_recurrent_only_backup = false;
+            slot.seq_id_backup = -1;
+        }
+
+        if (needs_reeval && recurrent_expanded && n_seq_max_full > n_parallel_user) {
+            auto * mem = llama_get_memory(ctx_tgt);
+            if (mem != nullptr) {
+                const llama_seq_id seq_backup = slot.id + n_parallel_user;
+                llama_memory_seq_rm(mem, seq_backup, -1, -1);
+            }
+
+            if (llama_context_recurrent_shrink(ctx_tgt, n_parallel_user)) {
+                did_shrink = true;
+                recurrent_expanded = false;
+                SRV_DBG("shrunk recurrent state to %d cells for slot clear (%s, slot %d)\n",
+                        n_parallel_user, reason, slot.id);
+            } else {
+                SRV_ERR("failed to shrink recurrent state to %d cells for slot clear (%s, slot %d)\n",
+                        n_parallel_user, reason, slot.id);
+            }
+        }
+
+        SLT_INF(slot, "clearing prompt with %zu tokens (%s)\n", slot.prompt.tokens.size(), reason);
+
+        if (!context_seq_rm_safe(ctx_tgt, slot.id, -1, -1)) {
+            SLT_WRN(slot, "failed to clear target sequence (%s)\n", reason);
+            if (did_shrink && llama_context_recurrent_expand(ctx_tgt, n_seq_max_full)) {
+                recurrent_expanded = true;
+            }
+            return false;
+        }
+
+        if (ctx_dft && !context_seq_rm_safe(ctx_dft.get(), slot.id, -1, -1)) {
+            SLT_WRN(slot, "failed to clear draft sequence (%s)\n", reason);
+        }
+
+        slot.prompt.tokens.clear();
+        slot.prompt.checkpoints.clear();
+        slot.prompt.data.main.clear();
+        slot.prompt.data.drft.clear();
+
+        slot.reset();
+
+        if (did_shrink) {
+            if (llama_context_recurrent_expand(ctx_tgt, n_seq_max_full)) {
+                recurrent_expanded = true;
+                SRV_DBG("expanded recurrent state to %d cells after slot clear (%s, slot %d)\n",
+                        n_seq_max_full, reason, slot.id);
+            } else {
+                SRV_ERR("failed to expand recurrent state to %d cells after slot clear (%s, slot %d); "
+                        "continuing in shrunk mode (%d cells)\n",
+                        n_seq_max_full, reason, slot.id, n_parallel_user);
+            }
+        } else if (needs_reeval && !recurrent_expanded && n_seq_max_full > n_parallel_user) {
+            if (llama_context_recurrent_expand(ctx_tgt, n_seq_max_full)) {
+                recurrent_expanded = true;
+                SRV_INF("expanded recurrent state to %d cells after slot clear (%s, slot %d)\n",
+                        n_seq_max_full, reason, slot.id);
+            } else {
+                SRV_ERR("failed to expand recurrent state to %d cells after slot clear (%s, slot %d); "
+                        "continuing in shrunk mode (%d cells)\n",
+                        n_seq_max_full, reason, slot.id, n_parallel_user);
+            }
+        }
+
+        return true;
+    }
+
     void slot_save_and_clear(server_slot & slot) {
         if (slot.prompt.n_tokens() == 0) {
             return;
@@ -2023,9 +2143,8 @@ private:
         SLT_INF(slot, "%s", "saving idle slot to prompt cache\n");
         SLT_DBG(slot, "%s", "__TEST_TAG_CACHE_IDLE_SLOT__\n");
         slot.prompt_save(*prompt_cache);
-        slot.prompt_clear(false);
+        slot_clear_hybrid_safe(slot, "after idle slot save");
         prompt_cache->update();
-        recurrent_expand_after_prompt_cache("after idle slot save");
     }
 
     bool recurrent_shrink_for_prompt_cache(const char * reason) {
@@ -2869,8 +2988,8 @@ private:
                 SRV_WRN("%s", "--cache-idle-slots requires --kv-unified, disabling\n");
                 params_base.cache_idle_slots = false;
             } else if (params_base.cache_ram_mib == 0) {
-                SRV_WRN("%s", "--cache-idle-slots requires --cache-ram, disabling\n");
-                params_base.cache_idle_slots = false;
+                SRV_INF("%s", "idle slots will be cleared (no --cache-ram) upon starting a new task\n");
+                SRV_DBG("%s", "__TEST_TAG_CACHE_IDLE_SLOTS_ENABLED__\n");
             } else {
                 SRV_INF("%s", "idle slots will be saved to prompt cache and cleared upon starting a new task\n");
                 SRV_DBG("%s", "__TEST_TAG_CACHE_IDLE_SLOTS_ENABLED__\n");
@@ -3125,9 +3244,9 @@ private:
             if (slot.prompt.n_tokens() > 0) {
                 SRV_WRN("purging slot %d with %zu tokens\n", slot.id, slot.prompt.tokens.size());
 
-                slot.prompt_clear(false);
-
-                res = true;
+                if (slot_clear_hybrid_safe(slot, "idle slot purge")) {
+                    res = true;
+                }
 
                 // clear slots one by one
                 break;
@@ -3887,7 +4006,7 @@ private:
 
         cur.update_pos(slot.prompt.n_tokens() - n_tokens_cur, pos_min, pos_max);
 
-        cur.update_tgt(ctx_tgt,       slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+        prompt_checkpoint_update_tgt_safe(cur, ctx_tgt, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
         cur.update_dft(ctx_dft.get(), slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
 
         // Save DFlash ring buffer alongside the recurrent state checkpoint.
@@ -4001,7 +4120,11 @@ private:
                     if (params_base.cache_idle_slots) {
                         for (auto & s : slots) {
                             if (!s.is_processing()) {
-                                slot_save_and_clear(s);
+                                if (params_base.cache_ram_mib != 0 && prompt_cache) {
+                                    slot_save_and_clear(s);
+                                } else {
+                                    slot_clear_hybrid_safe(s, "before new task");
+                                }
                             }
                         }
                     }
@@ -4212,7 +4335,10 @@ private:
                     // Erase token cache
                     const size_t n_erased = slot->prompt.tokens.size();
 
-                    slot->prompt_clear(false);
+                    if (!slot_clear_hybrid_safe(*slot, "slot erase")) {
+                        send_error(task, "Failed to erase slot KV cache", ERROR_TYPE_SERVER);
+                        break;
+                    }
 
                     auto res = std::make_unique<server_task_result_slot_erase>();
                     res->id       = task.id;
@@ -4693,6 +4819,8 @@ private:
                         slot.n_tokens_before_draft = slot.prompt.n_tokens();
                         slot.n_pos_before_draft = slot.prompt.tokens.pos_next();
 
+                        const int batch_n_tokens_before = batch.n_tokens;
+
                         slot.spec_i_batch.push_back(batch.n_tokens);
                         common_batch_add(batch, slot.sampled, slot.n_pos_before_draft, { slot.id }, true);
                         slot.prompt.tokens.push_back(slot.sampled);
@@ -4705,53 +4833,68 @@ private:
 
                         slot.n_draft_total += tree.n_nodes;
 
+                        bool ddtree_backup_ok = true;
                         if (needs_reeval) {
-                            GGML_ASSERT(recurrent_backup_sequences && "DDTree recurrent rollback requires backup sequences");
-                            const int64_t t_replay_sync_start = dflash_profile_start();
-                            llama_tape_replay_sync(ctx_tgt);
-                            dflash_profile_add(t_replay_sync_total, t_replay_sync_start);
-
-                            if (!recurrent_expanded) {
-                                if (llama_context_recurrent_expand(ctx_tgt, n_seq_max_full)) {
-                                    SRV_INF("expanded recurrent state to %d cells for speculative backup\n", n_seq_max_full);
-                                } else {
-                                    SRV_ERR("failed to expand recurrent state to %d cells\n", n_seq_max_full);
-                                    GGML_ABORT("failed to expand recurrent state for speculative backup; continuing would corrupt recurrent replay\n");
-                                }
-                                recurrent_expanded = true;
-                            }
-
-                            const llama_seq_id seq_backup = slot.id + n_parallel_user;
-                            auto * mem = llama_get_memory(ctx_tgt);
-                            llama_memory_seq_rm(mem, seq_backup, -1, -1);
-                            int n_branches = 0;
-                            for (size_t i = 1; i < tree.parents.size(); ++i) {
-                                if (tree.parents[i] != -1 && tree.parents[i] != (int32_t)(i - 1)) {
-                                    n_branches++;
-                                }
-                            }
-                            if (n_branches > 0) {
-                                llama_memory_seq_cp(mem, slot.id, seq_backup, -1, -1);
+                            if (!recurrent_backup_sequences) {
+                                SRV_WRN("%s", "DDTree recurrent rollback requires backup sequences; falling back to flat speculative decode\n");
+                                ddtree_backup_ok = false;
                             } else {
-                                dflash_backup_recurrent_state(slot.id, seq_backup);
+                                const int64_t t_replay_sync_start = dflash_profile_start();
+                                llama_tape_replay_sync(ctx_tgt);
+                                dflash_profile_add(t_replay_sync_total, t_replay_sync_start);
+
+                                if (!recurrent_expanded) {
+                                    if (llama_context_recurrent_expand(ctx_tgt, n_seq_max_full)) {
+                                        SRV_INF("expanded recurrent state to %d cells for speculative backup\n", n_seq_max_full);
+                                        recurrent_expanded = true;
+                                    } else {
+                                        SRV_ERR("failed to expand recurrent state to %d cells; falling back to flat speculative decode\n", n_seq_max_full);
+                                        ddtree_backup_ok = false;
+                                    }
+                                }
+
+                                if (ddtree_backup_ok) {
+                                    const llama_seq_id seq_backup = slot.id + n_parallel_user;
+                                    auto * mem = llama_get_memory(ctx_tgt);
+                                    llama_memory_seq_rm(mem, seq_backup, -1, -1);
+                                    int n_branches = 0;
+                                    for (size_t i = 1; i < tree.parents.size(); ++i) {
+                                        if (tree.parents[i] != -1 && tree.parents[i] != (int32_t)(i - 1)) {
+                                            n_branches++;
+                                        }
+                                    }
+                                    if (n_branches > 0) {
+                                        llama_memory_seq_cp(mem, slot.id, seq_backup, -1, -1);
+                                    } else {
+                                        dflash_backup_recurrent_state(slot.id, seq_backup);
+                                    }
+                                    slot.has_draft_backup = true;
+                                    slot.has_recurrent_only_backup = (n_branches == 0);
+                                    slot.seq_id_backup = seq_backup;
+                                }
                             }
-                            slot.has_draft_backup = true;
-                            slot.has_recurrent_only_backup = (n_branches == 0);
-                            slot.seq_id_backup = seq_backup;
                         }
 
-                        llama_set_tree_mask(ctx_tgt, tree.visibility.data(), tree.n_nodes + 1);
-                        llama_set_tree_parent_ids(ctx_tgt, tree.parents.data(), tree.n_nodes + 1);
+                        if (!ddtree_backup_ok) {
+                            batch.n_tokens = batch_n_tokens_before;
+                            slot.prompt.tokens.keep_first(slot.n_tokens_before_draft);
+                            slot.spec_i_batch.clear();
+                            slot.n_draft_total -= tree.n_nodes;
+                            SLT_DBG(slot, "%s", "DDTree draft unavailable due to recurrent backup failure, falling back to flat speculative decode\n");
+                        } else {
+                            llama_set_tree_mask(ctx_tgt, tree.visibility.data(), tree.n_nodes + 1);
+                            llama_set_tree_parent_ids(ctx_tgt, tree.parents.data(), tree.n_nodes + 1);
 
-                        slot.drafted = tree.tokens;
-                        slot.draft_log_probs = tree.log_probs;
-                        slot.draft_tree = std::move(tree);
-                        slot.has_draft_tree = true;
-                        ddtree_batch_active = true;
+                            slot.drafted = tree.tokens;
+                            slot.draft_log_probs = tree.log_probs;
+                            slot.draft_tree = std::move(tree);
+                            slot.has_draft_tree = true;
+                            ddtree_batch_active = true;
 
-                        t_draft_total += ggml_time_us() - t_draft_slot_start;
-                        n_slots_drafted++;
-                        break;
+                            t_draft_total += ggml_time_us() - t_draft_slot_start;
+                            n_slots_drafted++;
+                            break;
+                        }
                     }
 
                     SLT_DBG(slot, "%s", "DDTree draft unavailable, falling back to flat speculative decode\n");
@@ -4848,6 +4991,7 @@ private:
                     } else {
                         slot.n_draft_total += slot.spec_draft.size();
 
+                        bool hybrid_dflash_backup_ok = true;
                         if (needs_reeval) {
                             if (params_base.speculative.type() == COMMON_SPECULATIVE_TYPE_DFLASH) {
                                 const int64_t t_replay_sync_start = dflash_profile_start();
@@ -4869,36 +5013,51 @@ private:
                             // MTP uses the checkpoint-based accept path (which cleans ctx_dft via seq_rm)
                             if (ctx_tgt_seq_rm_type != COMMON_CONTEXT_SEQ_RM_TYPE_RS && params_base.speculative.type() == COMMON_SPECULATIVE_TYPE_DFLASH) {
                                 if (!recurrent_backup_sequences) {
-                                    GGML_ABORT("speculative recurrent rollback requires backup sequences when bounded snapshots are unavailable\n");
-                                }
-                                if (!recurrent_expanded) {
+                                    SRV_WRN("%s", "speculative recurrent rollback requires backup sequences when bounded snapshots are unavailable; disabling speculative draft for this slot\n");
+                                    hybrid_dflash_backup_ok = false;
+                                } else if (!recurrent_expanded) {
                                     if (llama_context_recurrent_expand(ctx_tgt, n_seq_max_full)) {
                                         SRV_INF("expanded recurrent state to %d cells for speculative backup\n", n_seq_max_full);
+                                        recurrent_expanded = true;
                                     } else {
-                                        SRV_ERR("failed to expand recurrent state to %d cells\n", n_seq_max_full);
-                                        GGML_ABORT("failed to expand recurrent state for speculative backup; continuing would corrupt recurrent replay\n");
+                                        SRV_ERR("failed to expand recurrent state to %d cells; disabling speculative draft for this slot\n", n_seq_max_full);
+                                        hybrid_dflash_backup_ok = false;
                                     }
-                                    recurrent_expanded = true;
                                 }
-                                const llama_seq_id seq_backup = slot.id + n_parallel_user;
-                                auto * mem = llama_get_memory(ctx_tgt);
-                                llama_memory_seq_rm(mem, seq_backup, -1, -1);
-                                if (params_base.speculative.type() == COMMON_SPECULATIVE_TYPE_DFLASH) {
-                                    dflash_backup_recurrent_state(slot.id, seq_backup);
-                                    slot.has_recurrent_only_backup = true;
-                                } else {
-                                    llama_memory_seq_cp(mem, slot.id, seq_backup, -1, -1);
-                                    slot.has_recurrent_only_backup = false;
+
+                                if (hybrid_dflash_backup_ok) {
+                                    const llama_seq_id seq_backup = slot.id + n_parallel_user;
+                                    auto * mem = llama_get_memory(ctx_tgt);
+                                    llama_memory_seq_rm(mem, seq_backup, -1, -1);
+                                    if (params_base.speculative.type() == COMMON_SPECULATIVE_TYPE_DFLASH) {
+                                        dflash_backup_recurrent_state(slot.id, seq_backup);
+                                        slot.has_recurrent_only_backup = true;
+                                    } else {
+                                        llama_memory_seq_cp(mem, slot.id, seq_backup, -1, -1);
+                                        slot.has_recurrent_only_backup = false;
+                                    }
+                                    slot.has_draft_backup = true;
+                                    slot.seq_id_backup = seq_backup;
                                 }
-                                slot.has_draft_backup = true;
-                                slot.seq_id_backup = seq_backup;
                             }
                         }
 
-                        for (size_t i = 0; i < slot.spec_draft.size(); i++) {
-                            slot.spec_i_batch.push_back(batch.n_tokens);
-                            common_batch_add(batch, slot.spec_draft[i], slot.prompt.tokens.pos_next(), { slot.id }, true);
-                            slot.prompt.tokens.push_back(slot.spec_draft[i]);
+                        if (!hybrid_dflash_backup_ok) {
+                            slot.n_draft_total -= slot.spec_draft.size();
+                            slot.spec_draft.clear();
+                            slot.draft_log_probs.clear();
+                            if (!slot.spec_i_batch.empty()) {
+                                slot.i_batch = slot.spec_i_batch[0];
+                            }
+                            slot.spec_i_batch.clear();
+                            slot.spec_pad_i_batch.clear();
+                            llama_clear_tree_parent_ids(ctx_tgt);
+                        } else {
+                            for (size_t i = 0; i < slot.spec_draft.size(); i++) {
+                                slot.spec_i_batch.push_back(batch.n_tokens);
+                                common_batch_add(batch, slot.spec_draft[i], slot.prompt.tokens.pos_next(), { slot.id }, true);
+                                slot.prompt.tokens.push_back(slot.spec_draft[i]);
+                            }
                         }
                         const int active_verify_draft_max = n_draft_max;
                         const common_params_sampling & slot_sampling =
@@ -4990,7 +5149,7 @@ private:
                    (ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS && draft.size() > llama_n_rs_seq(ctx_dft.get()));
 
                 if (use_ckpt_tgt) {
-                    ckpt.update_tgt(ctx_tgt, slot.id,
+                    prompt_checkpoint_update_tgt_safe(ckpt, ctx_tgt, slot.id,
                         LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY | LLAMA_STATE_SEQ_FLAGS_ON_DEVICE);
                 }
 
