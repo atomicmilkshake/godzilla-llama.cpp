@@ -2019,11 +2019,13 @@ private:
         if (slot.prompt.n_tokens() == 0) {
             return;
         }
+        recurrent_shrink_for_prompt_cache("before idle slot save");
         SLT_INF(slot, "%s", "saving idle slot to prompt cache\n");
         SLT_DBG(slot, "%s", "__TEST_TAG_CACHE_IDLE_SLOT__\n");
         slot.prompt_save(*prompt_cache);
         slot.prompt_clear(false);
         prompt_cache->update();
+        recurrent_expand_after_prompt_cache("after idle slot save");
     }
 
     bool recurrent_shrink_for_prompt_cache(const char * reason) {
@@ -2068,8 +2070,12 @@ private:
             return;
         }
 
-        SRV_ERR("failed to expand recurrent state to %d cells after prompt cache (%s)\n", n_seq_max_full, reason);
-        GGML_ABORT("failed to expand recurrent state after prompt cache restore; continuing would make scheduler reservation inconsistent\n");
+        // Hybrid models (e.g. Qwen3.5 SSM) at extended ctx can fail expand under KV-RAM
+        // pressure after prompt-cache shrink. Aborting kills the whole server; continue in
+        // shrunk mode and retry expand on the next successful expand path.
+        SRV_ERR("failed to expand recurrent state to %d cells after prompt cache (%s); "
+                "continuing in shrunk mode (%d cells)\n",
+                n_seq_max_full, reason, n_parallel_user);
     }
 
     bool dflash_shared_drafter_batch_allowed(int n_drafting) {
@@ -2621,8 +2627,12 @@ private:
 
         int n_ctx_slot = llama_n_ctx_seq(ctx_tgt);
         if (n_ctx_slot > n_ctx_train) {
-            SRV_WRN("the slot context (%d) exceeds the training context of the model (%d) - capping\n", n_ctx_slot, n_ctx_train);
-            n_ctx_slot = n_ctx_train;
+            if (params_base.allow_extended_ctx) {
+                SRV_WRN("the slot context (%d) exceeds the training context of the model (%d) — extended context enabled (YaRN/rope)\n", n_ctx_slot, n_ctx_train);
+            } else {
+                SRV_WRN("the slot context (%d) exceeds the training context of the model (%d) — capping to training context (pass --allow-extended-ctx to override)\n", n_ctx_slot, n_ctx_train);
+                n_ctx_slot = n_ctx_train;
+            }
         }
 
         slots.clear();
