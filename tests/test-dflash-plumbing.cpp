@@ -260,7 +260,7 @@ int main(int argc, char ** argv) {
         "CUDA reduced-logits argmax must not read rowx[-1] when every row candidate is invalid");
     ok &= expect(context_cpp.find("GGML_ASSERT(batch_inp.token || batch_inp.embd);") != std::string::npos,
         "decode must allow MTP draft batches to carry both token ids and target hidden embeddings");
-    ok &= expect(context_cpp.find("/*.ctx_type =*/ cparams.ctx_type") != std::string::npos,
+    ok &= expect(context_cpp.find("/*.ctx_type  =*/ cparams.ctx_type") != std::string::npos,
         "context creation must propagate ctx_type into memory creation so MTP uses its MTP-only KV cache");
     ok &= expect(context_cpp.find("graph_params(res, ubatch, mctx, ctx_type_to_graph_type(cparams.ctx_type))") != std::string::npos,
         "graph reservation must use the active context graph type so MTP reserves the MTP graph");
@@ -325,12 +325,14 @@ int main(int argc, char ** argv) {
         "CUDA FlashAttention all-quant dispatch must include D=512 q8_0 K/V cache pairs");
     ok &= expect(cuda_fattn.find("FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_BF16)") != std::string::npos,
         "CUDA FlashAttention all-quant dispatch must include D=512 bf16 K/V cache pairs");
-    ok &= expect(cuda_fattn.find("FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,       GGML_TYPE_TURBO3_TCQ)") != std::string::npos &&
+    ok &= expect(cuda_fattn.find("FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO3_TCQ)") != std::string::npos &&
                  cuda_fattn.find("FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q8_0)") != std::string::npos,
         "CUDA FlashAttention all-quant dispatch must include D=512 TCQ mixed q8/turbo3 pairs");
     ok &= expect(cuda_fattn.find("hip_native_tcq_decode") != std::string::npos &&
                  cuda_fattn.find("#if defined(GGML_USE_HIP)") != std::string::npos &&
-                 cuda_fattn.find("!hip_native_tcq_decode && !turbo_decode_native && turbo_kv") != std::string::npos,
+                 cuda_fattn.find("!hip_native_tcq_decode") != std::string::npos &&
+                 cuda_fattn.find("!turbo_decode_native") != std::string::npos &&
+                 cuda_fattn.find("turbo_kv") != std::string::npos,
         "HIP TCQ decode must stay on the native VEC path instead of dequantizing into generic tile/MMA FlashAttention");
     ok &= expect(cuda_fattn.find("turbo_mma_fused && turbo_mma_supported && Q->ne[1] <= 4") != std::string::npos &&
                  cuda_fattn.find("K->type == GGML_TYPE_TURBO4_0 ||") != std::string::npos &&
@@ -1199,7 +1201,7 @@ int main(int argc, char ** argv) {
     ok &= expect(server_context.find("const bool needs_backup_sequences") != std::string::npos &&
                  server_context.find("ctx_tgt_seq_rm_type != COMMON_CONTEXT_SEQ_RM_TYPE_RS && params_base.speculative.type() == COMMON_SPECULATIVE_TYPE_DFLASH") != std::string::npos,
         "server must use Bee backup rollback only for DFlash on non-RS contexts; MTP uses checkpoint-based accept path");
-    ok &= expect(common_h.find("return needs_rs_seq ? draft.n_max : 0u;") != std::string::npos,
+    ok &= expect(common_h.find("const int32_t rs_n_max = std::max(draft.n_max, n_max);") != std::string::npos,
         "MTP target context must enable bounded recurrent snapshots for upstream rollback");
     ok &= expect(server_context.find("cparams.n_rs_seq = 0") != std::string::npos,
         "MTP draft context creation must force n_rs_seq = 0 (upstream invariant: MTP heads have no delta-net layers)");
@@ -1284,8 +1286,8 @@ int main(int argc, char ** argv) {
     ok &= expect(context_cpp.find("sched_need_reserve = true") != std::string::npos, "context recurrent resize must reserve a fresh scheduler graph after tensor reallocation");
     ok &= expect(server_context.find("dflash_profit_controller") == std::string::npos, "DFlash profit controller must use the normal adaptive depth probe path");
     ok &= expect(server_context.find("dflash_fixed_verify_shape") == std::string::npos, "DFlash profit controller must not override adaptive depth decisions");
-    ok &= expect(server_context.find("continuing would corrupt recurrent replay") != std::string::npos,
-        "in-flight speculative recurrent backup must still abort when expand fails mid-draft");
+    ok &= expect(server_context.find("failed to expand recurrent state to %d cells; disabling speculative draft") != std::string::npos,
+        "in-flight speculative recurrent backup must disable speculative draft when expand fails mid-draft");
     ok &= expect(graph_h.find("cparams.cb_eval              == other.cparams.cb_eval") == std::string::npos,
         "graph reuse must not key on eval callback runtime state");
     ok &= expect(graph_h.find("cparams.cb_eval_user_data    == other.cparams.cb_eval_user_data") == std::string::npos,

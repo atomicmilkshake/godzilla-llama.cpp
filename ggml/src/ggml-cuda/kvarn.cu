@@ -1414,6 +1414,7 @@ static __global__ void kvarn_materialize_fast_kernel(
     const int stage_base = stream * KVAR_N_DIM * KVAR_N_STAGE_GROUPS;
     const bool from_stage = group == 0 || (group > 0 && group <= live_group && group + 1 >= live_group);
     const bool from_record = !from_stage && group < live_group && group < groups_per_stream;
+    __shared__ float rotated[CHUNK * KVAR_N_DIM];
     float x[CHUNK] = {};
 
     if (from_record) {
@@ -1585,50 +1586,47 @@ static __global__ void kvarn_materialize_fast_kernel(
         return;
     }
 
-    if constexpr (!EMIT_ROTATED) {
-        __shared__ float rotated[CHUNK * KVAR_N_DIM];
 #pragma unroll
-        for (int stride = 1; stride < 32; stride *= 2) {
+    for (int stride = 1; stride < 32; stride *= 2) {
 #pragma unroll
-            for (int i = 0; i < CHUNK; ++i) {
-                const float other = __shfl_xor_sync(0xffffffffu, x[i], stride);
-                x[i] = (dim & stride) == 0 ? x[i] + other : other - x[i];
-            }
+        for (int i = 0; i < CHUNK; ++i) {
+            const float other = __shfl_xor_sync(0xffffffffu, x[i], stride);
+            x[i] = (dim & stride) == 0 ? x[i] + other : other - x[i];
         }
+    }
 
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            rotated[i * KVAR_N_DIM + dim] = x[i];
-        }
-        __syncthreads();
+    for (int i = 0; i < CHUNK; ++i) {
+        rotated[i * KVAR_N_DIM + dim] = x[i];
+    }
+    __syncthreads();
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            x[i] = (dim & 32) == 0 ?
-                x[i] + rotated[i * KVAR_N_DIM + dim + 32] :
-                rotated[i * KVAR_N_DIM + dim - 32] - x[i];
-        }
-        __syncthreads();
+    for (int i = 0; i < CHUNK; ++i) {
+        x[i] = (dim & 32) == 0 ?
+            x[i] + rotated[i * KVAR_N_DIM + dim + 32] :
+            rotated[i * KVAR_N_DIM + dim - 32] - x[i];
+    }
+    __syncthreads();
 
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            rotated[i * KVAR_N_DIM + dim] = x[i];
-        }
-        __syncthreads();
+    for (int i = 0; i < CHUNK; ++i) {
+        rotated[i * KVAR_N_DIM + dim] = x[i];
+    }
+    __syncthreads();
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            x[i] = dim < 64 ?
-                x[i] + rotated[i * KVAR_N_DIM + dim + 64] :
-                rotated[i * KVAR_N_DIM + dim - 64] - x[i];
-        }
-        __syncthreads();
+    for (int i = 0; i < CHUNK; ++i) {
+        x[i] = dim < 64 ?
+            x[i] + rotated[i * KVAR_N_DIM + dim + 64] :
+            rotated[i * KVAR_N_DIM + dim - 64] - x[i];
+    }
+    __syncthreads();
 
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            const int token = token0 + i;
-            if (token < n_kv) {
-                half * out = dst + ((int64_t) out_stream * n_kv * n_heads + (int64_t) token * n_heads + head) * KVAR_N_DIM;
-                out[dim] = __float2half_rn(x[i] * 0.08838834764831845f);
-            }
+    for (int i = 0; i < CHUNK; ++i) {
+        const int token = token0 + i;
+        if (token < n_kv) {
+            half * out = dst + ((int64_t) out_stream * n_kv * n_heads + (int64_t) token * n_heads + head) * KVAR_N_DIM;
+            out[dim] = __float2half_rn(x[i] * 0.08838834764831845f);
         }
     }
 }
@@ -1698,6 +1696,7 @@ static __global__ void kvarn_materialize_v4_pair_kernel(
     const int stage_base = stream * KVAR_N_DIM * KVAR_N_STAGE_GROUPS;
     const bool from_stage = group == 0 || (group > 0 && group <= live_group && group + 1 >= live_group);
     const bool from_record = !from_stage && group < live_group && group < groups_per_stream;
+    __shared__ float rotated[CHUNK * KVAR_N_DIM];
     float x0[CHUNK] = {};
     float x1[CHUNK] = {};
 
@@ -1749,52 +1748,49 @@ static __global__ void kvarn_materialize_v4_pair_kernel(
         return;
     }
 
-    if constexpr (!EMIT_ROTATED) {
-        __shared__ float rotated[CHUNK * KVAR_N_DIM];
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            const float a = x0[i];
-            const float b = x1[i];
-            x0[i] = a + b;
-            x1[i] = a - b;
-        }
+    for (int i = 0; i < CHUNK; ++i) {
+        const float a = x0[i];
+        const float b = x1[i];
+        x0[i] = a + b;
+        x1[i] = a - b;
+    }
 
 #pragma unroll
-        for (int stride = 2; stride < 64; stride *= 2) {
-            const int partner = stride / 2;
+    for (int stride = 2; stride < 64; stride *= 2) {
+        const int partner = stride / 2;
 #pragma unroll
-            for (int i = 0; i < CHUNK; ++i) {
-                const float y0 = __shfl_xor_sync(0xffffffffu, x0[i], partner);
-                const float y1 = __shfl_xor_sync(0xffffffffu, x1[i], partner);
-                x0[i] = (hdim & partner) == 0 ? x0[i] + y0 : y0 - x0[i];
-                x1[i] = (hdim & partner) == 0 ? x1[i] + y1 : y1 - x1[i];
-            }
+        for (int i = 0; i < CHUNK; ++i) {
+            const float y0 = __shfl_xor_sync(0xffffffffu, x0[i], partner);
+            const float y1 = __shfl_xor_sync(0xffffffffu, x1[i], partner);
+            x0[i] = (hdim & partner) == 0 ? x0[i] + y0 : y0 - x0[i];
+            x1[i] = (hdim & partner) == 0 ? x1[i] + y1 : y1 - x1[i];
         }
+    }
 
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            rotated[i * KVAR_N_DIM + dim0] = x0[i];
-            rotated[i * KVAR_N_DIM + dim1] = x1[i];
-        }
-        __syncthreads();
+    for (int i = 0; i < CHUNK; ++i) {
+        rotated[i * KVAR_N_DIM + dim0] = x0[i];
+        rotated[i * KVAR_N_DIM + dim1] = x1[i];
+    }
+    __syncthreads();
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            const float y0 = rotated[i * KVAR_N_DIM + (dim0 ^ 64)];
-            const float y1 = rotated[i * KVAR_N_DIM + (dim1 ^ 64)];
-            x0[i] = hdim < 32 ? x0[i] + y0 : y0 - x0[i];
-            x1[i] = hdim < 32 ? x1[i] + y1 : y1 - x1[i];
-        }
-        __syncthreads();
+    for (int i = 0; i < CHUNK; ++i) {
+        const float y0 = rotated[i * KVAR_N_DIM + (dim0 ^ 64)];
+        const float y1 = rotated[i * KVAR_N_DIM + (dim1 ^ 64)];
+        x0[i] = hdim < 32 ? x0[i] + y0 : y0 - x0[i];
+        x1[i] = hdim < 32 ? x1[i] + y1 : y1 - x1[i];
+    }
+    __syncthreads();
 
 #pragma unroll
-        for (int i = 0; i < CHUNK; ++i) {
-            const int token = token0 + i;
-            if (token < n_kv) {
-                half * out = dst + ((int64_t) out_stream * n_kv * n_heads + (int64_t) token * n_heads + head) * KVAR_N_DIM;
-                *((half2 *) (out + dim0)) = __halves2half2(
-                    __float2half_rn(x0[i] * 0.08838834764831845f),
-                    __float2half_rn(x1[i] * 0.08838834764831845f));
-            }
+    for (int i = 0; i < CHUNK; ++i) {
+        const int token = token0 + i;
+        if (token < n_kv) {
+            half * out = dst + ((int64_t) out_stream * n_kv * n_heads + (int64_t) token * n_heads + head) * KVAR_N_DIM;
+            *((half2 *) (out + dim0)) = __halves2half2(
+                __float2half_rn(x0[i] * 0.08838834764831845f),
+                __float2half_rn(x1[i] * 0.08838834764831845f));
         }
     }
 }

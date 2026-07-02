@@ -781,6 +781,13 @@ static struct gguf_context * gguf_init_from_reader(const struct gguf_reader & gr
         for (size_t i = 0; i < ctx->info.size(); ++i) {
             const gguf_tensor_info & ti = ctx->info[i];
             if (ti.offset != ctx->size) {
+                if (i > 0) {
+                    GGML_LOG_ERROR("DIAG: prev tensor '%s', type %d, ne [%lld,%lld,%lld,%lld], size %zu, padded_size %zu\n",
+                        ctx->info[i-1].t.name, ctx->info[i-1].t.type,
+                        ctx->info[i-1].t.ne[0], ctx->info[i-1].t.ne[1],
+                        ctx->info[i-1].t.ne[2], ctx->info[i-1].t.ne[3],
+                        ggml_nbytes(&ctx->info[i-1].t), GGML_PAD(ggml_nbytes(&ctx->info[i-1].t), ctx->alignment));
+                }
                 GGML_LOG_ERROR("%s: tensor '%s' has offset %" PRIu64 ", expected %zu\n",
                     __func__, ti.t.name, ti.offset, ctx->size);
                 GGML_LOG_ERROR("%s: failed to read tensor data\n", __func__);

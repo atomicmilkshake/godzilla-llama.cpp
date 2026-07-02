@@ -32,9 +32,11 @@ class MiniCPMModel(TextModel):
     def generate_extra_tensors(self) -> Iterable[tuple[str, Tensor]]:
         rope_dims = self.hparams["hidden_size"] // self.hparams["num_attention_heads"]
 
-        long_factors = self.rope_parameters.get('long_factor')
-        short_factors = self.rope_parameters.get('short_factor')
-        if long_factors or short_factors:
+        rope_scaling = self.find_hparam(['rope_scaling'], True)
+        if rope_scaling is not None:
+            long_factors = rope_scaling.get('long_factor', None)
+            short_factors = rope_scaling.get('short_factor', None)
+
             if long_factors is None or short_factors is None:
                 raise KeyError('Missing the required key rope_scaling.long_factor or rope_scaling_short_factor')
 
@@ -83,10 +85,12 @@ class MiniCPM3Model(TextModel):
         self.gguf_writer.add_rope_dimension_count(hparams["qk_rope_head_dim"])
 
     def generate_extra_tensors(self) -> Iterable[tuple[str, Tensor]]:
-        long_factors = self.rope_parameters.get('long_factor')
-        short_factors = self.rope_parameters.get('short_factor')
-        if long_factors or short_factors:
+        rope_scaling = self.find_hparam(['rope_scaling'], True)
+        if rope_scaling is not None:
             rope_dims = self.hparams["qk_rope_head_dim"]
+
+            long_factors = rope_scaling.get('long_factor', None)
+            short_factors = rope_scaling.get('short_factor', None)
 
             if long_factors is None or short_factors is None:
                 raise KeyError('Missing the required key rope_scaling.long_factor or rope_scaling_short_factor')

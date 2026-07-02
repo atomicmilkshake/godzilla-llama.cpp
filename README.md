@@ -101,6 +101,9 @@ For YaRN beyond `n_ctx_train` (e.g. `-c 524288` with `--yarn-orig-ctx 262144`), 
 
 Cadre integration (managed server, HumanEval): see [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md). Rebuild helper: `V:\cadre\scripts\rebuild-godzilla.bat`.
 
+For CUDA builds, the escape hatch environment variable `GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS=1` can be set to warn instead of failing when a requested KV cache type pair is not compiled into the backend.
+
+
 ## Benchmarks
 
 ```powershell

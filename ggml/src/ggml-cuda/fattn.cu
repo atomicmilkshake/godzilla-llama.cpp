@@ -436,7 +436,9 @@ static inline float tcq_compute_alpha_v(ggml_type v_type, int64_t n_kv) {
     if (d_tcq_decode_alpha_v_static > 0.0f) return d_tcq_decode_alpha_v_static;
     if (n_kv < 1) n_kv = 1;
     const float ln_ctx = logf((float)n_kv);
-    if (v_type == GGML_TYPE_TURBO3_TCQ) {
+    if (v_type == GGML_TYPE_TURBO4_TCQ) {
+        return 1.0f;
+    } else if (v_type == GGML_TYPE_TURBO3_TCQ) {
         // v3: 3-point fit from fine-grained KLD sweeps at 8K/16K/32K on Qwen3.5-27B.
         // Per-token: n_kv=512→1.044, 2K→1.024, 8K→1.004, 16K→0.994, 32K→0.984
         // Clamped [0.98, 1.06] — early tokens (small n_kv) use higher alpha.
@@ -480,6 +482,31 @@ static void load_tcq_decode_alpha(int device) {
         if (device == 0) fprintf(stderr, "TCQ decode: V alpha=%.4f (static override)\n", d_tcq_decode_alpha_v_static);
     } else {
         if (device == 0) fprintf(stderr, "TCQ decode: context-adaptive V alpha enabled\n");
+    }
+}
+
+static void load_tcq4_codebook_fattn(int device, const char * label) {
+    static bool tcq4_cb_loaded[GGML_CUDA_MAX_DEVICES] = {};
+    if (tcq4_cb_loaded[device]) {
+        return;
+    }
+    tcq4_cb_loaded[device] = true;
+    const char * cb_path = getenv("TURBO_TCQ_CB4");
+    if (!cb_path) {
+        return;
+    }
+
+    float cb[1024];
+    FILE * f = fopen(cb_path, "rb");
+    if (f && fread(cb, sizeof(float), 1024, f) == 1024) {
+        fclose(f);
+        cudaMemcpyToSymbol(d_turbo4_tcq_codebook_fattn, cb, 1024*sizeof(float));
+        fprintf(stderr, "%s: loaded 4-bit codebook from %s (device %d)\n", label, cb_path, device);
+    } else {
+        if (f) {
+            fclose(f);
+        }
+        fprintf(stderr, "%s: FAILED to load 4-bit codebook from %s\n", label, cb_path);
     }
 }
 
@@ -557,6 +584,33 @@ static __global__ void k_turbo3_tcq_dequant_f16(
     const uint16_t raw = (uint16_t)blk->qs[byte_idx] | ((uint16_t)blk->qs[byte_idx + 1] << 8);
     const int state = (raw >> bit_off) & 0x1FF;
     const float val = d_turbo3_tcq_codebook_fattn[state] * norm;
+
+    dst[strm * (ne1 * ne2 * ne0) + row * (ne2 * ne0) + head * ne0 + j] = __float2half(val);
+}
+
+static __global__ void k_turbo4_tcq_dequant_f16(
+        const char * __restrict__ src, half * __restrict__ dst,
+        const int64_t ne0, const int64_t ne1, const int64_t ne2,
+        const size_t nb1, const size_t nb2, const size_t nb3,
+        const float alpha) {
+    const int64_t row  = blockIdx.x;
+    const int64_t head = blockIdx.y;
+    const int64_t strm = blockIdx.z;
+    const int j = threadIdx.x;
+    if (j >= ne0) return;
+
+    const char * src_row = src + strm * nb3 + head * nb2 + row * nb1;
+    const int blk_idx  = j / QK_TURBO4_TCQ;
+    const int t = j % QK_TURBO4_TCQ;
+    const block_turbo4_tcq * blk = (const block_turbo4_tcq *)src_row + blk_idx;
+
+    const float norm = __half2float(blk->norm) * alpha;
+    const int bit_pos = t * 4;
+    const int byte_idx = bit_pos / 8;
+    const int bit_off = bit_pos % 8;
+    const uint16_t raw = (uint16_t)blk->qs[byte_idx] | ((uint16_t)blk->qs[byte_idx + 1] << 8);
+    const int state = (raw >> bit_off) & 0x3FF;
+    const float val = d_turbo4_tcq_codebook_fattn[state] * norm;
 
     dst[strm * (ne1 * ne2 * ne0) + row * (ne2 * ne0) + head * ne0 + j] = __float2half(val);
 }
@@ -823,6 +877,47 @@ static __global__ void k_turbo3_tcq_dequant_f16_inv_fwht(
     }
 }
 
+// turbo4_tcq K dequant with inverse FWHT: produces K in original (unrotated) domain.
+static __global__ void k_turbo4_tcq_dequant_f16_inv_fwht(
+        const char * __restrict__ src, half * __restrict__ dst,
+        const int64_t ne0, const int64_t ne1, const int64_t ne2,
+        const size_t nb1, const size_t nb2, const size_t nb3,
+        const float alpha) {
+    const int64_t row  = blockIdx.x;
+    const int64_t head = blockIdx.y;
+    const int64_t strm = blockIdx.z;
+    const int tid = threadIdx.x;
+
+    const char * src_row = src + strm * nb3 + head * nb2 + row * nb1;
+    const int64_t dst_base = strm * (ne1 * ne2 * ne0) + row * (ne2 * ne0) + head * ne0;
+
+    __shared__ float smem[128];
+
+    const float * s1 = d_turbo_wht_signs1_fattn;
+    const float * s2 = d_turbo_wht_signs2_fattn;
+    constexpr float inv_sqrt_128 = 0.08838834764831845f;
+
+    const int n_blocks = (int)(ne0 / QK_TURBO4_TCQ);
+
+    for (int blk_idx = 0; blk_idx < n_blocks; blk_idx++) {
+        const block_turbo4_tcq * blk = (const block_turbo4_tcq *)src_row + blk_idx;
+        const float norm = __half2float(blk->norm) * alpha;
+
+        const int bit_pos = tid * 4;
+        const int byte_idx = bit_pos / 8;
+        const int bit_off = bit_pos % 8;
+        const uint16_t raw = (uint16_t)blk->qs[byte_idx] | ((uint16_t)blk->qs[byte_idx + 1] << 8);
+        const int state = (raw >> bit_off) & 0x3FF;
+        const float c = d_turbo4_tcq_codebook_fattn[state];
+
+        float val = fwht128_butterfly_inplace(c * s2[tid], smem);
+
+        val = val * inv_sqrt_128 * s1[tid] * d_innerq_channel_scale_inv_fattn[tid] * norm;
+        fwht128_store_half(val, dst + dst_base + blk_idx * 128);
+        __syncthreads();
+    }
+}
+
 // turbo2_tcq K dequant with inverse FWHT: produces K in original (unrotated) domain.
 static __global__ void k_turbo2_tcq_dequant_f16_inv_fwht(
         const char * __restrict__ src, half * __restrict__ dst,
@@ -890,25 +985,6 @@ static __global__ void k_q8_0_dequant_f16_tkhe(
     dst[strm * (ne1 * ne2 * ne0) + row * (ne2 * ne0) + head * ne0 + j] = __float2half(val);
 }
 
-// bf16 K/V cast to f16 in the same TKHE layout as k_q8_0_dequant_f16_tkhe. Used when a bf16
-// side is paired with a turbo side: the f16-only MMA/VEC kernels need an f16 input, and bf16 is
-// already in the original (unrotated) domain so no rotation is applied. 1 thread per element.
-static __global__ void k_bf16_to_f16_tkhe(
-        const char * __restrict__ src, half * __restrict__ dst,
-        const int64_t ne0, const int64_t ne1, const int64_t ne2,
-        const size_t nb1, const size_t nb2, const size_t nb3) {
-    const int64_t row  = blockIdx.x;
-    const int64_t head = blockIdx.y;
-    const int64_t strm = blockIdx.z;
-    const int j = threadIdx.x;
-    if (j >= ne0) return;
-
-    const nv_bfloat16 * src_row = (const nv_bfloat16 *)(src + strm * nb3 + row * nb1 + head * nb2);
-    const float val = __bfloat162float(src_row[j]);
-
-    dst[strm * (ne1 * ne2 * ne0) + row * (ne2 * ne0) + head * ne0 + j] = __float2half(val);
-}
-
 // Persistent Q rotation buffer per device (shared between prefill and decode paths)
 static float * q_rot_buf[GGML_CUDA_MAX_DEVICES] = {};
 static size_t  q_rot_buf_size[GGML_CUDA_MAX_DEVICES] = {};
@@ -949,28 +1025,75 @@ static __global__ void k_turbo_fwht_forward(
     }
 }
 
+static inline bool ggml_cuda_fattn_is_classic_non_q8_type(const ggml_type type) {
+    return type == GGML_TYPE_BF16 ||
+           type == GGML_TYPE_Q4_0 ||
+           type == GGML_TYPE_Q4_1 ||
+           type == GGML_TYPE_Q5_0 ||
+           type == GGML_TYPE_Q5_1 ||
+           type == GGML_TYPE_Q6_0 ||
+           type == GGML_TYPE_Q6_1 ||
+           type == GGML_TYPE_Q3_0 ||
+           type == GGML_TYPE_Q3_1 ||
+           type == GGML_TYPE_Q2_0 ||
+           type == GGML_TYPE_Q2_1;
+}
+
+static void ggml_cuda_fattn_materialize_to_f16(
+        const ggml_tensor * src, half * dst, cudaStream_t stream, ggml_tensor & src_f16) {
+    const size_t bs = ggml_blck_size(src->type);
+    const size_t ts = ggml_type_size(src->type);
+
+    src_f16 = *src;
+    src_f16.type = GGML_TYPE_F16;
+    src_f16.data = dst;
+    src_f16.nb[0] = sizeof(half);
+
+    if (ggml_is_contiguously_allocated(src)) {
+        const to_fp16_cuda_t to_fp16 = ggml_get_to_fp16_cuda(src->type);
+        GGML_ASSERT(to_fp16 != nullptr);
+        to_fp16(src->data, dst, ggml_nelements(src), stream);
+
+        src_f16.nb[1] = src->nb[1] * bs * sizeof(half) / ts;
+        src_f16.nb[2] = src->nb[2] * bs * sizeof(half) / ts;
+        src_f16.nb[3] = src->nb[3] * bs * sizeof(half) / ts;
+    } else {
+        GGML_ASSERT(src->nb[0] == ts);
+        const to_fp16_nc_cuda_t to_fp16 = ggml_get_to_fp16_nc_cuda(src->type);
+        GGML_ASSERT(to_fp16 != nullptr);
+        const int64_t s01 = src->nb[1] / ts;
+        const int64_t s02 = src->nb[2] / ts;
+        const int64_t s03 = src->nb[3] / ts;
+        to_fp16(src->data, dst, src->ne[0], src->ne[1], src->ne[2], src->ne[3], s01, s02, s03, stream);
+
+        src_f16.nb[1] = src->ne[0] * sizeof(half);
+        src_f16.nb[2] = src->ne[1] * src_f16.nb[1];
+        src_f16.nb[3] = src->ne[2] * src_f16.nb[2];
+    }
+}
+
 static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     load_tcq_decode_alpha(ctx.device);
     cudaStream_t stream = ctx.stream();
     const ggml_tensor * K = dst->src[1];
     const ggml_tensor * V = dst->src[2];
 
-    const bool turbo_k = K->type == GGML_TYPE_TURBO2_0 || K->type == GGML_TYPE_TURBO3_0 || K->type == GGML_TYPE_TURBO4_0 || K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ;
-    const bool turbo_v = V->type == GGML_TYPE_TURBO2_0 || V->type == GGML_TYPE_TURBO3_0 || V->type == GGML_TYPE_TURBO4_0 || V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ;
-    // Mixed (asymmetric) K/V: a q8_0 or bf16 side must be dequanted to f16 here too.
-    const bool q8_k = K->type == GGML_TYPE_Q8_0;
-    const bool q8_v = V->type == GGML_TYPE_Q8_0;
-    const bool bf16_k = K->type == GGML_TYPE_BF16;
-    const bool bf16_v = V->type == GGML_TYPE_BF16;
+    const bool turbo_k = K->type == GGML_TYPE_TURBO2_0 || K->type == GGML_TYPE_TURBO3_0 || K->type == GGML_TYPE_TURBO4_0 || K->type == GGML_TYPE_TURBO4_TCQ || K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ;
+    const bool turbo_v = V->type == GGML_TYPE_TURBO2_0 || V->type == GGML_TYPE_TURBO3_0 || V->type == GGML_TYPE_TURBO4_0 || V->type == GGML_TYPE_TURBO4_TCQ || V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ;
+    const bool classic_non_q8_v = !turbo_v && ggml_cuda_fattn_is_classic_non_q8_type(V->type);
 
     int device;
     CUDA_CHECK(cudaGetDevice(&device));
 
     half * k_fp16 = nullptr;
     half * v_fp16 = nullptr;
+    bool v_f16_layout_set = false;
 
-    // Allocate and dequant K to fp16 (turbo2/3/4, q8_0, or bf16)
-    if (turbo_k || q8_k || bf16_k) {
+    ggml_tensor K_f16 = *K;
+    ggml_tensor V_f16 = *V;
+
+    // Allocate and dequant K to fp16 (turbo2, turbo3, or turbo4)
+    if (turbo_k) {
         // Size for full cache (kv_size from root) so we never realloc mid-session.
         const ggml_tensor * k_root = K;
         while (k_root->view_src) k_root = k_root->view_src;
@@ -988,6 +1111,10 @@ static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml
         } else if (K->type == GGML_TYPE_TURBO3_0) {
             k_turbo3_dequant_f16<<<grid_k, K->ne[0], 0, stream>>>(
                 (const char *)K->data, k_fp16, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
+        } else if (K->type == GGML_TYPE_TURBO4_TCQ) {
+            load_tcq4_codebook_fattn(device, "TCQ4 K prefill");
+            k_turbo4_tcq_dequant_f16<<<grid_k, K->ne[0], 0, stream>>>(
+                (const char *)K->data, k_fp16, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3], d_tcq_decode_alpha_k);
         } else if (K->type == GGML_TYPE_TURBO3_TCQ) {
             {
                 static bool tcq_fattn_k_cb_loaded[GGML_CUDA_MAX_DEVICES] = {};
@@ -1032,21 +1159,15 @@ static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml
             }
             k_turbo2_tcq_dequant_f16<<<grid_k, K->ne[0], 0, stream>>>(
                 (const char *)K->data, k_fp16, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3], d_tcq_decode_alpha_k);
-        } else if (K->type == GGML_TYPE_TURBO4_0) {
+        } else {
             // turbo4 K: inverse FWHT dequant → produces K in original domain (no Q rotation needed)
             k_turbo4_dequant_f16_inv_fwht<<<grid_k, 128, 0, stream>>>(
-                (const char *)K->data, k_fp16, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
-        } else if (K->type == GGML_TYPE_BF16) {
-            k_bf16_to_f16_tkhe<<<grid_k, K->ne[0], 0, stream>>>(
-                (const char *)K->data, k_fp16, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
-        } else {
-            k_q8_0_dequant_f16_tkhe<<<grid_k, K->ne[0], 0, stream>>>(
                 (const char *)K->data, k_fp16, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
         }
     }
 
-    // Allocate and dequant V to fp16 (turbo2/3/4, q8_0, or bf16)
-    if (turbo_v || q8_v || bf16_v) {
+    // Allocate and materialize V to fp16 (turbo2, turbo3, turbo4, or classic non-q8).
+    if (turbo_v || classic_non_q8_v) {
         // Size for full cache (kv_size from root) so we never realloc mid-session.
         const ggml_tensor * v_root = V;
         while (v_root->view_src) v_root = v_root->view_src;
@@ -1064,6 +1185,10 @@ static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml
         } else if (V->type == GGML_TYPE_TURBO3_0) {
             k_turbo3_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
                 (const char *)V->data, v_fp16, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
+        } else if (V->type == GGML_TYPE_TURBO4_TCQ) {
+            load_tcq4_codebook_fattn(device, "TCQ4 V decode");
+            k_turbo4_tcq_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
+                (const char *)V->data, v_fp16, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3], tcq_compute_alpha_v(V->type, V->ne[1]));
         } else if (V->type == GGML_TYPE_TURBO3_TCQ) {
             // Runtime codebook loading for 3-bit V decode (in case K is a different type)
             {
@@ -1111,18 +1236,11 @@ static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml
         } else if (V->type == GGML_TYPE_TURBO4_0) {
             k_turbo4_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
                 (const char *)V->data, v_fp16, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
-        } else if (V->type == GGML_TYPE_BF16) {
-            k_bf16_to_f16_tkhe<<<grid_v, V->ne[0], 0, stream>>>(
-                (const char *)V->data, v_fp16, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
         } else {
-            k_q8_0_dequant_f16_tkhe<<<grid_v, V->ne[0], 0, stream>>>(
-                (const char *)V->data, v_fp16, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
+            ggml_cuda_fattn_materialize_to_f16(V, v_fp16, stream, V_f16);
+            v_f16_layout_set = true;
         }
     }
-
-    // Create fp16 tensor copies on stack
-    ggml_tensor K_f16 = *K;
-    ggml_tensor V_f16 = *V;
 
     if (k_fp16) {
         K_f16.type = GGML_TYPE_F16;
@@ -1133,7 +1251,7 @@ static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml
         K_f16.nb[3] = K->ne[0] * K->ne[1] * K->ne[2] * sizeof(half);
     }
 
-    if (v_fp16) {
+    if (v_fp16 && !v_f16_layout_set) {
         V_f16.type = GGML_TYPE_F16;
         V_f16.data = v_fp16;
         V_f16.nb[0] = sizeof(half);
@@ -1205,130 +1323,843 @@ static void ggml_cuda_turbo_prefill_attend(ggml_backend_cuda_context & ctx, ggml
     FATTN_VEC_CASE(256, type_K, type_V)       \
     FATTN_VEC_CASE(512, type_K, type_V)       \
 
+static inline bool ggml_cuda_fattn_is_turbo_kv_type(const ggml_type type) {
+    return type == GGML_TYPE_TURBO2_0   ||
+           type == GGML_TYPE_TURBO3_0   ||
+           type == GGML_TYPE_TURBO4_0   ||
+           type == GGML_TYPE_TURBO4_TCQ ||
+           type == GGML_TYPE_TURBO3_TCQ ||
+           type == GGML_TYPE_TURBO2_TCQ;
+}
+
+static inline bool ggml_cuda_turbo_prefill_mma_can_make_f16(const ggml_type type) {
+    return type == GGML_TYPE_F16 || ggml_cuda_fattn_is_turbo_kv_type(type);
+}
+
+static inline int ggml_cuda_fattn_kv_rank(const ggml_type type) {
+    switch (type) {
+        case GGML_TYPE_F32:
+        case GGML_TYPE_F16:         return 0;
+        case GGML_TYPE_BF16:        return 1;
+        case GGML_TYPE_Q8_0:        return 2;
+        case GGML_TYPE_Q6_1:        return 3;
+        case GGML_TYPE_Q6_0:        return 4;
+        case GGML_TYPE_Q5_1:        return 5;
+        case GGML_TYPE_Q5_0:        return 6;
+        case GGML_TYPE_Q4_1:
+        case GGML_TYPE_TURBO4_TCQ:
+        case GGML_TYPE_TURBO4_0:    return 7;
+        case GGML_TYPE_Q4_0:        return 8;
+        case GGML_TYPE_Q3_1:
+        case GGML_TYPE_TURBO3_TCQ:
+        case GGML_TYPE_TURBO3_0:    return 9;
+        case GGML_TYPE_Q3_0:        return 10;
+        case GGML_TYPE_Q2_1:
+        case GGML_TYPE_TURBO2_TCQ:
+        case GGML_TYPE_TURBO2_0:    return 11;
+        case GGML_TYPE_Q2_0:        return 12;
+        default:                    return -1;
+    }
+}
+
+static inline bool ggml_cuda_fattn_is_ranked_kv_type(const ggml_type type) {
+    return ggml_cuda_fattn_kv_rank(type) >= 0;
+}
+
+static inline ggml_type ggml_cuda_fattn_canonical_kv_type(const ggml_type type) {
+    return type == GGML_TYPE_F32 ? GGML_TYPE_F16 : type;
+}
+
+#if !defined(GGML_CUDA_FA_ALL_QUANTS) && !defined(GGML_CUDA_FA_HALF_QUANTS)
+static inline int ggml_cuda_fattn_default_kv_tier(const ggml_type type) {
+    switch (ggml_cuda_fattn_canonical_kv_type(type)) {
+        case GGML_TYPE_F16:
+        case GGML_TYPE_BF16:
+            return 0;
+        case GGML_TYPE_Q8_0:
+        case GGML_TYPE_Q6_1:
+        case GGML_TYPE_Q6_0:
+            return 1;
+        case GGML_TYPE_Q5_1:
+        case GGML_TYPE_Q5_0:
+            return 2;
+        case GGML_TYPE_Q4_1:
+        case GGML_TYPE_Q4_0:
+            return 3;
+        case GGML_TYPE_Q3_1:
+        case GGML_TYPE_Q3_0:
+            return 4;
+        case GGML_TYPE_Q2_1:
+        case GGML_TYPE_Q2_0:
+            return 5;
+        default:
+            return -1;
+    }
+}
+
+static inline bool ggml_cuda_fattn_default_pair_compiled(const ggml_type type_K, const ggml_type type_V) {
+    if (ggml_cuda_fattn_is_turbo_kv_type(type_K) || ggml_cuda_fattn_is_turbo_kv_type(type_V)) {
+        return false;
+    }
+
+    const int rank_K = ggml_cuda_fattn_kv_rank(type_K);
+    const int rank_V = ggml_cuda_fattn_kv_rank(type_V);
+    const int tier_K = ggml_cuda_fattn_default_kv_tier(type_K);
+    const int tier_V = ggml_cuda_fattn_default_kv_tier(type_V);
+
+    if (rank_K < 0 || rank_V < 0 || tier_K < 0 || tier_V < 0) {
+        return false;
+    }
+
+    if ((type_K == GGML_TYPE_F16 || type_K == GGML_TYPE_BF16) &&
+        (type_V == GGML_TYPE_F16 || type_V == GGML_TYPE_BF16) &&
+        type_K != type_V) {
+        return false;
+    }
+
+    return rank_K <= rank_V && tier_V - tier_K <= 2;
+}
+#endif
+
+static inline bool ggml_cuda_fattn_pair_compiled(const ggml_type type_K_in, const ggml_type type_V_in) {
+    const ggml_type type_K = ggml_cuda_fattn_canonical_kv_type(type_K_in);
+    const ggml_type type_V = ggml_cuda_fattn_canonical_kv_type(type_V_in);
+
+#if defined(GGML_CUDA_FA_ALL_QUANTS)
+    return ggml_cuda_fattn_is_ranked_kv_type(type_K) &&
+           ggml_cuda_fattn_is_ranked_kv_type(type_V);
+#elif defined(GGML_CUDA_FA_HALF_QUANTS)
+    const int rank_K = ggml_cuda_fattn_kv_rank(type_K);
+    const int rank_V = ggml_cuda_fattn_kv_rank(type_V);
+
+    return rank_K >= 0 && rank_V >= 0 &&
+           (rank_K <= rank_V || type_K == GGML_TYPE_F16 || type_V == GGML_TYPE_F16);
+#else
+    return ggml_cuda_fattn_default_pair_compiled(type_K, type_V);
+#endif
+}
+
+const char * ggml_cuda_fa_build_policy() {
+#if defined(GGML_CUDA_FA_ALL_QUANTS)
+    return "all";
+#elif defined(GGML_CUDA_FA_HALF_QUANTS)
+    return "half";
+#else
+    return "default";
+#endif
+}
+
+bool ggml_cuda_fa_pair_compiled(ggml_type type_K, ggml_type type_V) {
+    return ggml_cuda_fattn_pair_compiled(type_K, type_V);
+}
+
+static inline bool ggml_cuda_fattn_prefers_native_vec_for_turbo_k_classic_v(
+        const ggml_tensor * Q, const ggml_tensor * K, const ggml_tensor * V) {
+    return ggml_cuda_fattn_is_turbo_kv_type(K->type) &&
+           !ggml_cuda_fattn_is_turbo_kv_type(V->type) &&
+           ggml_cuda_fattn_is_classic_non_q8_type(V->type) &&
+           Q->ne[0] <= 512 &&
+           Q->ne[0] % 64 == 0 &&
+           ggml_cuda_fattn_pair_compiled(K->type, V->type);
+}
+
+static inline bool ggml_cuda_fattn_prefill_mma_can_materialize_turbo_k_classic_v(
+        const ggml_tensor * K, const ggml_tensor * V) {
+    return ggml_cuda_fattn_is_turbo_kv_type(K->type) &&
+           !ggml_cuda_fattn_is_turbo_kv_type(V->type) &&
+           ggml_cuda_fattn_is_classic_non_q8_type(V->type);
+}
+
+static inline bool ggml_cuda_fattn_is_turbo_v_decode_unsafe_k_type(const ggml_type type) {
+    return type == GGML_TYPE_Q8_0 ||
+           ggml_cuda_fattn_is_classic_non_q8_type(type);
+}
+
+// Shape guard for the effective K/V pair after Turbo V decode-dequant.
+// D>=256 with classic-or-q8 K/f16 V is unsafe on the vec path.
+// Only applied when V was actually decoded from Turbo — explicit q5_0/f16
+// at D>=256 is unaffected. D=128 is safe on vec and not gated.
+static inline bool ggml_cuda_fattn_effective_vec_shape_unsafe(
+        const ggml_tensor * Q, const ggml_tensor * K, const ggml_tensor * V) {
+    return Q->ne[0] >= 256 &&
+           ggml_cuda_fattn_is_turbo_v_decode_unsafe_k_type(K->type) &&
+           V->type == GGML_TYPE_F16;
+}
+
 static void ggml_cuda_flash_attn_ext_vec(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     ggml_tensor * Q = dst->src[0];
     ggml_tensor * K = dst->src[1];
     ggml_tensor * V = dst->src[2];
 
-#ifdef GGML_CUDA_FA_ALL_QUANTS
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_F16)
+#if defined(GGML_CUDA_FA_ALL_QUANTS)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q2_0)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_F16)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q4_0)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q4_1)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_0)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_1)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_1)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_0)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_BF16)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q8_0)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_F16)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_BF16)
-
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,     GGML_TYPE_TURBO2_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,     GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,     GGML_TYPE_TURBO4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO2_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO3_TCQ)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO2_TCQ)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,       GGML_TYPE_TURBO3_TCQ)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,       GGML_TYPE_TURBO2_TCQ)
-#else
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16,  GGML_TYPE_F16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_0)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_BF16)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_BF16)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,     GGML_TYPE_TURBO2_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,     GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,     GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO3_TCQ)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO4_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO3_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO2_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO3_TCQ)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_BF16)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_BF16)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q8_0)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,       GGML_TYPE_TURBO3_TCQ)
-    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0,       GGML_TYPE_TURBO2_TCQ)
-#endif // GGML_CUDA_FA_ALL_QUANTS
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q2_0)
+#elif defined(GGML_CUDA_FA_HALF_QUANTS)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_TCQ, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO4_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_TCQ, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_TCQ, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_TCQ)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q2_0)
+#else
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_F16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_F16, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_BF16)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_BF16, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q8_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q8_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q6_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q6_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q6_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q5_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q5_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q4_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q4_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q3_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q3_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q3_0, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q2_1)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_1, GGML_TYPE_Q2_0)
+    FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_Q2_0, GGML_TYPE_Q2_0)
+#endif
 
-    GGML_ABORT("fatal error");
+    fprintf(stderr,
+        "CUDA FA vec dispatch missing compiled K/V pair: K=%s V=%s D=%lld. "
+        "Use standard q/KVarN fallback cache types in the default build, or rebuild with "
+        "GGML_CUDA_FA_HALF_QUANTS or GGML_CUDA_FA_ALL_QUANTS for Turbo/TCQ or arbitrary pairs.\n",
+        ggml_type_name(K->type), ggml_type_name(V->type), (long long) Q->ne[0]);
+    GGML_ABORT("missing CUDA FA vec K/V pair");
+}
+
+// Very verbose CUDA FA route tracing. Intentionally env-gated; do not enable
+// for performance measurements or wire into normal -lv verbosity levels.
+static inline bool ggml_cuda_fattn_route_debug_enabled() {
+    static const bool enabled = [] {
+        const char * e = getenv("GGML_CUDA_FA_ROUTE_DEBUG");
+        return e != nullptr && atoi(e) != 0;
+    }();
+    return enabled;
+}
+
+static inline bool ggml_cuda_fattn_ignore_uncompiled_pairs() {
+    static const bool enabled = [] {
+        const char * e = getenv("GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS");
+        return e != nullptr && atoi(e) != 0;
+    }();
+    return enabled;
 }
 
 // Best FlashAttention kernel for a specific GPU:
@@ -1340,9 +2171,20 @@ enum best_fattn_kernel {
     BEST_FATTN_KERNEL_MMA_F16  = 400,
 };
 
-static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const ggml_tensor * dst) {
+static const char * ggml_cuda_fattn_kernel_name(const best_fattn_kernel kernel) {
+    switch (kernel) {
+        case BEST_FATTN_KERNEL_NONE:     return "NONE";
+        case BEST_FATTN_KERNEL_VEC:      return "VEC";
+        case BEST_FATTN_KERNEL_TILE:     return "TILE";
+        case BEST_FATTN_KERNEL_WMMA_F16: return "WMMA_F16";
+        case BEST_FATTN_KERNEL_MMA_F16:  return "MMA_F16";
+    }
+    return "UNKNOWN";
+}
+
+static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const ggml_tensor * dst, bool allow_vec = true) {
 #ifndef FLASH_ATTN_AVAILABLE
-    GGML_UNUSED(device); GGML_UNUSED(dst);
+    GGML_UNUSED(device); GGML_UNUSED(dst); GGML_UNUSED(allow_vec);
     return BEST_FATTN_KERNEL_NONE;
 #endif// FLASH_ATTN_AVAILABLE
 
@@ -1424,12 +2266,6 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
             return BEST_FATTN_KERNEL_NONE;
     }
 
-#ifndef GGML_CUDA_FA_ALL_QUANTS
-    if (K->type != V->type) {
-        return BEST_FATTN_KERNEL_NONE;
-    }
-#endif // GGML_CUDA_FA_ALL_QUANTS
-
     switch (K->type) {
         case GGML_TYPE_F32:
         case GGML_TYPE_F16:
@@ -1438,21 +2274,30 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
         case GGML_TYPE_Q5_0:
         case GGML_TYPE_Q5_1:
         case GGML_TYPE_Q6_0:
-#ifndef GGML_CUDA_FA_ALL_QUANTS
-            return BEST_FATTN_KERNEL_NONE;
-#endif // GGML_CUDA_FA_ALL_QUANTS
+        case GGML_TYPE_Q6_1:
+        case GGML_TYPE_Q3_0:
+        case GGML_TYPE_Q3_1:
+        case GGML_TYPE_Q2_0:
+        case GGML_TYPE_Q2_1:
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q8_0:
         case GGML_TYPE_BF16:
         case GGML_TYPE_TURBO2_0:
         case GGML_TYPE_TURBO3_0:
         case GGML_TYPE_TURBO4_0:
+        case GGML_TYPE_TURBO4_TCQ:
         case GGML_TYPE_TURBO3_TCQ:
         case GGML_TYPE_TURBO2_TCQ:
             break;
         default:
             return BEST_FATTN_KERNEL_NONE;
     }
+
+    const bool pair_compiled = ggml_cuda_fattn_pair_compiled(K->type, V->type);
+    if (!pair_compiled && !ggml_cuda_fattn_ignore_uncompiled_pairs()) {
+        return BEST_FATTN_KERNEL_NONE;
+    }
+    allow_vec = allow_vec && pair_compiled;
 
     if (mask && mask->ne[2] != 1) {
         return BEST_FATTN_KERNEL_NONE;
@@ -1463,9 +2308,10 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     if (K->type == GGML_TYPE_TURBO2_0 || V->type == GGML_TYPE_TURBO2_0 ||
         K->type == GGML_TYPE_TURBO3_0 || V->type == GGML_TYPE_TURBO3_0 ||
         K->type == GGML_TYPE_TURBO4_0 || V->type == GGML_TYPE_TURBO4_0 ||
+        K->type == GGML_TYPE_TURBO4_TCQ || V->type == GGML_TYPE_TURBO4_TCQ ||
         K->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO3_TCQ ||
         K->type == GGML_TYPE_TURBO2_TCQ || V->type == GGML_TYPE_TURBO2_TCQ) {
-        if (Q->ne[0] <= 512 && Q->ne[0] % 64 == 0)
+        if (allow_vec && Q->ne[0] <= 512 && Q->ne[0] % 64 == 0)
             return BEST_FATTN_KERNEL_VEC;
         return BEST_FATTN_KERNEL_NONE;
     }
@@ -1477,21 +2323,21 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     if (turing_mma_available(cc) && Q->ne[0] != 40 && Q->ne[0] != 72) {
         if (can_use_vector_kernel) {
             if (!ggml_is_quantized(K->type) && !ggml_is_quantized(V->type)) {
-                if (cc >= GGML_CUDA_CC_ADA_LOVELACE && Q->ne[1] == 1 && Q->ne[3] == 1 && !(gqa_ratio > 4 && K->ne[1] >= 8192)) {
+                if (allow_vec && cc >= GGML_CUDA_CC_ADA_LOVELACE && Q->ne[1] == 1 && Q->ne[3] == 1 && !(gqa_ratio > 4 && K->ne[1] >= 8192)) {
                     return BEST_FATTN_KERNEL_VEC;
                 }
             } else {
                 if (cc >= GGML_CUDA_CC_ADA_LOVELACE) {
-                    if (Q->ne[1] <= 2) {
+                    if (allow_vec && Q->ne[1] <= 2) {
                         return BEST_FATTN_KERNEL_VEC;
                     }
                 } else {
-                    if (Q->ne[1] == 1) {
+                    if (allow_vec && Q->ne[1] == 1) {
                         return BEST_FATTN_KERNEL_VEC;
                     }
                 }
             }
-            if (!gqa_opt_applies && Q->ne[1] == 1) {
+            if (allow_vec && !gqa_opt_applies && Q->ne[1] == 1) {
                 return BEST_FATTN_KERNEL_VEC;
             }
         }
@@ -1505,7 +2351,7 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     }
 
     if (volta_mma_available(cc) && Q->ne[0] != 40 && Q->ne[0] != 72) {
-        if (can_use_vector_kernel && Q->ne[1] * gqa_ratio_eff <= 2) {
+        if (allow_vec && can_use_vector_kernel && Q->ne[1] * gqa_ratio_eff <= 2) {
             return BEST_FATTN_KERNEL_VEC;
         }
         if (Q->ne[1] * gqa_ratio_eff <= 16) {
@@ -1516,7 +2362,7 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
 
     // Use the WMMA kernel if possible:
     if (ggml_cuda_should_use_wmma_fattn(cc) && K->ne[1] % FATTN_KQ_STRIDE == 0 && Q->ne[0] != 40 && Q->ne[0] != 72 && Q->ne[0] != 192 && Q->ne[0] != 512 && Q->ne[0] != 576) {
-        if (can_use_vector_kernel && Q->ne[1] <= 2) {
+        if (allow_vec && can_use_vector_kernel && Q->ne[1] <= 2) {
             return BEST_FATTN_KERNEL_VEC;
         }
         return BEST_FATTN_KERNEL_WMMA_F16;
@@ -1543,13 +2389,13 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     // If there are no tensor cores available, use the generic tile kernel:
     if (can_use_vector_kernel) {
         if (!ggml_is_quantized(K->type) && !ggml_is_quantized(V->type)) {
-            if (Q->ne[1] == 1) {
+            if (allow_vec && Q->ne[1] == 1) {
                 if (!gqa_opt_applies) {
                     return BEST_FATTN_KERNEL_VEC;
                 }
             }
         } else {
-            if (Q->ne[1] <= 2) {
+            if (allow_vec && Q->ne[1] <= 2) {
                 return BEST_FATTN_KERNEL_VEC;
             }
         }
@@ -1557,37 +2403,218 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     return BEST_FATTN_KERNEL_TILE;
 }
 
-size_t ggml_cuda_flash_attn_ext_get_alloc_size(int device, const ggml_tensor * dst) {
-    GGML_ASSERT(dst->op == GGML_OP_FLASH_ATTN_EXT);
+struct ggml_cuda_fattn_route_plan {
+    ggml_type effective_type_K;
+    ggml_type effective_type_V;
+    bool decode_dequant;
+    bool decode_dequant_K;
+    bool decode_dequant_V;
+    bool need_generic_f16_K;
+    bool need_generic_f16_V;
+    bool allow_vec;
+    bool unsafe_vec_after_turbo_v_decode;
+    best_fattn_kernel kernel;
+};
 
+static ggml_cuda_fattn_route_plan ggml_cuda_fattn_make_route_plan(const int device, const ggml_tensor * dst) {
+    GGML_ASSERT(dst != nullptr);
+    GGML_ASSERT(dst->src[0] != nullptr);
+    GGML_ASSERT(dst->src[1] != nullptr);
+    GGML_ASSERT(dst->src[2] != nullptr);
+
+    const ggml_tensor * Q = dst->src[0];
     const ggml_tensor * K = dst->src[1];
     const ggml_tensor * V = dst->src[2];
 
-    GGML_ASSERT(K != nullptr);
-    GGML_ASSERT(V != nullptr);
+    ggml_cuda_fattn_route_plan plan = {};
 
-    const best_fattn_kernel kernel = ggml_cuda_get_best_fattn_kernel(device, dst);
+    const bool turbo_kv =
+        ggml_cuda_fattn_is_turbo_kv_type(K->type) ||
+        ggml_cuda_fattn_is_turbo_kv_type(V->type);
 
-    bool need_f16_K = false;
-    bool need_f16_V = false;
+#if defined(GGML_USE_HIP)
+    const bool hip_native_tcq_decode =
+        K->type == GGML_TYPE_TURBO4_TCQ || K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ ||
+        V->type == GGML_TYPE_TURBO4_TCQ || V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ;
+#else
+    const bool hip_native_tcq_decode = false;
+#endif
 
-    switch (kernel) {
+    const bool turbo_decode_native = getenv("GGML_TURBO_DECODE_NATIVE") != nullptr;
+    const bool prefer_native_vec =
+        ggml_cuda_fattn_prefers_native_vec_for_turbo_k_classic_v(Q, K, V);
+
+    const bool turbo_k_only = ggml_cuda_fattn_is_turbo_kv_type(K->type);
+    const bool turbo_v_only = ggml_cuda_fattn_is_turbo_kv_type(V->type);
+
+    const bool classic_non_q8_K_turbo_V =
+        ggml_cuda_fattn_is_classic_non_q8_type(K->type) &&
+        turbo_v_only &&
+        !turbo_k_only;
+
+    // Decode-dequant policy:
+    // - Compiled Turbo K + classic non-q8 V fallback routes stay native vec
+    //   instead of taking generic f16 materialization after Turbo K decode.
+    // - D <= 256: Turbo K/V sides may be decoded to f16.
+    // - D = 512: f16/q8_0/Turbo pairs keep the existing f16 route.
+    // - D = 512 classic non-q8 K + Turbo V decodes Turbo V to f16 and keeps
+    //   K in its original classic type for generic f16 conversion.
+    // - D > 512: unchanged.
+    const bool k_f16_q8_or_turbo =
+        K->type == GGML_TYPE_F16 || K->type == GGML_TYPE_Q8_0 || turbo_k_only;
+    const bool v_f16_q8_or_turbo =
+        V->type == GGML_TYPE_F16 || V->type == GGML_TYPE_Q8_0 || turbo_v_only;
+
+    plan.decode_dequant =
+        !hip_native_tcq_decode &&
+        !turbo_decode_native &&
+        !prefer_native_vec &&
+        turbo_kv &&
+        (Q->ne[0] <= 256 ||
+         (Q->ne[0] <= 512 && k_f16_q8_or_turbo && v_f16_q8_or_turbo) ||
+         (Q->ne[0] == 512 && classic_non_q8_K_turbo_V));
+
+    plan.decode_dequant_K =
+        plan.decode_dequant &&
+        (turbo_k_only || (K->type == GGML_TYPE_Q8_0 && Q->ne[0] > 256));
+
+    plan.decode_dequant_V =
+        plan.decode_dequant &&
+        (turbo_v_only || (V->type == GGML_TYPE_Q8_0 && Q->ne[0] > 256));
+
+    plan.effective_type_K = plan.decode_dequant_K ? GGML_TYPE_F16 : K->type;
+    plan.effective_type_V = plan.decode_dequant_V ? GGML_TYPE_F16 : V->type;
+
+    ggml_tensor K_eff = *K;
+    ggml_tensor V_eff = *V;
+
+    if (plan.decode_dequant_K) {
+        K_eff.type = GGML_TYPE_F16;
+        K_eff.nb[0] = sizeof(half);
+        K_eff.nb[1] = K->ne[0] * K->ne[2] * sizeof(half);
+        K_eff.nb[2] = K->ne[0] * sizeof(half);
+        K_eff.nb[3] = K->ne[0] * K->ne[1] * K->ne[2] * sizeof(half);
+    }
+
+    if (plan.decode_dequant_V) {
+        V_eff.type = GGML_TYPE_F16;
+        V_eff.nb[0] = sizeof(half);
+        V_eff.nb[1] = V->ne[0] * V->ne[2] * sizeof(half);
+        V_eff.nb[2] = V->ne[0] * sizeof(half);
+        V_eff.nb[3] = V->ne[0] * V->ne[1] * V->ne[2] * sizeof(half);
+    }
+
+    ggml_tensor dst_eff = *dst;
+    ggml_tensor * src_eff[GGML_MAX_SRC];
+    for (int i = 0; i < GGML_MAX_SRC; ++i) {
+        src_eff[i] = dst->src[i];
+    }
+    src_eff[1] = &K_eff;
+    src_eff[2] = &V_eff;
+    for (int i = 0; i < GGML_MAX_SRC; ++i) {
+        dst_eff.src[i] = src_eff[i];
+    }
+
+    // If V was decoded from Turbo to f16 and the effective pair is
+    // classic-or-q8 K/f16 at D>=256, the vec path is unsafe. Only gate vec
+    // for Turbo-originated f16 V — explicit q5_0/f16 at D>=256 is unaffected.
+    // Disable vec so the existing kernel selector picks MMA_F16 or tile with
+    // generic f16 K conversion. D=128 is fine on vec and is not affected.
+    plan.unsafe_vec_after_turbo_v_decode =
+        plan.decode_dequant_V &&
+        ggml_cuda_fattn_effective_vec_shape_unsafe(Q, &K_eff, &V_eff);
+
+    plan.allow_vec = !plan.unsafe_vec_after_turbo_v_decode;
+
+    plan.kernel = ggml_cuda_get_best_fattn_kernel(device, &dst_eff, plan.allow_vec);
+
+    plan.need_generic_f16_K = false;
+    plan.need_generic_f16_V = false;
+    switch (plan.kernel) {
         case BEST_FATTN_KERNEL_TILE:
         case BEST_FATTN_KERNEL_WMMA_F16:
         case BEST_FATTN_KERNEL_MMA_F16:
-            need_f16_K = true;
-            need_f16_V = true;
+            plan.need_generic_f16_K = !plan.decode_dequant_K && plan.effective_type_K != GGML_TYPE_F16;
+            plan.need_generic_f16_V = !plan.decode_dequant_V && plan.effective_type_V != GGML_TYPE_F16;
             break;
         case BEST_FATTN_KERNEL_VEC:
-            need_f16_K = K->type == GGML_TYPE_F32;
-            need_f16_V = V->type == GGML_TYPE_F32;
+            plan.need_generic_f16_K = plan.effective_type_K == GGML_TYPE_F32;
+            plan.need_generic_f16_V = plan.effective_type_V == GGML_TYPE_F32;
             break;
         case BEST_FATTN_KERNEL_NONE:
             break;
     }
 
+    if (ggml_cuda_fattn_route_debug_enabled()) {
+        fprintf(stderr,
+            "CUDA_FA_ROUTE_PLAN "
+            "device=%d "
+            "Q=[%lld,%lld,%lld,%lld] "
+            "Kraw=%s Vraw=%s "
+            "Kshape=[%lld,%lld,%lld,%lld] Vshape=[%lld,%lld,%lld,%lld] "
+            "Keff=%s Veff=%s "
+            "turbo_kv=%d "
+            "prefer_native_vec=%d "
+            "decode=%d dk=%d dv=%d "
+            "unsafe_vec_after_turbo_v_decode=%d allow_vec=%d "
+            "kernel=%s "
+            "need_f16_K=%d need_f16_V=%d "
+            "Knb=[%lld,%lld,%lld,%lld] Vnb=[%lld,%lld,%lld,%lld] "
+            "Keff_nb=[%lld,%lld,%lld,%lld] Veff_nb=[%lld,%lld,%lld,%lld]\n",
+            device,
+            (long long) Q->ne[0], (long long) Q->ne[1], (long long) Q->ne[2], (long long) Q->ne[3],
+            ggml_type_name(K->type), ggml_type_name(V->type),
+            (long long) K->ne[0], (long long) K->ne[1], (long long) K->ne[2], (long long) K->ne[3],
+            (long long) V->ne[0], (long long) V->ne[1], (long long) V->ne[2], (long long) V->ne[3],
+            ggml_type_name(plan.effective_type_K), ggml_type_name(plan.effective_type_V),
+            (int) turbo_kv,
+            (int) prefer_native_vec,
+            (int) plan.decode_dequant,
+            (int) plan.decode_dequant_K,
+            (int) plan.decode_dequant_V,
+            (int) plan.unsafe_vec_after_turbo_v_decode,
+            (int) plan.allow_vec,
+            ggml_cuda_fattn_kernel_name(plan.kernel),
+            (int) plan.need_generic_f16_K,
+            (int) plan.need_generic_f16_V,
+            (long long) K->nb[0], (long long) K->nb[1], (long long) K->nb[2], (long long) K->nb[3],
+            (long long) V->nb[0], (long long) V->nb[1], (long long) V->nb[2], (long long) V->nb[3],
+            (long long) K_eff.nb[0], (long long) K_eff.nb[1], (long long) K_eff.nb[2], (long long) K_eff.nb[3],
+            (long long) V_eff.nb[0], (long long) V_eff.nb[1], (long long) V_eff.nb[2], (long long) V_eff.nb[3]);
+        fflush(stderr);
+    }
+
+    return plan;
+}
+
+size_t ggml_cuda_flash_attn_ext_get_alloc_size(int device, const ggml_tensor * dst) {
+    GGML_ASSERT(dst->op == GGML_OP_FLASH_ATTN_EXT);
+
+    const ggml_cuda_fattn_route_plan plan = ggml_cuda_fattn_make_route_plan(device, dst);
+
+    const bool alloc_f16_K = plan.need_generic_f16_K;
+    const bool alloc_f16_V = plan.need_generic_f16_V;
+
     const ggml_cuda_flash_attn_ext_f16_extra_data f16_extra =
-        ggml_cuda_flash_attn_ext_get_f16_extra_data(dst, need_f16_K, need_f16_V);
+        ggml_cuda_flash_attn_ext_get_f16_extra_data(dst, alloc_f16_K, alloc_f16_V);
+
+    if (ggml_cuda_fattn_route_debug_enabled()) {
+        fprintf(stderr,
+            "CUDA_FA_ROUTE_ALLOC "
+            "kernel=%s "
+            "need_f16_K=%d need_f16_V=%d "
+            "workspace_end_offset=%llu "
+            "dst_data=%p f16_K=%p f16_V=%p f16_end=%p\n",
+            ggml_cuda_fattn_kernel_name(plan.kernel),
+            (int) plan.need_generic_f16_K,
+            (int) plan.need_generic_f16_V,
+            (unsigned long long) (f16_extra.end - (uintptr_t) dst->data),
+            dst->data,
+            (void *) f16_extra.K,
+            (void *) f16_extra.V,
+            (void *) f16_extra.end);
+        fflush(stderr);
+    }
 
     return f16_extra.end - (uintptr_t) dst->data;
 }
@@ -1599,6 +2626,28 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
     const ggml_tensor * K = dst->src[1];
     const ggml_tensor * V = dst->src[2];
 
+    const ggml_cuda_fattn_route_plan plan =
+        ggml_cuda_fattn_make_route_plan(ctx.device, dst);
+
+    if ((ggml_cuda_fattn_is_ranked_kv_type(plan.effective_type_K) ||
+         ggml_cuda_fattn_is_ranked_kv_type(plan.effective_type_V)) &&
+        !ggml_cuda_fattn_pair_compiled(plan.effective_type_K, plan.effective_type_V)) {
+        if (!ggml_cuda_fattn_ignore_uncompiled_pairs()) {
+            fprintf(stderr,
+                "CUDA FA effective K/V pair was not compiled in this build: raw K=%s raw V=%s effective K=%s effective V=%s. "
+                "Use standard q/KVarN fallback cache types in the default build, or rebuild with "
+                "GGML_CUDA_FA_HALF_QUANTS or GGML_CUDA_FA_ALL_QUANTS for Turbo/TCQ or arbitrary pairs.\n",
+                ggml_type_name(K->type), ggml_type_name(V->type),
+                ggml_type_name(plan.effective_type_K), ggml_type_name(plan.effective_type_V));
+            GGML_ABORT("CUDA FA effective K/V pair not compiled");
+        }
+        fprintf(stderr,
+            "WARNING: GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS=1: CUDA FA effective K/V pair was not compiled: "
+            "raw K=%s raw V=%s effective K=%s effective V=%s. Continuing with non-vec fallback if available.\n",
+            ggml_type_name(K->type), ggml_type_name(V->type),
+            ggml_type_name(plan.effective_type_K), ggml_type_name(plan.effective_type_V));
+    }
+
     // Turbo prefill: dequant to fp16 and use tensor core MMA for batched attention.
     // turbo4 K uses inverse FWHT during dequant — mixes centroids in float32 shmem before
     // fp16 cast, so precision is fine. turbo2/turbo3 use simple centroid×norm dequant.
@@ -1608,8 +2657,9 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
         if (e) fprintf(stderr, "TURBO_PREFILL_VEC=%s: forcing vec prefill for turbo types\n", e);
         return e != nullptr;
     }();
-    const bool turbo_kv = K->type == GGML_TYPE_TURBO2_0 || K->type == GGML_TYPE_TURBO3_0 || K->type == GGML_TYPE_TURBO4_0 || K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ ||
-                          V->type == GGML_TYPE_TURBO2_0 || V->type == GGML_TYPE_TURBO3_0 || V->type == GGML_TYPE_TURBO4_0 || V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ;
+    const bool turbo_kv =
+        ggml_cuda_fattn_is_turbo_kv_type(K->type) ||
+        ggml_cuda_fattn_is_turbo_kv_type(V->type);
 
     // Fused MMA turbo: reads raw turbo bytes directly in the MMA kernel, no intermediate fp16 buffers.
     // Fused straight TurboQuant matched K/V. Set GGML_TURBO_MMA_FUSED=0 to disable.
@@ -1635,8 +2685,8 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
         (Q->ne[0] == 128 || Q->ne[0] == 256) &&
         turing_mma_available(ggml_cuda_info().devices[ggml_cuda_get_device()].cc)) {
         cudaStream_t stream = ctx.stream();
-        int device;
-        CUDA_CHECK(cudaGetDevice(&device));
+        int device_fused;
+        CUDA_CHECK(cudaGetDevice(&device_fused));
 
         if (turbo_fa_debug) {
             fprintf(stderr,
@@ -1652,16 +2702,16 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
         ggml_tensor * orig_q_fused = nullptr;
         if (Q->ne[0] % 128 == 0) {
             const size_t q_size = ggml_nelements(Q) * sizeof(float);
-            if (q_size > q_rot_buf_size[device]) {
-                if (q_rot_buf[device]) CUDA_CHECK(cudaFree(q_rot_buf[device]));
-                CUDA_CHECK(cudaMalloc(&q_rot_buf[device], q_size));
-                q_rot_buf_size[device] = q_size;
+            if (q_size > q_rot_buf_size[device_fused]) {
+                if (q_rot_buf[device_fused]) CUDA_CHECK(cudaFree(q_rot_buf[device_fused]));
+                CUDA_CHECK(cudaMalloc(&q_rot_buf[device_fused], q_size));
+                q_rot_buf_size[device_fused] = q_size;
             }
             const int64_t n_q_groups = ggml_nelements(Q) / 128;
             k_turbo_fwht_forward<<<(int)n_q_groups, 128, 0, stream>>>(
-                (const float *)Q->data, q_rot_buf[device], ggml_nelements(Q));
+                (const float *)Q->data, q_rot_buf[device_fused], ggml_nelements(Q));
             Q_rot_fused = *Q;
-            Q_rot_fused.data = q_rot_buf[device];
+            Q_rot_fused.data = q_rot_buf[device_fused];
             orig_q_fused = dst->src[0];
             dst->src[0] = &Q_rot_fused;
         }
@@ -1682,7 +2732,19 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
         return;
     }
 
-    if (turbo_kv && !turbo_prefill_vec && Q->ne[1] > 1 && Q->ne[0] <= 256 && turing_mma_available(ggml_cuda_info().devices[ggml_cuda_get_device()].cc)) {
+    const bool turbo_k_classic_v_prefill =
+        ggml_cuda_fattn_prefill_mma_can_materialize_turbo_k_classic_v(K, V);
+    const bool turbo_prefill_can_make_f16_K = ggml_cuda_turbo_prefill_mma_can_make_f16(K->type);
+    const bool turbo_prefill_can_make_f16_V = ggml_cuda_turbo_prefill_mma_can_make_f16(V->type);
+    const bool turbo_prefill_mma_safe =
+        turbo_kv &&
+        ((turbo_prefill_can_make_f16_K &&
+          turbo_prefill_can_make_f16_V) ||
+         turbo_k_classic_v_prefill);
+    const bool turbo_prefill_turing_mma =
+        turing_mma_available(ggml_cuda_info().devices[ggml_cuda_get_device()].cc);
+
+    if (turbo_prefill_mma_safe && !turbo_prefill_vec && Q->ne[1] > 1 && Q->ne[0] <= 512 && turbo_prefill_turing_mma) {
         if (turbo_fa_debug) {
             fprintf(stderr,
                 "GGML_TURBO_FA_DEBUG: path=prefill-dequant K=%s V=%s Q=[%lld,%lld,%lld,%lld] K=[%lld,%lld,%lld,%lld] V=[%lld,%lld,%lld,%lld]\n",
@@ -1697,22 +2759,33 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
     } else {
         if (turbo_fa_debug && turbo_kv) {
             fprintf(stderr,
-                "GGML_TURBO_FA_DEBUG: path=decode-dequant-or-vec K=%s V=%s Q=[%lld,%lld,%lld,%lld] K=[%lld,%lld,%lld,%lld] V=[%lld,%lld,%lld,%lld]\n",
+                "GGML_TURBO_FA_DEBUG: path=decode-dequant-or-vec K=%s V=%s Q=[%lld,%lld,%lld,%lld] K=[%lld,%lld,%lld,%lld] V=[%lld,%lld,%lld,%lld] prefill_safe=%d can_make_f16_K=%d can_make_f16_V=%d turbo_k_classic_v_prefill=%d vec_override=%d batch_ok=%d dim_ok=%d turing_mma=%d\n",
                 ggml_type_name(K->type), ggml_type_name(V->type),
                 (long long) Q->ne[0], (long long) Q->ne[1], (long long) Q->ne[2], (long long) Q->ne[3],
                 (long long) K->ne[0], (long long) K->ne[1], (long long) K->ne[2], (long long) K->ne[3],
-                (long long) V->ne[0], (long long) V->ne[1], (long long) V->ne[2], (long long) V->ne[3]);
+                (long long) V->ne[0], (long long) V->ne[1], (long long) V->ne[2], (long long) V->ne[3],
+                (int) turbo_prefill_mma_safe,
+                (int) turbo_prefill_can_make_f16_K,
+                (int) turbo_prefill_can_make_f16_V,
+                (int) turbo_k_classic_v_prefill,
+                (int) turbo_prefill_vec,
+                (int) (Q->ne[1] > 1),
+                (int) (Q->ne[0] <= 512),
+                (int) turbo_prefill_turing_mma);
         }
         load_tcq_decode_alpha(ctx.device);
 
         // Update VEC __constant__ alpha for context-adaptive mode
         if (d_tcq_decode_alpha_v_static == 0.0f &&
-            (V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ)) {
+            (V->type == GGML_TYPE_TURBO4_TCQ || V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ)) {
             float alpha = tcq_compute_alpha_v(V->type, V->ne[1]);
             cudaMemcpyToSymbol(d_tcq_decode_alpha_v_fattn, &alpha, sizeof(float));
         }
 
         // Load runtime codebooks for TCQ types (needed by both dequant and native VEC paths)
+        if (K->type == GGML_TYPE_TURBO4_TCQ || V->type == GGML_TYPE_TURBO4_TCQ) {
+            load_tcq4_codebook_fattn(ctx.device, "TCQ4 decode");
+        }
         if (K->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO3_TCQ) {
             static bool tcq3_cb_loaded[GGML_CUDA_MAX_DEVICES] = {};
             if (!tcq3_cb_loaded[ctx.device]) {
@@ -1754,32 +2827,42 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
 
         cudaStream_t stream = ctx.stream();
 
-        // Dequant turbo K/V to fp16 for decode: MMA tensor cores on fp16 beat VEC scalar
-        // on turbo bits for dense models. Bandwidth savings from turbo's 3/16 footprint are
-        // negligible relative to FFN compute (~1% slower native on Qwen3.5-27B, 3090).
-        // Set GGML_TURBO_DECODE_NATIVE=1 to force native VEC path (may help bandwidth-limited configs).
-        static const bool turbo_decode_native = (getenv("GGML_TURBO_DECODE_NATIVE") != nullptr);
-        // Dequant turbo K/V to fp16 for D<=256 (any K/V combo), or D=512 only when BOTH
-        // K and V are turbo (Gemma 4 ISWA global layers with K=V — Bug A2). Mixed q8_0+turbo
-        // at D=512 stays on native VEC path because post-dequant q8_0 K + f16 V has no
-        // working VEC template at D=512.
-        const bool turbo_k_only = K->type == GGML_TYPE_TURBO2_0 || K->type == GGML_TYPE_TURBO3_0 || K->type == GGML_TYPE_TURBO4_0 || K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ;
-        const bool turbo_v_only = V->type == GGML_TYPE_TURBO2_0 || V->type == GGML_TYPE_TURBO3_0 || V->type == GGML_TYPE_TURBO4_0 || V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ;
-        // Mixed f16/q8_0 + turbo at D=512: dequant K (and turbo V) to f16 so FA dispatches as
-        // F16/F16 D=512 (which exists). Without this, the native VEC templates needed are
-        // either missing (F16↔turbo) or have buggy SASS on sm_120 PTX-JIT (Q8_0↔turbo4 etc).
-        const bool k_is_f16_q8_or_turbo = (K->type == GGML_TYPE_F16) || (K->type == GGML_TYPE_Q8_0) || (K->type == GGML_TYPE_BF16) || turbo_k_only;
-        const bool v_is_f16_q8_or_turbo = (V->type == GGML_TYPE_F16) || (V->type == GGML_TYPE_Q8_0) || (V->type == GGML_TYPE_BF16) || turbo_v_only;
-        const bool both_dequantable_512 = k_is_f16_q8_or_turbo && v_is_f16_q8_or_turbo;
-#if defined(GGML_USE_HIP)
-        const bool hip_native_tcq_decode =
-            K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ ||
-            V->type == GGML_TYPE_TURBO3_TCQ || V->type == GGML_TYPE_TURBO2_TCQ;
-#else
-        const bool hip_native_tcq_decode = false;
-#endif
-        const bool do_decode_dequant = !hip_native_tcq_decode && !turbo_decode_native && turbo_kv &&
-            (Q->ne[0] <= 256 || (Q->ne[0] <= 512 && both_dequantable_512));
+        // Use the unified route plan from raw K/V types. The same plan drives
+        // allocation, support checks, and execution. Mixed classic K + Turbo V
+        // uses decoded Turbo V plus MMA/tile fallback for D>=256 when the
+        // effective classic_K/f16 vec route is unsafe. D=512 classic_non_q8 K
+        // + Turbo V is also forced through this path to avoid the raw
+        // classic_K/Turbo_V vec crash seen on Gemma 4.
+        int device_dec;
+        CUDA_CHECK(cudaGetDevice(&device_dec));
+
+        if (ggml_cuda_fattn_route_debug_enabled()) {
+            fprintf(stderr,
+                "CUDA_FA_ROUTE_EXEC_BEGIN "
+                "Q=[%lld,%lld,%lld,%lld] "
+                "Kraw=%s Vraw=%s "
+                "decode=%d dk=%d dv=%d "
+                "allow_vec=%d kernel=%s "
+                "need_f16_K=%d need_f16_V=%d "
+                "Kdata=%p Vdata=%p dst=%p\n",
+                (long long) Q->ne[0], (long long) Q->ne[1], (long long) Q->ne[2], (long long) Q->ne[3],
+                ggml_type_name(K->type), ggml_type_name(V->type),
+                (int) plan.decode_dequant,
+                (int) plan.decode_dequant_K,
+                (int) plan.decode_dequant_V,
+                (int) plan.allow_vec,
+                ggml_cuda_fattn_kernel_name(plan.kernel),
+                (int) plan.need_generic_f16_K,
+                (int) plan.need_generic_f16_V,
+                K->data,
+                V->data,
+                dst->data);
+            fflush(stderr);
+        }
+
+        const bool do_decode_dequant = plan.decode_dequant;
+        const bool k_needs_dequant    = plan.decode_dequant_K;
+        const bool v_needs_dequant    = plan.decode_dequant_V;
 
         half * k_fp16_dec = nullptr;
         half * v_fp16_dec = nullptr;
@@ -1787,12 +2870,7 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
         ggml_tensor * orig_k_decode = nullptr;
         ggml_tensor * orig_v_decode = nullptr;
 
-        int device_dec;
-        CUDA_CHECK(cudaGetDevice(&device_dec));
-
         if (do_decode_dequant) {
-            const bool k_needs_dequant = turbo_k_only || ((K->type == GGML_TYPE_Q8_0 || K->type == GGML_TYPE_BF16) && (Q->ne[0] > 256 || turbo_v_only));
-            const bool v_needs_dequant = turbo_v_only || ((V->type == GGML_TYPE_Q8_0 || V->type == GGML_TYPE_BF16) && (Q->ne[0] > 256 || turbo_k_only));
             if (k_needs_dequant) {
                 // Size the dequant buffer for the FULL cache (kv_size from the underlying root
                 // tensor), not just the current n_kv. This prevents per-token reallocations as
@@ -1842,6 +2920,9 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
                 } else if (K->type == GGML_TYPE_TURBO4_0) {
                     k_turbo4_dequant_f16_inv_fwht<<<grid_k, 128, 0, stream>>>(
                         (const char *)K->data, k_fp16_dec, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
+                } else if (K->type == GGML_TYPE_TURBO4_TCQ) {
+                    k_turbo4_tcq_dequant_f16_inv_fwht<<<grid_k, 128, 0, stream>>>(
+                        (const char *)K->data, k_fp16_dec, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3], d_tcq_decode_alpha_k);
                 } else if (K->type == GGML_TYPE_TURBO3_TCQ) {
                     k_turbo3_tcq_dequant_f16_inv_fwht<<<grid_k, 128, 0, stream>>>(
                         (const char *)K->data, k_fp16_dec, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3], d_tcq_decode_alpha_k);
@@ -1849,10 +2930,10 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
                     k_turbo2_tcq_dequant_f16_inv_fwht<<<grid_k, 128, 0, stream>>>(
                         (const char *)K->data, k_fp16_dec, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3], d_tcq_decode_alpha_k);
                 } else if (K->type == GGML_TYPE_Q8_0) {
+                    // Q8_0 K dequant: only fires at D=512 when V is turbo (no F16/Q8_0 D=512
+                    // template, and (Q8_0, TURBO4_0) D=512 has buggy SASS on sm_120 PTX-JIT).
+                    // Output goes into TKHE layout matching V_f16_dec → dispatches as F16/F16 D=512.
                     k_q8_0_dequant_f16_tkhe<<<grid_k, K->ne[0], 0, stream>>>(
-                        (const char *)K->data, k_fp16_dec, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
-                } else if (K->type == GGML_TYPE_BF16) {
-                    k_bf16_to_f16_tkhe<<<grid_k, K->ne[0], 0, stream>>>(
                         (const char *)K->data, k_fp16_dec, K->ne[0], K->ne[1], K->ne[2], K->nb[1], K->nb[2], K->nb[3]);
                 }
                 K_f16_dec = *K;
@@ -1882,6 +2963,9 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
                 if (V->type == GGML_TYPE_TURBO2_0) {
                     k_turbo2_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
                         (const char *)V->data, v_fp16_dec, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
+                } else if (V->type == GGML_TYPE_TURBO4_TCQ) {
+                    k_turbo4_tcq_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
+                        (const char *)V->data, v_fp16_dec, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3], tcq_compute_alpha_v(V->type, V->ne[1]));
                 } else if (V->type == GGML_TYPE_TURBO3_TCQ) {
                     k_turbo3_tcq_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
                         (const char *)V->data, v_fp16_dec, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3], tcq_compute_alpha_v(V->type, V->ne[1]));
@@ -1895,10 +2979,8 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
                     k_turbo3_dequant_f16<<<grid_v, V->ne[0], 0, stream>>>(
                         (const char *)V->data, v_fp16_dec, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
                 } else if (V->type == GGML_TYPE_Q8_0) {
+                    // Q8_0 V dequant: only fires at D=512 when K is turbo (mirror of K=Q8_0 path).
                     k_q8_0_dequant_f16_tkhe<<<grid_v, V->ne[0], 0, stream>>>(
-                        (const char *)V->data, v_fp16_dec, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
-                } else if (V->type == GGML_TYPE_BF16) {
-                    k_bf16_to_f16_tkhe<<<grid_v, V->ne[0], 0, stream>>>(
                         (const char *)V->data, v_fp16_dec, V->ne[0], V->ne[1], V->ne[2], V->nb[1], V->nb[2], V->nb[3]);
                 }
                 V_f16_dec = *V;
@@ -1924,7 +3006,7 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
         // which expects a pre-rotated Q — so rotate Q in that case.
         ggml_tensor Q_rot_decode;
         ggml_tensor * orig_q_decode = nullptr;
-        const bool turbo_k_any = (K->type == GGML_TYPE_TURBO2_0 || K->type == GGML_TYPE_TURBO3_0 || K->type == GGML_TYPE_TURBO4_0 || K->type == GGML_TYPE_TURBO3_TCQ || K->type == GGML_TYPE_TURBO2_TCQ);
+        const bool turbo_k_any = ggml_cuda_fattn_is_turbo_kv_type(K->type);
         // Bug #31 exception: when K=turbo2/turbo3 dequant fell back to the rotated kernel (see K
         // dispatch above), K is in WHT-rotated space, not original space, so Q must be pre-rotated.
         const bool k_uses_rotated_path = do_decode_dequant && (
@@ -1949,13 +3031,58 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
             dst->src[0] = &Q_rot_decode;
         }
 
-        switch (ggml_cuda_get_best_fattn_kernel(ggml_cuda_get_device(), dst)) {
+        if (ggml_cuda_fattn_route_debug_enabled()) {
+            const ggml_tensor * K_run = dst->src[1];
+            const ggml_tensor * V_run = dst->src[2];
+            const ggml_tensor * Q_run = dst->src[0];
+
+            fprintf(stderr,
+                "CUDA_FA_ROUTE_EXEC_DISPATCH "
+                "Qrun=%s Q=[%lld,%lld,%lld,%lld] Qdata=%p "
+                "Krun=%s K=[%lld,%lld,%lld,%lld] Kdata=%p Knb=[%lld,%lld,%lld,%lld] "
+                "Vrun=%s V=[%lld,%lld,%lld,%lld] Vdata=%p Vnb=[%lld,%lld,%lld,%lld] "
+                "kernel=%s compiled_pair=%d\n",
+                ggml_type_name(Q_run->type),
+                (long long) Q_run->ne[0], (long long) Q_run->ne[1], (long long) Q_run->ne[2], (long long) Q_run->ne[3],
+                Q_run->data,
+                ggml_type_name(K_run->type),
+                (long long) K_run->ne[0], (long long) K_run->ne[1], (long long) K_run->ne[2], (long long) K_run->ne[3],
+                K_run->data,
+                (long long) K_run->nb[0], (long long) K_run->nb[1], (long long) K_run->nb[2], (long long) K_run->nb[3],
+                ggml_type_name(V_run->type),
+                (long long) V_run->ne[0], (long long) V_run->ne[1], (long long) V_run->ne[2], (long long) V_run->ne[3],
+                V_run->data,
+                (long long) V_run->nb[0], (long long) V_run->nb[1], (long long) V_run->nb[2], (long long) V_run->nb[3],
+                ggml_cuda_fattn_kernel_name(plan.kernel),
+                (int) ggml_cuda_fattn_pair_compiled(K_run->type, V_run->type));
+            fflush(stderr);
+        }
+
+        const best_fattn_kernel selected_kernel = plan.kernel;
+
+        switch (selected_kernel) {
             case BEST_FATTN_KERNEL_NONE:
-                GGML_ABORT("fatal error");
+                fprintf(stderr, "No CUDA FA kernel selected: K=%s V=%s D=%lld\n",
+                    ggml_type_name(K->type), ggml_type_name(V->type), (long long) Q->ne[0]);
+                GGML_ABORT("no CUDA FA kernel selected");
             case BEST_FATTN_KERNEL_TILE:
                 ggml_cuda_flash_attn_ext_tile(ctx, dst);
                 break;
             case BEST_FATTN_KERNEL_VEC:
+                if (!ggml_cuda_fattn_pair_compiled(dst->src[1]->type, dst->src[2]->type)) {
+                    if (!ggml_cuda_fattn_ignore_uncompiled_pairs()) {
+                        fprintf(stderr,
+                            "CUDA FA effective K/V pair was not compiled: K=%s V=%s. "
+                            "Use standard q/KVarN fallback cache types in the default build, or rebuild with "
+                            "GGML_CUDA_FA_HALF_QUANTS or GGML_CUDA_FA_ALL_QUANTS for Turbo/TCQ or arbitrary pairs.\n",
+                            ggml_type_name(dst->src[1]->type), ggml_type_name(dst->src[2]->type));
+                        GGML_ABORT("CUDA FA effective K/V pair not compiled");
+                    }
+                    fprintf(stderr,
+                        "WARNING: GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS=1: CUDA FA effective K/V pair was not compiled: "
+                        "K=%s V=%s. Continuing with vec dispatch.\n",
+                        ggml_type_name(dst->src[1]->type), ggml_type_name(dst->src[2]->type));
+                }
                 ggml_cuda_flash_attn_ext_vec(ctx, dst);
                 break;
             case BEST_FATTN_KERNEL_WMMA_F16:
@@ -1977,25 +3104,31 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
 }
 
 bool ggml_cuda_flash_attn_ext_supported(int device, const ggml_tensor * dst) {
-    return ggml_cuda_get_best_fattn_kernel(device, dst) != BEST_FATTN_KERNEL_NONE;
-}
+    const ggml_cuda_fattn_route_plan plan = ggml_cuda_fattn_make_route_plan(device, dst);
 
-const char * ggml_cuda_fa_build_policy() {
-#if defined(GGML_CUDA_FA_ALL_QUANTS)
-    return "all";
-#elif defined(GGML_CUDA_FA_HALF_QUANTS)
-    return "half";
-#else
-    return "default";
-#endif
-}
+    if (plan.kernel == BEST_FATTN_KERNEL_NONE) {
+        return false;
+    }
 
-bool ggml_cuda_fa_pair_compiled(ggml_type type_K, ggml_type type_V) {
-#if defined(GGML_CUDA_FA_ALL_QUANTS)
-    GGML_UNUSED(type_K);
-    GGML_UNUSED(type_V);
+    if (plan.kernel == BEST_FATTN_KERNEL_VEC) {
+        return ggml_cuda_fattn_pair_compiled(plan.effective_type_K, plan.effective_type_V);
+    }
+
+    if ((ggml_cuda_fattn_is_ranked_kv_type(plan.effective_type_K) || ggml_cuda_fattn_is_ranked_kv_type(plan.effective_type_V)) &&
+        !ggml_cuda_fattn_pair_compiled(plan.effective_type_K, plan.effective_type_V)) {
+        return false;
+    }
+
+    if (ggml_cuda_fattn_route_debug_enabled()) {
+        fprintf(stderr,
+            "CUDA_FA_ROUTE_SUPPORTED "
+            "kernel=%s effK=%s effV=%s supported=%d\n",
+            ggml_cuda_fattn_kernel_name(plan.kernel),
+            ggml_type_name(plan.effective_type_K),
+            ggml_type_name(plan.effective_type_V),
+            plan.kernel != BEST_FATTN_KERNEL_NONE);
+        fflush(stderr);
+    }
+
     return true;
-#else
-    return type_K == GGML_TYPE_F16 && type_V == GGML_TYPE_F16;
-#endif
 }

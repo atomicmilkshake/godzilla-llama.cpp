@@ -2,6 +2,15 @@
 
 This file gives code assistants local context for this repository.
 
+> [!IMPORTANT]
+> ### 🛠️ Agent Bootstrapping & Continuity
+> Every time a new session starts, you **MUST** follow these steps:
+> 1. **Read the Dev Journal**: View the latest entries in [.agents/journal.md](file:///J:/LLM/godzilla-llama.cpp/.agents/journal.md) to understand the current workspace state, active tasks, and notes from previous sessions.
+> 2. **Consult the Documentation Map**: For architectural or operational guidance, check the centralized index of all project docs at [.agents/doc_map.md](file:///J:/LLM/godzilla-llama.cpp/.agents/doc_map.md).
+> 3. **Update the Dev Journal**: Before finishing a task or session, you **MUST** append a new entry to the Dev Journal at [.agents/journal.md](file:///J:/LLM/godzilla-llama.cpp/.agents/journal.md) detailing your session goals, changes, findings/decisions, and next steps.
+> 
+> Detailed agent instructions are located in [.agents/AGENTS.md](file:///J:/LLM/godzilla-llama.cpp/.agents/AGENTS.md).
+
 ## What This Is
 
 BeeLlama.cpp is Anbeeld's fork of llama.cpp. Fork-specific work is concentrated around:

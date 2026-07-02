@@ -125,18 +125,17 @@ class NemotronModel(TextModel):
         self.gguf_writer.add_layer_norm_eps(f_norm_eps)
 
         # * Partial RoPE
-        rot_pct = self.rope_parameters["partial_rotary_factor"]
+        rot_pct = self.find_hparam(["partial_rotary_factor", "rope_pct", "rope_percent"])
         n_embd = self.find_hparam(["hidden_size", "n_embd"])
         n_head = self.find_hparam(["num_attention_heads", "n_head"])
         self.gguf_writer.add_rope_dimension_count(int(rot_pct * n_embd) // n_head)
 
         # * RopeScaling for Nemotron
-        factor = self.hparams.get("factor") or self.rope_parameters.get("factor")
-        if factor is None:
+        if "rope_scaling" not in self.hparams or self.hparams["rope_scaling"] is None:
             self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.NONE)
         else:
             self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.LINEAR)
-            self.gguf_writer.add_rope_scaling_factor(factor)
+            self.gguf_writer.add_rope_scaling_factor(self.hparams["factor"])
 
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # * Adding +1 to LayerNorm's weights here to implement layernorm1p w/o changing anything on the GGML engine side

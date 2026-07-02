@@ -2000,6 +2000,17 @@ struct test_unary : public test_case {
         return out;
     }
 
+    // ROUND on F16 inputs can land values arbitrarily close to an x.5 boundary once
+    // rounded to F16 precision. Different backends' F16<->F32 conversion paths can then
+    // round that boundary in different directions, same class of issue as
+    // https://github.com/ggml-org/llama.cpp/pull/22976 (there for WebGPU, here CPU vs CUDA).
+    double max_nmse_err(ggml_backend_t backend) override {
+        if (type == GGML_TYPE_F16 && op == GGML_UNARY_OP_ROUND) {
+            return std::max(test_case::max_nmse_err(backend), 1e-4);
+        }
+        return test_case::max_nmse_err(backend);
+    }
+
     void initialize_tensors(ggml_context * ctx) override {
         float min = -150.f;
         float max =  150.f;
@@ -4698,6 +4709,15 @@ struct test_round : public test_case {
     test_round(ggml_type type = GGML_TYPE_F32,
                std::array<int64_t, 4> ne = {10, 2, 2, 2})
         : type(type), ne(ne) {}
+
+    // See test_unary's override above: F16 ROUND can flip direction at x.5 boundaries
+    // depending on the backend's F16<->F32 conversion rounding.
+    double max_nmse_err(ggml_backend_t backend) override {
+        if (type == GGML_TYPE_F16) {
+            return std::max(test_case::max_nmse_err(backend), 1e-4);
+        }
+        return test_case::max_nmse_err(backend);
+    }
 
     ggml_tensor * build_graph(ggml_context * ctx) override {
         ggml_tensor * a = ggml_new_tensor(ctx, type, 4, ne.data());

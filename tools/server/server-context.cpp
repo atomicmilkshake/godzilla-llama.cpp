@@ -49,6 +49,26 @@
 
 using json = nlohmann::ordered_json;
 
+server_dflash_recurrent_rollback_plan server_context_dflash_recurrent_rollback_plan(
+        const common_params_speculative & speculative,
+        bool target_recurrent_or_hybrid,
+        bool target_supports_rs_rollback) {
+    server_dflash_recurrent_rollback_plan plan;
+
+    if (speculative.type() != COMMON_SPECULATIVE_TYPE_DFLASH || !target_recurrent_or_hybrid) {
+        return plan;
+    }
+
+    if (speculative.branch_budget == 0 && target_supports_rs_rollback) {
+        plan.uses_rs_snapshots = true;
+        return plan;
+    }
+
+    plan.needs_backup_sequences = true;
+    plan.needs_attention_backup_streams = speculative.branch_budget > 0;
+    return plan;
+}
+
 static bool dflash_server_profile_enabled(uint32_t flags) {
     return dflash_profile_enabled(flags);
 }

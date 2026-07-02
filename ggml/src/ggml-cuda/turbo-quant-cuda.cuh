@@ -8,7 +8,7 @@
 #include <cuda_fp16.h>
 #endif
 #include "ggml-common.h"
-#include <mutex>
+#include "turbo4-tcq-codebook.cuh"
 
 // === InnerQ per-channel equalization ===
 // Scale K channels before L2 norm + FWHT to reduce quantization error on anisotropic distributions.
@@ -46,8 +46,6 @@ static float * h_extract_gpu_buf = nullptr;
 static int   * h_extract_gpu_pos = nullptr;
 static int     h_extract_max = 0;
 static int     h_extract_state = 0;  // 0=uninit, 1=collecting, 2=done
-static std::once_flag h_extract_init_flag;
-static std::mutex     h_extract_check_mutex;
 
 static void turbo_extract_init(int max_samples) {
 	int cur_device;
@@ -63,9 +61,6 @@ static void turbo_extract_init(int max_samples) {
 		cudaMemcpyToSymbol(d_extract_buf_ptr, &h_extract_gpu_buf, sizeof(float *));
 		cudaMemcpyToSymbol(d_extract_pos_ptr, &h_extract_gpu_pos, sizeof(int *));
 		cudaMemcpyToSymbol(d_extract_max_val, &max_samples, sizeof(int));
-		if (id != cur_device) {
-			cudaDeviceEnablePeerAccess(cur_device, 0);
-		}
 	}
 	cudaSetDevice(cur_device);
 	h_extract_max = max_samples;
@@ -491,7 +486,7 @@ void dequantize_turbo3_0(const void * vx, const int64_t ib, const int iqs, float
       const uint8_t low2 = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       const uint8_t hi1  = (x[ib].signs[j/8] >> (j%8)) & 0x1;
       v.x = d_turbo_centroids_3bit[low2 | (hi1 << 2)] * norm; }
-    { const int j = iqs + 16;
+    { const int j = iqs + QK_TURBO3 / 2;
       const uint8_t low2 = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       const uint8_t hi1  = (x[ib].signs[j/8] >> (j%8)) & 0x1;
       v.y = d_turbo_centroids_3bit[low2 | (hi1 << 2)] * norm; }
@@ -615,7 +610,7 @@ void dequantize_turbo2_0(const void * vx, const int64_t ib, const int iqs, float
     { const int j = iqs;
       const uint8_t idx = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       v.x = d_turbo_centroids_2bit[idx] * norm; }
-    { const int j = iqs + 16;
+    { const int j = iqs + QK_TURBO2 / 2;
       const uint8_t idx = (x[ib].qs[j/4] >> ((j%4)*2)) & 0x3;
       v.y = d_turbo_centroids_2bit[idx] * norm; }
 }
@@ -687,6 +682,11 @@ static __constant__ float d_turbo3_tcq_codebook[512] = {
     -0.17986591f, -0.10738580f, -0.06376371f, -0.026595421f, +0.00842492f, +0.04272362f, +0.08608052f, +0.15240218f,
     -0.10953678f, -0.057022586f, -0.012483291f, +0.024463262f, +0.06076792f, +0.09776234f, +0.12983681f, +0.18648379f,
     -0.16471463f, -0.089491285f, -0.037574016f, +0.004444791f, +0.039293647f, +0.07845859f, +0.12893885f, +0.23508036f
+};
+
+// 4-bit TCQ codebook (product_mono/iter100, 1024-state bitshift trellis). Decode: state_t = read_10_bits(qs, t*4)
+static __constant__ float d_turbo4_tcq_codebook[1024] = {
+    GGML_CUDA_TURBO4_TCQ_CODEBOOK_VALUES
 };
 
 // TCQ norm alpha: K alpha = 1.0 (no scaling), V alpha = 1.04 (optimal at 2K context).
@@ -818,10 +818,7 @@ static __global__ void __launch_bounds__(512, 1) k_set_rows_turbo3_tcq(
     __syncthreads();
 
     if (sid == 0) turbo_extract_append(x);
-    if (sid == 0) cost[0] = grp_norm;
-    __syncthreads();
-
-    float saved_norm = cost[0];
+    const float saved_norm = grp_norm;
 
     // Viterbi forward pass: double-buffered cost (1 sync/step, was 3)
     uint8_t * bt = use_shared_bt ? bt_shared : bt_buf + (int64_t)blockIdx.x * (128 * 64);
@@ -1012,6 +1009,292 @@ void dequantize_turbo3_tcq(const void * vx, const int64_t ib, const int iqs, flo
 }
 
 // =====================================================================================
+// TURBO4_TCQ: 4-bit Trellis-Coded Quantization (k=4, L=10, 1024 states)
+// =====================================================================================
+
+template<typename idx_t>
+static __global__ void __launch_bounds__(1024, 1) k_set_rows_turbo4_tcq(
+        const float * __restrict__ src0, const idx_t * __restrict__ src1,
+        block_turbo4_tcq * __restrict__ dst, const int64_t ne_total_groups,
+        uint8_t * __restrict__ bt_buf,
+        const int use_shared_bt,
+        const int64_t ne00, const int64_t ne01, const int64_t ne02,
+        const int64_t ne10, const int64_t ne11, const int64_t ne12, const int64_t ne13,
+        const int64_t s01, const int64_t s02, const int64_t s03,
+        const int64_t s10, const int64_t s11, const int64_t s12,
+        const int iq_is_k,
+        const int64_t s1,  const int64_t s2,  const int64_t s3,
+        const uint3 ne00_fd, const uint3 ne01_fd, const uint3 ne02_fd,
+        const uint3 ne11_fd, const uint3 ne12_fd) {
+
+    const int64_t group = blockIdx.x;
+    if (group >= ne_total_groups) return;
+    const int sid = threadIdx.x; // 0..1023 = trellis state
+
+    const int64_t i_base = group * QK_TURBO4_TCQ;
+    uint32_t tmp = (uint32_t)i_base; uint2 div_mod;
+    div_mod = fast_div_modulo(tmp, ne00_fd); const int64_t i00 = div_mod.y; tmp = div_mod.x;
+    div_mod = fast_div_modulo(tmp, ne01_fd); const int64_t i01 = div_mod.y; tmp = div_mod.x;
+    div_mod = fast_div_modulo(tmp, ne02_fd); const int64_t i02 = div_mod.y; const int64_t i03 = div_mod.x;
+    const int64_t i12 = fastmodulo((uint32_t)i03, ne12_fd);
+    const int64_t i11 = fastmodulo((uint32_t)i02, ne11_fd);
+    const int64_t dst_row = *(src1 + i01*s10 + i11*s11 + i12*s12);
+    const float * grp_src = src0 + i01*s01 + i02*s02 + i03*s03 + i00;
+    block_turbo4_tcq * dst_blk = (block_turbo4_tcq *)((char *)dst + dst_row*s1 + i02*s2 + i03*s3)
+                               + (i00 / QK_TURBO4_TCQ);
+
+    extern __shared__ uint8_t bt_shared[];
+    __shared__ float x[128];
+    __shared__ float cost[1024];
+    __shared__ float cost_b[1024];
+    __shared__ int warp_min_idx[32];
+    __shared__ float warp_min_cost[32];
+    __shared__ float pred_min_cost[64];
+    __shared__ int shared_initial_state;
+
+    if (sid < 128) x[sid] = grp_src[sid];
+    __syncthreads();
+
+    if (d_innerq_calibrate && sid < 128) {
+        atomicAdd(&d_innerq_channel_sq[sid], x[sid] * x[sid]);
+        float abs_val = fabsf(x[sid]);
+        unsigned int * addr = (unsigned int *)&d_innerq_channel_max[sid];
+        unsigned int old_val = __float_as_uint(abs_val);
+        unsigned int assumed;
+        do {
+            assumed = *addr;
+            if (__uint_as_float(assumed) >= abs_val) break;
+        } while (atomicCAS(addr, assumed, old_val) != assumed);
+        if (sid == 0) atomicAdd(&d_innerq_count, 1);
+    }
+    if (sid < 128) x[sid] *= d_innerq_channel_scale[sid];
+    __syncthreads();
+
+    cost[sid] = (sid < 128) ? x[sid] * x[sid] : 0.0f;
+    __syncthreads();
+    for (int stride = 512; stride >= 32; stride >>= 1) {
+        if (sid < stride) cost[sid] += cost[sid + stride];
+        __syncthreads();
+    }
+    if (sid < 32) {
+        float v = cost[sid];
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 16);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 8);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 4);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 2);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 1);
+        if (sid == 0) cost[0] = v;
+    }
+    __syncthreads();
+    float grp_norm = sqrtf(cost[0]);
+    float inv_norm = grp_norm > 1e-10f ? 1.0f / grp_norm : 0.0f;
+
+    if (sid < 128) x[sid] *= inv_norm;
+    __syncthreads();
+
+    if (sid < 128) {
+        float v = x[sid] * d_turbo_wht_signs1[sid];
+        const int lane = sid & 31;
+#pragma unroll
+        for (int h = 1; h < 32; h <<= 1) {
+            const float other = __shfl_xor_sync(0xFFFFFFFFULL, v, h);
+            v = (lane & h) ? (other - v) : (v + other);
+        }
+        x[sid] = v;
+    }
+    __syncthreads();
+    if (sid < 64) {
+        const int j = ((sid >> 5) << 6) + (sid & 31);
+        float a = x[j], b = x[j + 32];
+        x[j] = a + b; x[j + 32] = a - b;
+    }
+    __syncthreads();
+    if (sid < 64) {
+        float a = x[sid], b = x[sid + 64];
+        x[sid] = a + b; x[sid + 64] = a - b;
+    }
+    __syncthreads();
+    constexpr float inv_sqrt_128 = 0.08838834764831845f;
+    if (sid < 128) x[sid] *= inv_sqrt_128 * d_turbo_wht_signs2[sid];
+    __syncthreads();
+
+    if (sid == 0) turbo_extract_append(x);
+    const float saved_norm = grp_norm;
+    uint8_t * bt = use_shared_bt ? bt_shared : bt_buf + (int64_t)blockIdx.x * (128 * 64);
+    cost[sid] = 0.0f;
+    const float tcq_codebook_sid = d_turbo4_tcq_codebook[sid];
+    __syncthreads();
+
+    for (int t = 0; t < 128; t++) {
+        float * cost_rd = (t & 1) ? cost_b : cost;
+        float * cost_wr = (t & 1) ? cost   : cost_b;
+        const float xt = x[t];
+
+        // Right-shift trellis (k=4, L=10): ns = (prev >> 4) | (out << 6).
+        if (sid < 64) {
+            const int base_prev = sid << 4;
+            float best = cost_rd[base_prev];
+            int best_p = 0;
+#pragma unroll
+            for (int p = 1; p < 16; p++) {
+                float c = cost_rd[base_prev | p];
+                if (c < best) {
+                    best = c;
+                    best_p = p;
+                }
+            }
+            pred_min_cost[sid] = best;
+            bt[t * 64 + sid] = (uint8_t) best_p;
+        }
+        __syncthreads();
+
+        const int pred_idx = sid & 0x3F;
+        float dist = xt - tcq_codebook_sid;
+        dist = dist * dist;
+        cost_wr[sid] = pred_min_cost[pred_idx] + dist;
+        __syncthreads();
+    }
+
+    {
+        float my_cost = cost[sid];
+        int my_idx = sid;
+#pragma unroll
+        for (int offset = 16; offset > 0; offset >>= 1) {
+            float other_cost = __shfl_xor_sync(0xFFFFFFFFULL, my_cost, offset);
+            int other_idx = __shfl_xor_sync(0xFFFFFFFFULL, my_idx, offset);
+            if (other_cost < my_cost) { my_cost = other_cost; my_idx = other_idx; }
+        }
+        if ((sid & 31) == 0) {
+            warp_min_cost[sid / 32] = my_cost;
+            warp_min_idx[sid / 32] = my_idx;
+        }
+    }
+    __syncthreads();
+    if (sid < 32) {
+        float best = warp_min_cost[sid];
+        int best_idx = warp_min_idx[sid];
+#pragma unroll
+        for (int offset = 16; offset > 0; offset >>= 1) {
+            float other_cost = __shfl_down_sync(0xFFFFFFFFULL, best, offset);
+            int other_idx = __shfl_down_sync(0xFFFFFFFFULL, best_idx, offset);
+            if (other_cost < best) {
+                best = other_cost;
+                best_idx = other_idx;
+            }
+        }
+        if (sid == 0) {
+            shared_initial_state = best_idx;
+        }
+    }
+    __syncthreads();
+
+    if (d_tcq_dump_max > 0 && group < d_tcq_dump_max && sid < 128)
+        d_tcq_dump_x_buf[group * 128 + sid] = x[sid];
+
+    uint8_t * outputs = (uint8_t *)x;
+    if (sid == 0) {
+        int state = shared_initial_state;
+        for (int t = 127; t >= 0; t--) {
+            outputs[t] = (uint8_t)(state >> 6);
+            int p = bt[t * 64 + (state & 0x3F)];
+            state = ((state & 0x3F) << 4) | p;
+        }
+        shared_initial_state = state;
+    }
+    __syncthreads();
+
+    if (d_tcq_dump_max > 0 && group < d_tcq_dump_max && sid < 128)
+        d_tcq_dump_out_buf[group * 128 + sid] = outputs[sid];
+
+    float my_recon_sq = 0.0f;
+    if (sid < 128) {
+        int cur_state;
+        if (sid < 2) {
+            cur_state = shared_initial_state;
+            for (int t = 0; t <= sid; t++)
+                cur_state = (cur_state >> 4) | (((int)outputs[t]) << 6);
+        } else {
+            cur_state = (((int)outputs[sid - 2] & 0xF) >> 2)
+                      | (((int)outputs[sid - 1] & 0xF) << 2)
+                      | (((int)outputs[sid]     & 0xF) << 6);
+        }
+        cur_state &= 0x3FF;
+        float c = d_turbo4_tcq_codebook[cur_state];
+        my_recon_sq = c * c;
+    }
+    cost[sid] = my_recon_sq;
+    __syncthreads();
+    for (int stride = 512; stride >= 32; stride >>= 1) {
+        if (sid < stride) cost[sid] += cost[sid + stride];
+        __syncthreads();
+    }
+    if (sid < 32) {
+        float v = cost[sid];
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 16);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 8);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 4);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 2);
+        v += __shfl_down_sync(0xFFFFFFFFULL, v, 1);
+        if (sid == 0) cost[0] = v;
+    }
+    __syncthreads();
+    float recon_norm = sqrtf(cost[0]);
+    float corrected_norm = (recon_norm > 1e-10f) ? saved_norm / recon_norm : saved_norm;
+    corrected_norm *= iq_is_k ? d_tcq_norm_alpha : d_tcq_norm_alpha_v;
+
+    if (sid < 65) {
+        const int init_bits = (shared_initial_state >> 4) & 0x3F;
+        uint8_t packed = 0;
+#pragma unroll
+        for (int bit = 0; bit < 8; bit++) {
+            const int pos = sid * 8 + bit;
+            int v = 0;
+            if (pos < 6) {
+                v = (init_bits >> pos) & 1;
+            } else {
+                const int sym_bit_pos = pos - 6;
+                const int sym_idx = sym_bit_pos / 4;
+                if (sym_idx < 128) {
+                    v = (outputs[sym_idx] >> (sym_bit_pos & 3)) & 1;
+                }
+            }
+            packed |= (uint8_t)(v << bit);
+        }
+        dst_blk->qs[sid] = packed;
+    }
+    if (sid == 0) {
+        dst_blk->norm = __float2half(corrected_norm);
+        dst_blk->pad = 0;
+    }
+}
+
+#define QR_TURBO4_TCQ 2
+static __device__ __forceinline__
+void dequantize_turbo4_tcq(const void * vx, const int64_t ib, const int iqs, float2 & v) {
+    const block_turbo4_tcq * blk = (const block_turbo4_tcq *)vx + ib;
+    const float norm = __half2float(blk->norm);
+
+    {
+        const int t = iqs;
+        const int bit_pos = t * 4;
+        const int byte_idx = bit_pos / 8;
+        const int bit_off = bit_pos % 8;
+        const uint16_t raw = (uint16_t)blk->qs[byte_idx] | ((uint16_t)blk->qs[byte_idx + 1] << 8);
+        const int state = (raw >> bit_off) & 0x3FF;
+        v.x = d_turbo4_tcq_codebook[state] * norm;
+    }
+    {
+        const int t = iqs + 64;
+        const int bit_pos = t * 4;
+        const int byte_idx = bit_pos / 8;
+        const int bit_off = bit_pos % 8;
+        const uint16_t raw = (uint16_t)blk->qs[byte_idx] | ((uint16_t)blk->qs[byte_idx + 1] << 8);
+        const int state = (raw >> bit_off) & 0x3FF;
+        v.y = d_turbo4_tcq_codebook[state] * norm;
+    }
+}
+
+// =====================================================================================
 // TURBO2_TCQ: 2-bit Trellis-Coded Quantization (k=2, L=8, 256 states, free initial state)
 // =====================================================================================
 
@@ -1167,10 +1450,7 @@ static __global__ void __launch_bounds__(256, 1) k_set_rows_turbo2_tcq(
     __syncthreads();
 
     if (sid == 0) turbo_extract_append(x);
-    if (sid == 0) cost[0] = grp_norm;
-    __syncthreads();
-
-    float saved_norm = cost[0];
+    const float saved_norm = grp_norm;
 
     // Viterbi forward pass: double-buffered cost (1 sync/step, was 3)
     uint8_t * bt = use_shared_bt ? bt_shared : bt_buf + (int64_t)blockIdx.x * (128 * 64);

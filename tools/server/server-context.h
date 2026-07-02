@@ -87,6 +87,18 @@ struct server_context {
 
 // forward declarations
 struct server_res_generator;
+struct common_params_speculative;
+
+struct server_dflash_recurrent_rollback_plan {
+    bool uses_rs_snapshots = false;
+    bool needs_backup_sequences = false;
+    bool needs_attention_backup_streams = false;
+};
+
+server_dflash_recurrent_rollback_plan server_context_dflash_recurrent_rollback_plan(
+        const common_params_speculative & speculative,
+        bool target_recurrent_or_hybrid,
+        bool target_supports_rs_rollback);
 
 struct server_routes {
     server_routes(const common_params & params, server_context & ctx_server);

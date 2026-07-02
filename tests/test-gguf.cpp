@@ -112,7 +112,13 @@ static std::vector<tensor_config_t> get_tensor_configs(std::mt19937 & rng) {
     tensor_configs.reserve(100);
 
     for (int i = 0; i < 100; ++i) {
-        const enum ggml_type type = ggml_type(rng() % GGML_TYPE_COUNT);
+        enum ggml_type type = ggml_type(rng() % GGML_TYPE_COUNT);
+        switch ((int) type) {
+            case 36: type = GGML_TYPE_I2_S; break;
+            case 37: type = GGML_TYPE_I8_S; break;
+            case 38: type = GGML_TYPE_TL1;  break;
+            case 39: type = GGML_TYPE_TL2;  break;
+        }
         if (ggml_type_size(type) == 0) {
             continue;
         }
@@ -438,12 +444,20 @@ static FILE * get_handcrafted_file(const unsigned int seed, const enum handcraft
             helper_write(file, offset);
         }
 
-        int64_t ne = shape[0];
-        for (uint32_t i = 1; i < n_dims; ++i) {
-            ne *= shape[i];
+        struct ggml_tensor dummy;
+        memset(&dummy, 0, sizeof(dummy));
+        dummy.type = type;
+        dummy.ne[0] = shape[0];
+        dummy.ne[1] = shape[1];
+        dummy.ne[2] = shape[2];
+        dummy.ne[3] = shape[3];
+        dummy.nb[0] = ggml_type_size(type);
+        dummy.nb[1] = dummy.nb[0] * (dummy.ne[0] / ggml_blck_size(type));
+        for (int j = 2; j < GGML_MAX_DIMS; ++j) {
+            dummy.nb[j] = dummy.nb[j-1] * dummy.ne[j-1];
         }
-
-        offset += GGML_PAD(ggml_row_size(type, ne), (uint64_t) alignment);
+        const size_t nbytes = ggml_nbytes(&dummy);
+        offset += GGML_PAD(nbytes, (uint64_t) alignment);
     }
 
     while (ftell(file) % alignment != 0) {
@@ -669,11 +683,20 @@ static bool handcrafted_check_tensors(const gguf_context * gguf_ctx, const unsig
             ok = false;
         }
 
-        int64_t ne = shape[0];
-        for (size_t j = 1; j < GGML_MAX_DIMS; ++j) {
-            ne *= shape[j];
+        struct ggml_tensor dummy;
+        memset(&dummy, 0, sizeof(dummy));
+        dummy.type = type;
+        dummy.ne[0] = shape[0];
+        dummy.ne[1] = shape[1];
+        dummy.ne[2] = shape[2];
+        dummy.ne[3] = shape[3];
+        dummy.nb[0] = ggml_type_size(type);
+        dummy.nb[1] = dummy.nb[0] * (dummy.ne[0] / ggml_blck_size(type));
+        for (int j = 2; j < GGML_MAX_DIMS; ++j) {
+            dummy.nb[j] = dummy.nb[j-1] * dummy.ne[j-1];
         }
-        expected_offset += GGML_PAD(ggml_row_size(type, ne), alignment);
+        const size_t nbytes = ggml_nbytes(&dummy);
+        expected_offset += GGML_PAD(nbytes, alignment);
     }
 
     return ok;
@@ -694,11 +717,19 @@ static bool handcrafted_check_tensor_data(const gguf_context * gguf_ctx, const u
         const ggml_type                          type  = tensor_configs[i].first;
         const std::array<int64_t, GGML_MAX_DIMS> shape = tensor_configs[i].second;
 
-        int64_t ne = shape[0];
-        for (size_t j = 1; j < GGML_MAX_DIMS; ++j) {
-            ne *= shape[j];
+        struct ggml_tensor dummy;
+        memset(&dummy, 0, sizeof(dummy));
+        dummy.type = type;
+        dummy.ne[0] = shape[0];
+        dummy.ne[1] = shape[1];
+        dummy.ne[2] = shape[2];
+        dummy.ne[3] = shape[3];
+        dummy.nb[0] = ggml_type_size(type);
+        dummy.nb[1] = dummy.nb[0] * (dummy.ne[0] / ggml_blck_size(type));
+        for (int j = 2; j < GGML_MAX_DIMS; ++j) {
+            dummy.nb[j] = dummy.nb[j-1] * dummy.ne[j-1];
         }
-        const size_t size = ggml_row_size(type, ne);
+        const size_t size = ggml_nbytes(&dummy);
 
         const std::string name = "my_tensor_" + std::to_string(i);
         const size_t offset = gguf_get_tensor_offset(gguf_ctx, gguf_find_tensor(gguf_ctx, name.c_str()));
