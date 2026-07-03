@@ -119,7 +119,7 @@ Microsoft ships a **separate** W2A8 PyTorch stack under `$BITNET_REF_ROOT\gpu\` 
 - `compile.sh` / `nvcc` builds `bitnet_kernels/libbitnet.so` (`.so` only; **no Windows-native path**).
 - `model.py` loads the `.so` with a **relative** path (`bitnet_kernels/libbitnet.so`); run from `gpu/` root.
 - Requires **CUDA toolkit in WSL** (`nvcc`), NVIDIA driver passthrough, and GPU with **sm_80+** (RTX 30xx = 8.6).
-- `gpu-dev` branch differs only cosmetically from `main` for `gpu/` (drops `weights_only=True` on `torch.load`; README table edits). Stay on **`main` @ `01eb415`** unless MS merges GPU fixes.
+- `gpu-dev` branch differs only cosmetically from `main` for `gpu/` (drops `weights_only=True` on `torch.load`; README table edits). Stay on **`godzilla` @ `01eb415`** unless MS merges GPU fixes.
 
 ### Windows native feasibility
 

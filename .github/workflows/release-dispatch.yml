@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run release.yml \
-            --ref main \
+            --ref godzilla \
             --field source_ref="${SOURCE_REF}" \
             --field source_sha="${SOURCE_SHA}" \
             --field tag_name="${TAG_NAME}" \

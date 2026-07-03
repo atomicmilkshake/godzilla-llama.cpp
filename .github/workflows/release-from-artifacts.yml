@@ -28,7 +28,7 @@ jobs:
       - name: Clone main workflow helpers
         uses: actions/checkout@v6
         with:
-          ref: main
+          ref: godzilla
           fetch-depth: 0
 
       - name: Verify source run and tag

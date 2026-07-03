@@ -283,3 +283,16 @@ Work is wrapped. No further action unless requested.
 - **Next Steps**:
   - None unless additional style constraints are requested.
 
+---
+
+### Session: 2026-07-03 (full update publish)
+- **Goal**: Publish all remaining local changes to the `godzilla` branch.
+- **Changes Completed**:
+  - Prepared full pending change set for commit, including workflow/docs/test updates and `.agents` notes files.
+  - Published as a single branch update commit to `origin/godzilla`.
+- **Findings & Decisions**:
+  - Kept scope broad per explicit "full update" request (not a selective docs-only push).
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - None.
+

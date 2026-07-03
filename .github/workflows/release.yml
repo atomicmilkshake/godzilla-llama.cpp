@@ -79,7 +79,7 @@ jobs:
           fi
           git cat-file -e "${source_sha}^{commit}"
 
-          git fetch origin +refs/heads/main:refs/remotes/origin/main --no-tags
+          git fetch origin +refs/heads/godzilla:refs/remotes/origin/godzilla --no-tags
 
           if [[ "${create_release}" == "true" ]]; then
             if [[ "${tag_name}" != v* ]]; then
@@ -92,7 +92,7 @@ jobs:
               echo "Tag ${tag_name} points to ${tag_commit}, not requested source ${source_sha}." >&2
               exit 1
             fi
-            if ! git merge-base --is-ancestor "${source_sha}" refs/remotes/origin/main; then
+            if ! git merge-base --is-ancestor "${source_sha}" refs/remotes/origin/godzilla; then
               echo "Tag ${tag_name} is not reachable from origin/main; refusing to publish." >&2
               exit 1
             fi
