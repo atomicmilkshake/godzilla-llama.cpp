@@ -101,3 +101,15 @@ Sensitive local paths, machine-specific details, and external session identifier
 - **Current State**: COMPLETED
 - **Next Steps**:
   - None.
+
+---
+
+### Session: 2026-07-03 (GitHub description revision)
+- **Goal**: Update GitHub repository description to reflect current branch and technical scope.
+- **Changes Completed**:
+  - Replaced outdated branch-specific description text on GitHub with a concise technical description aligned to `godzilla`.
+- **Findings & Decisions**:
+  - Prior description referenced old branch naming and stale planning doc path.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Keep the About description aligned with single-branch policy and release lineage.
