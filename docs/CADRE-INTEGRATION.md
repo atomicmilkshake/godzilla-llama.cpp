@@ -1,7 +1,7 @@
 # Cadre integration with godzilla-llama.cpp
 
-**Consumer:** [Cadre](file:///V:/cadre) eval harness and managed `llama-server` on port **8090**.  
-**Engine:** `J:\LLM\godzilla-llama.cpp` branch **`main`**.
+**Consumer:** Cadre eval harness and managed `llama-server` on port **8090**.  
+**Engine:** `<GODZILLA_REPO_ROOT>` branch **`main`**.
 
 ---
 
@@ -9,9 +9,9 @@
 
 ```powershell
 # Rebuild godzilla (MSVC + CUDA via vcvars)
-V:\cadre\scripts\rebuild-godzilla.bat
+<CADRE_ROOT>\scripts\rebuild-godzilla.bat
 
-cd V:\cadre
+cd <CADRE_ROOT>
 python -m cadre server start
 python -m cadre eval humaneval --mode coder --limit 5 --no-live
 ```
@@ -21,7 +21,7 @@ Success: all problems complete without `openai.APIConnectionError` / `httpx.Conn
 Stability regression (coder + think tank):
 
 ```powershell
-python V:\cadre\scripts\benchmark_modes.py 5
+python <CADRE_ROOT>\scripts\benchmark_modes.py 5
 ```
 
 ---
@@ -71,12 +71,12 @@ Solo-coder HumanEval: **HumanEval/0** PASS, **HumanEval/1** second LLM round →
 
 | File | Change |
 |------|--------|
-| `V:\cadre\src\cadre\server\manager.py` | `erase_slot()`, `ensure_running()` |
-| `V:\cadre\src\cadre\eval\humaneval.py` | Call both between each HumanEval problem |
+| `<CADRE_ROOT>\src\cadre\server\manager.py` | `erase_slot()`, `ensure_running()` |
+| `<CADRE_ROOT>\src\cadre\eval\humaneval.py` | Call both between each HumanEval problem |
 
 ### Verification
 
-Post-fix: solo coder **5/5 pass@1**, zero connection errors (wall ~1273 s for 5 problems). Artifacts: `V:\cadre\data\eval\humaneval_20260701_133731`.
+Post-fix: solo coder **5/5 pass@1**, zero connection errors (wall ~1273 s for 5 problems). Artifacts: `<CADRE_ROOT>\data\eval\humaneval_<TIMESTAMP>`.
 
 ---
 
@@ -93,7 +93,7 @@ Post-fix: solo coder **5/5 pass@1**, zero connection errors (wall ~1273 s for 5 
 
 | Item | Path |
 |------|------|
-| Stability report | `J:\LLM\diagnostics\cadre-godzilla-stability-report-2026-07-01.md` |
-| Repro JSON | `J:\LLM\diagnostics\godzilla-stability-repro-20260701.json` |
-| Verify log | `J:\LLM\diagnostics\godzilla-stability-verify-20260701.log` |
-| Cadre settings | `V:\cadre\config\settings.yaml` |
+| Stability report | `<DIAGNOSTICS_ROOT>\cadre-godzilla-stability-report-<DATE>.md` |
+| Repro JSON | `<DIAGNOSTICS_ROOT>\godzilla-stability-repro-<DATE>.json` |
+| Verify log | `<DIAGNOSTICS_ROOT>\godzilla-stability-verify-<DATE>.log` |
+| Cadre settings | `<CADRE_ROOT>\config\settings.yaml` |

@@ -32,7 +32,7 @@ Ports **ik_llama.cpp** weight-quant ideas without touching the Microsoft BitNet 
 ```powershell
 cd <GODZILLA_ROOT>
 # CPU + CUDA (WDK UCRT if VS18 needs it)
-pwsh -File scripts/build_cuda.ps1 -SdkRoot S:\WADK102 -WithTests -Target test-quantize-fns
+pwsh -File scripts/build_cuda.ps1 -SdkRoot <WDK_ROOT> -WithTests -Target test-quantize-fns
 .\build\bin\test-quantize-fns.exe
 # Expect: iq2_bn quant + vec_dot PASS (iq2_bn uses relaxed starter thresholds)
 ```
@@ -63,8 +63,8 @@ IQ2_BN merged to `main` after enum audit (60–61 vs BitNet 56–59 / Turbo 42�
 |------|--------|-------|
 | `test-quantize-fns` IQ2_BN round-trip | **PASS** | row-meta scaled dequant; starter RMSE gate 0.010; re-verified CPU-only @ `2543f8a8a` |
 | `test-quantize-fns` IQ2_BN vec_dot | **PASS** | `vec_dot_iq2_bn_q8_K64` + `Q8_K64`; starter dot gate 0.15; re-verified CPU-only @ `2543f8a8a` |
-| CUDA `mmvq` / `convert` compile | **PASS** | nvcc sm86: `mmvq.cu` + `convert.cu` (IQ2_BN `vec_dot_iq2_bn_q8_1`, `dequantize_block_iq2_bn`) green with WDK `-SdkRoot` (e.g. `S:\WADK102`) |
-| Full CUDA link (`ggml-cuda.dll`) | **PASS** | `build-qg/bin/ggml-cuda.dll` linked @ `7e64e8c23` (2026-06-30 04:50, ~134 MB); single-writer `cmake --build build-qg -j 4 --target ggml-cuda` + WDK `S:\WADK102` |
+| CUDA `mmvq` / `convert` compile | **PASS** | nvcc sm86: `mmvq.cu` + `convert.cu` (IQ2_BN `vec_dot_iq2_bn_q8_1`, `dequantize_block_iq2_bn`) green with WDK `-SdkRoot` (for example `<WDK_ROOT>`) |
+| Full CUDA link (`ggml-cuda.dll`) | **PASS** | `build-qg/bin/ggml-cuda.dll` linked @ `7e64e8c23` (2026-06-30 04:50, ~134 MB); single-writer `cmake --build build-qg -j 4 --target ggml-cuda` + WDK `<WDK_ROOT>` |
 | CUDA `test-quantize-fns` (build-qg) | **PASS** | `build-qg/bin/test-quantize-fns.exe` exit 0 incl. `iq2_bn` + `q8_K64` (CPU quant paths; CUDA DLL present) |
 | `main` ctest `triattention\|copilot-coalesce` | **PASS 9/9** | After merge @ `14d6b1b77`; re-verified post-stability commits 2026-07-01 |
 | Enum 60–61 audit vs BitNet 56–59 / Turbo 42–55 | **OPEN** | No collision; formal audit before merge |
