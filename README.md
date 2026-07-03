@@ -1,150 +1,160 @@
 # Godzilla llama.cpp
 
-**King of the Monsters** — one fork that combines the best KV compression, pruning, weight quants, and speculative decoding work into a single maintainable tree.
+Godzilla is a BeeLlama/llama.cpp fork that integrates speculative decoding, KV compression/pruning, and fork-specific quantization changes in one codebase.
 
-> The fork that collected and perfected the best KV work (TurboQuant + TriAttention + KVarN + spiritbuun dequant), the best weight work (ik_llama), the best speculative decoding (BeeLlama + AtomicBot-ai/NJannasch), and made them play together.
+## Project scope
 
-**Maintainer:** [atomicmilkshake](https://github.com/atomicmilkshake)  
-**Security:** see [SECURITY.md](SECURITY.md) · local paths: [docs/LOCAL-SETUP.example.md](docs/LOCAL-SETUP.example.md)  
-**Base:** [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp) (`beellama-upstream`)  
-**Active branch:** `main` (single integration line — TriAttention, TurboQuant/TCQ, IQ2_BN, KVarN)
+- Base lineage: [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp)
+- Maintainer: [atomicmilkshake](https://github.com/atomicmilkshake)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Primary integration branch: `godzilla`
 
-## Godzilla stack (target architecture)
+## Implemented features
 
-```
-Model Loading
-├── Weight Quantization (ik_llama Trellis/IQ* + row-interleaved packing)     [Phase 2]
-│
-Inference Graph
-├── KV Cache Quantization (TurboQuant/TCQ + spiritbuun dequant/norm)         [Phase 1]
-├── KV Pruning / Eviction (TriAttention GPU scoring + compaction)            [main ✓]
-├── Speculative Decoding (DFlash/MTP + model-specific heads + Tri-aware)     [Phase 3]
-└── Backend Execution (CUDA/HIP/Metal/CPU + hybrid offload)                  [ongoing]
-```
+### Speculative decoding
 
-## What works today (`main`)
+- DFlash draft-model architecture and server flow
+- Flat and tree DFlash verification paths
+- Adaptive draft-max controllers (`profit`, `fringe`)
+- CopySpec/suffix/recycle and n-gram speculative variants
+- Server-side reasoning loop guard
 
-Cherry-picked from [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buun-llama-cpp) onto BeeLlama `main` @ `85e22ea0b`:
+Reference docs:
 
-- **TriAttention V3** — calibration-guided KV eviction ([arXiv:2604.04921](https://arxiv.org/abs/2604.04921))
-- Full CLI surface: `--triattention-stats`, `--triattention-budget`, `--triattention-window`, buckets, hard-prefix, etc.
-- CUDA scoring kernel: `ggml/src/ggml-cuda/triattention-score.cu`
-- Docs: [docs/TRIATTENTION.md](docs/TRIATTENTION.md), [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md)
+- [docs/beellama-features.md](docs/beellama-features.md)
+- [docs/beellama-args.md](docs/beellama-args.md)
+- [docs/quickstart-qwen36-dflash.md](docs/quickstart-qwen36-dflash.md)
+- [docs/quickstart-gemma-4-31b-dflash.md](docs/quickstart-gemma-4-31b-dflash.md)
 
-Inherited from BeeLlama:
+### KV compression and pruning
 
-- TurboQuant / TCQ KV types (`turbo2`, `turbo3`, `turbo4`, `turbo2_tcq`, `turbo3_tcq`)
-- DFlash speculative decoding, adaptive draft control, reasoning-loop protection
-- Multimodal + upstream llama.cpp server/API parity
+- TurboQuant KV cache types: `turbo2`, `turbo3`, `turbo4`
+- TCQ KV cache types: `turbo2_tcq`, `turbo3_tcq`
+- KVarN pseudo cache-type surface and runtime integration
+- TriAttention calibration-guided KV eviction (CPU + CUDA scoring paths)
 
-## Quick start (CUDA, Windows)
+Reference docs:
+
+- [docs/TRIATTENTION.md](docs/TRIATTENTION.md)
+- [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md)
+- [docs/PROFILES.md](docs/PROFILES.md)
+
+### Weight quantization extensions
+
+- IQ2_BN and Q8_K64 type integration (including CUDA-side support paths)
+- Current status and scope notes tracked in [docs/QUANT-GOD.md](docs/QUANT-GOD.md)
+
+## Roadmap execution status
+
+This section lists roadmap items that are already implemented in the current tree.
+
+| Milestone | Status |
+| --- | --- |
+| Single-branch Godzilla integration line | Executed |
+| TriAttention integration (CLI, runtime, CUDA scoring) | Executed |
+| KV stack integration (TurboQuant/TCQ + KVarN surfaces) | Executed |
+| IQ2_BN starter quant stream merged | Executed |
+| DFlash + adaptive controllers + loop guard | Executed |
+| DFlash and TriAttention coexistence support | Executed |
+
+Future planning is tracked in issues and docs.
+
+## Build
+
+### Windows (CUDA)
 
 ```powershell
-# MSVC + CUDA (RTX 3080 = arch 86)
-$Vcvars = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
-cmd /c "`"$Vcvars`" >nul 2>&1 && set" | ForEach-Object {
-    if ($_ -match "^(.*?)=(.*)$") { Set-Item "env:$($matches[1])" $matches[2] }
-}
-$env:INCLUDE += ";$WDK_ROOT\Include\10.0.26100.0\ucrt"
-$env:LIB     += ";$WDK_ROOT\Lib\10.0.26100.0\ucrt\x64"
-
 cmake -S . -B build -G Ninja `
-  -DGGML_CUDA=ON -DGGML_NATIVE=ON -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON `
-  -DGGML_CCACHE=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
-cmake --build build -j 8 --target llama-server
+  -DGGML_CUDA=ON `
+  -DGGML_NATIVE=ON `
+  -DGGML_CUDA_FA=ON `
+  -DGGML_CUDA_FA_ALL_QUANTS=ON `
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build --config Release --parallel --target llama-server
 ```
 
-### TurboQuant + TriAttention server example
+### Linux (CUDA)
 
-```powershell
-.\build\bin\llama-server.exe `
-  -m $MODELS_DIR/your-model.gguf `
-  --cache-type-k turbo3 --cache-type-v turbo4 `
-  --flash-attn on `
-  --triattention-stats $TRIATTENTION_CALIB_DIR/vibethinker-3b.triattention `
-  --triattention-budget 2048 --triattention-window 128 `
-  -c 32768 --port 8090
+```bash
+cmake -B build \
+  -DGGML_CUDA=ON \
+  -DGGML_NATIVE=ON \
+  -DGGML_CUDA_FA=ON \
+  -DGGML_CUDA_FA_ALL_QUANTS=ON \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build -j
 ```
 
-Calibration: set `TRIATTENTION_PYTHON` and `TRIATTENTION_CALIBRATE_PY` (see [docs/LOCAL-SETUP.example.md](docs/LOCAL-SETUP.example.md)).
+### macOS (Metal)
 
-### VSCode Copilot / agent mode (Qwopus-style)
-
-For remote Copilot through Caddy, keep reasoning in `reasoning_content` only and coalesce visible `content` deltas so agent mode does not treat every token as a completed step:
-
-```powershell
-.\build\bin\llama-server.exe `
-  -m $MODELS_DIR/Qwopus3.5-9B-coder-Exp-Q4_K_M.gguf `
-  -c 262144 -ngl 99 --flash-attn on -nkvo --kv-unified `
-  --host 0.0.0.0 --port 8090 --parallel 1 `
-  --alias "Qwopus Coder,Godzilla Test" --jinja `
-  --reasoning on --reasoning-budget 8192 --reasoning-format deepseek `
-  --no-reasoning-promote-to-content `
-  --verbose --log-payloads
+```bash
+cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ```
 
-Build helper: `pwsh -File scripts/build_cuda.ps1 -Target llama-server` (stop any running `llama-server` first on Windows to avoid DLL lock).
+## Launch examples
 
-### Extended context + KV-RAM (hybrid Qwen3.5 / Cadre)
+### TurboQuant + TriAttention
 
-For YaRN beyond `n_ctx_train` (e.g. `-c 524288` with `--yarn-orig-ctx 262144`), pass `--allow-extended-ctx` so slot init respects the requested context instead of clamping to training size. Pair with `--kv-ram` to keep large KV in system RAM on 10 GB GPUs.
-
-```powershell
-.\build\bin\llama-server.exe `
-  -m $MODELS_DIR/your-hybrid-thinking.gguf `
-  --allow-extended-ctx --kv-ram --flash-attn on `
-  --rope-scaling yarn --yarn-orig-ctx 262144 -c 524288 `
-  --parallel 1 --jinja --reasoning on --reasoning-budget 8192 `
-  --no-reasoning-promote-to-content `
-  --host 0.0.0.0 --port 8090
+```bash
+./build/bin/llama-server \
+  -m /path/to/model.gguf \
+  --flash-attn on \
+  --cache-type-k turbo3 \
+  --cache-type-v turbo4 \
+  --triattention-stats /path/to/model.triattention \
+  --triattention-budget 8192 \
+  --triattention-window 128 \
+  -c 32768 --port 8080
 ```
 
-Cadre integration (managed server, HumanEval): see [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md). Rebuild helper: `V:\cadre\scripts\rebuild-godzilla.bat`.
+### DFlash
 
-For CUDA builds, the escape hatch environment variable `GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS=1` can be set to warn instead of failing when a requested KV cache type pair is not compiled into the backend.
+```bash
+./build/bin/llama-server \
+  -m /path/to/target.gguf \
+  --spec-type dflash \
+  --spec-draft-model /path/to/draft.gguf \
+  --spec-draft-n-max 8 \
+  --spec-branch-budget 0 \
+  --spec-dflash-cross-ctx 512
+```
 
+## Testing and validation
 
-## Benchmarks
+```bash
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Commonly used test binaries include `test-dflash-plumbing`, `test-server-context`, `test-server-loop-guard`, `test-gguf`, and `test-kvarn`.
+
+## Benchmark helpers
 
 ```powershell
 pwsh -File scripts/benchmarks/run-engine-preflight.ps1
 pwsh -File scripts/benchmarks/run-kv-matrix.ps1 -Model path\to\model.gguf
 ```
 
-Results land in `logs/benchmarks/`.
+Artifacts are written under `logs/benchmarks/`.
 
-## Branch policy
+## Documentation index
 
-**Single branch:** all Godzilla work lands on `main`. Legacy topic branches (`kv-god`, `quant-god`, `spec-god`, `bitnet-god`) were consolidated 2026-07-01; IQ2_BN from `quant-god` is merged and kept.
-
-Upstream sync: `beellama-upstream/main` → merge into `main`. Full procedure: [docs/godotzilla-upstream-sync-process.md](docs/godotzilla-upstream-sync-process.md).
-
-## Roadmap
-
-Phased roadmap is tracked in project issues and `docs/`; operator-specific plans stay outside this repo.
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 0 | Repo + branches + TriAttention port | **done** (`main` only) |
-| 1 | KV domination (spiritbuun dequant, KVarN, profiles) | queued |
-| 2 | ik_llama weight quants + MoE | **starter** (IQ2_BN on `main`) |
-| 3 | Speculative + TriAttention coexistence | queued |
-| 4 | Embedded polish + CPU turbo path | queued |
-| 5 | Docs, prebuilts, upstream discipline | ongoing |
-
-## Inherited BeeLlama documentation
-
-- [BeeLlama features](docs/beellama-features.md)
-- [CLI reference](docs/beellama-args.md)
-- [Qwen 3.6 + DFlash quickstart](docs/quickstart-qwen36-dflash.md)
-- [Gemma 4 + DFlash quickstart](docs/quickstart-gemma-4-31b-dflash.md)
+- [docs/beellama-features.md](docs/beellama-features.md)
+- [docs/beellama-args.md](docs/beellama-args.md)
+- [docs/TRIATTENTION.md](docs/TRIATTENTION.md)
+- [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md)
+- [docs/QUANT-GOD.md](docs/QUANT-GOD.md)
+- [docs/PROFILES.md](docs/PROFILES.md)
+- [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md)
+- [docs/godzilla-upstream-sync-process.md](docs/godzilla-upstream-sync-process.md)
 
 ## Attribution
 
-| Innovation | Source |
-|------------|--------|
+| Area | Upstream source |
+| --- | --- |
 | BeeLlama base, DFlash, adaptive spec | [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp) |
-| TurboQuant / TCQ | [TheTom/llama-cpp-turboquant](https://github.com/TheTom/llama-cpp-turboquant), [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buun-llama-cpp) |
-| TriAttention | domvox / atomicmilkshake (ported via buun) |
-| ik_llama quants (planned) | [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) |
-| RotorQuant / KVarN (planned) | community forks per roadmap |
+| TurboQuant / TCQ lineage | [TheTom/llama-cpp-turboquant](https://github.com/TheTom/llama-cpp-turboquant), [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buun-llama-cpp) |
+| TriAttention lineage | domvox / atomicmilkshake integration via buun lineage |
+| IQ2_BN quant ideas | [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) |
