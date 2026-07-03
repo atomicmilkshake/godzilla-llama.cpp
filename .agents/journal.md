@@ -73,3 +73,17 @@ Sensitive local paths, machine-specific details, and external session identifier
 - **Current State**: COMPLETED
 - **Next Steps**:
   - Keep remote branch policy to `godzilla` only.
+
+---
+
+### Session: 2026-07-03 (release cleanup)
+- **Goal**: Clean the GitHub releases page to only show current release lineage.
+- **Changes Completed**:
+  - Deleted release `kv-god-20260629`.
+  - Deleted release `kv-god-20260628`.
+  - Verified `v0.3.2` is now the only listed release.
+- **Findings & Decisions**:
+  - Deleting a release does not delete its git tag automatically.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Optionally delete legacy `kv-god-*` tags if they are no longer needed.
