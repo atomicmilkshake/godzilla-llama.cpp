@@ -58,3 +58,18 @@ Sensitive local paths, machine-specific details, and external session identifier
 - **Current State**: COMPLETED
 - **Next Steps**:
   - Keep future entries redacted by default.
+
+---
+
+### Session: 2026-07-03 (single-branch enforcement)
+- **Goal**: Ensure only one active branch remains on the GitHub remote.
+- **Changes Completed**:
+  - Changed GitHub default branch to `godzilla`.
+  - Deleted remote branch `kv-god`.
+  - Pruned and verified remote-tracking refs.
+- **Findings & Decisions**:
+  - Branch deletion was initially blocked because `kv-god` was the default branch.
+  - Resolved by switching default branch first.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Keep remote branch policy to `godzilla` only.
