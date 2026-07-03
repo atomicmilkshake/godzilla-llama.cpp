@@ -87,3 +87,17 @@ Sensitive local paths, machine-specific details, and external session identifier
 - **Current State**: COMPLETED
 - **Next Steps**:
   - Optionally delete legacy `kv-god-*` tags if they are no longer needed.
+
+---
+
+### Session: 2026-07-03 (legacy tag cleanup)
+- **Goal**: Remove leftover `kv-god-*` tags after release cleanup.
+- **Changes Completed**:
+  - Deleted remote tags `kv-god-20260628` and `kv-god-20260629`.
+  - Deleted matching local tags.
+  - Verified only `v0.3.2` remains in release listing.
+- **Findings & Decisions**:
+  - Full cleanup now aligns branch/tag/release naming with the single-branch policy.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - None.
