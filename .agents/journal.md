@@ -153,18 +153,20 @@ Sensitive local paths, machine-specific details, and external session identifier
 
 ---
 
-### Session: 2026-07-04 [Local: 2026-07-04 09:40 CT / UTC: 2026-07-04 14:40]
-- **Goal**: Address the issue where Qwen 3.6 MTP (Multi-Token Prediction) tensors fail to convert due to differing weight key naming conventions (`model.mtp_layer` / `model.mtp_layers`).
+### Session: 2026-07-04 [Local: 2026-07-04 10:08 CT / UTC: 2026-07-04 15:08]
+- **Goal**: Make Qwen 3.6 MTP model conversion fully seamless and automatic, addressing differences in weight naming conventions (`model.mtp_layer` / `model.mtp_layers`) and registering Qwen 3.6 HF architecture identifiers.
 - **Changes Completed**:
-  - Modified [conversion/qwen.py](file:///J:/LLM/godzilla-llama.cpp/conversion/qwen.py) to normalize `model.mtp_layer.`, `model.mtp_layers.`, `mtp_layer.`, and `mtp_layers.` prefixes into standard `mtp.` prefixes during HF-to-GGUF conversion.
+  - Modified [conversion/qwen.py](file:///J:/LLM/godzilla-llama.cpp/conversion/qwen.py) to normalize `model.mtp_layer.`, `model.mtp_layers.`, `mtp_layer.`, and `mtp_layers.` prefixes into standard `mtp.` prefixes during HF-to-GGUF conversion. Also registered `Qwen3_6ForConditionalGeneration`, `Qwen3_6ForCausalLM`, `Qwen3_6MoeForConditionalGeneration`, and `Qwen3_6MoeForCausalLM` to utilize the Qwen 3.5 conversion classes automatically.
   - Modified [docs/quickstart-qwen36-dflash.md](file:///J:/LLM/godzilla-llama.cpp/docs/quickstart-qwen36-dflash.md) to add troubleshooting details for Qwen 3.6 MTP model conversion and naming conventions.
   - Created a test script [scratch/test_qwen_mtp.py](file:///J:/LLM/godzilla-llama.cpp/scratch/test_qwen_mtp.py) to verify the new tensor key normalization mapping rules.
 - **Findings & Decisions**:
   - Qwen 3.6 model checkpoints on Hugging Face often use `model.mtp_layer` or `model.mtp_layers` keys instead of `model.mtp`. Without normalizing these keys, the conversion script ignored them, leading to GGUF files with missing MTP layers and runtime assertion failures (`MTP block missing nextn.eh_proj`).
   - Normalizing these prefixes allows the standard downstream `_Qwen35MtpMixin` logic and tensor mappings to process them correctly.
+  - Explicitly registering Qwen 3.6 causal/conditional architectures under `Qwen3_5TextModel` and `Qwen3_5MoeTextModel` allows the conversion script to map Qwen 3.6 models automatically out-of-the-box, without manual class/configuration overrides.
   - Verified the custom mapping changes using a dedicated test script, where all mapped output tensor names match standard GGUF patterns.
 - **Current State**: COMPLETED
 - **Next Steps**:
-  - Advise the user to rebuild/run their conversion with the updated `convert_hf_to_gguf.py` for Qwen 3.6 MTP models.
+  - Direct Qwen 3.6 users to perform standard model conversions using `convert_hf_to_gguf.py --mtp`.
+
 
 

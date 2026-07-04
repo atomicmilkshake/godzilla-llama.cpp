@@ -625,11 +625,11 @@ class _Qwen35MtpMixin:
         self.fname_out = self.fname_out.parent / f"mtp-{fname_default}.gguf"
 
 
-@ModelBase.register("Qwen3_5ForConditionalGeneration", "Qwen3_5ForCausalLM")
+@ModelBase.register("Qwen3_5ForConditionalGeneration", "Qwen3_5ForCausalLM", "Qwen3_6ForConditionalGeneration", "Qwen3_6ForCausalLM")
 class Qwen3_5TextModel(_Qwen35MtpMixin, _Qwen35MRopeMixin, _LinearAttentionVReorderBase):
     model_arch = gguf.MODEL_ARCH.QWEN35
 
 
-@ModelBase.register("Qwen3_5MoeForConditionalGeneration", "Qwen3_5MoeForCausalLM")
+@ModelBase.register("Qwen3_5MoeForConditionalGeneration", "Qwen3_5MoeForCausalLM", "Qwen3_6MoeForConditionalGeneration", "Qwen3_6MoeForCausalLM")
 class Qwen3_5MoeTextModel(_Qwen35MtpMixin, _Qwen35MRopeMixin, _LinearAttentionVReorderBase):
     model_arch = gguf.MODEL_ARCH.QWEN35MOE
