@@ -782,7 +782,7 @@ static struct gguf_context * gguf_init_from_reader(const struct gguf_reader & gr
             const gguf_tensor_info & ti = ctx->info[i];
             if (ti.offset != ctx->size) {
                 if (i > 0) {
-                    GGML_LOG_ERROR("DIAG: prev tensor '%s', type %d, ne [%lld,%lld,%lld,%lld], size %zu, padded_size %zu\n",
+                    GGML_LOG_ERROR("DIAG: prev tensor '%s', type %d, ne [%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64 "], size %zu, padded_size %zu\n",
                         ctx->info[i-1].t.name, ctx->info[i-1].t.type,
                         ctx->info[i-1].t.ne[0], ctx->info[i-1].t.ne[1],
                         ctx->info[i-1].t.ne[2], ctx->info[i-1].t.ne[3],

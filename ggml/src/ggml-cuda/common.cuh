@@ -47,7 +47,7 @@
 #define CUDART_HMAX   11070 // CUDA 11.7, min. ver. for which __hmax and __hmax2 are known to work (may be higher than needed)
 #define CUDART_HMASK  12000 // CUDA 12.0, min. ver. for half2 -> uint mask comparisons
 // Bit-pattern -inf for device code (avoids NVCC #221 on -INFINITY → 1e+300 in __device__ paths).
-#if defined(__CUDACC__)
+#if defined(__CUDACC__) || defined(__HIPCC__)
 static __device__ __forceinline__ float ggml_cuda_neginf_f() {
     // Union avoids __int_as_float (unavailable in NVCC host pass) and -INFINITY (#221).
     union { unsigned int u; float f; } v { 0xff800000u };

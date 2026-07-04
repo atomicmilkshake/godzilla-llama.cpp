@@ -57,7 +57,7 @@ target_compile_features   (llama PRIVATE cxx_std_17) # don't bump
 
 target_link_libraries(llama PUBLIC ggml)
 
-if (NOT GGML_CUDA)
+if (NOT GGML_CUDA OR GGML_BACKEND_DL)
     target_sources(llama PRIVATE llama-triattention-gpu-stub.cpp)
 endif()
 

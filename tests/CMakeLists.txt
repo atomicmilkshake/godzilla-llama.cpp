@@ -341,7 +341,7 @@ if (GGML_BITNET_I2_S)
     set_property(TEST test-bitnet-i2s-quant PROPERTY LABELS bitnet)
 endif()
 
-if (GGML_CUDA)
+if (GGML_CUDA AND NOT GGML_BACKEND_DL)
     add_executable(test-triattention-gpu-parity test-triattention-gpu-parity.cpp ../src/llama-triattention.cpp)
     target_include_directories(test-triattention-gpu-parity PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/ggml/src)
     target_compile_features(test-triattention-gpu-parity PRIVATE cxx_std_17)
