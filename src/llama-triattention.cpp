@@ -365,8 +365,7 @@ static triattention_calibration * triattention_materialize_profile(
     cal->freq_count        = prof.freq_count;
     cal->num_kv_groups     = prof.num_attn_heads / prof.num_kv_heads;
 
-    strncpy(cal->model_name, model_name, sizeof(cal->model_name) - 1);
-    cal->model_name[sizeof(cal->model_name) - 1] = '\0';
+    snprintf(cal->model_name, sizeof(cal->model_name), "%s", model_name);
 
     cal->sampled_layer = new uint32_t[cal->n_sampled];
     cal->sampled_head  = new uint32_t[cal->n_sampled];
