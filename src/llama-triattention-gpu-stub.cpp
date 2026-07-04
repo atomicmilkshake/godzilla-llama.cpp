@@ -94,6 +94,6 @@ bool triattention_gpu_gather_k_rows(
     size_t,
     const uint32_t *,
     uint32_t,
-    size_t) {
+    uint32_t) {
     return false;
 }
