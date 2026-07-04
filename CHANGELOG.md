@@ -1,8 +1,16 @@
 # Changelog
 
-## main (unreleased, Godzilla fork)
+## v0.3.3 (2026-07-04)
 
-### 2026-07-01
+- **Qwen 3.6 MTP Conversion Fixes**: Normalized `model.mtp_layer`, `model.mtp_layers`, `mtp_layer`, and `mtp_layers` tensor prefixes to `mtp.` during HF-to-GGUF conversion. Registered Qwen 3.6 architectures (`Qwen3_6ForConditionalGeneration`, `Qwen3_6ForCausalLM`, `Qwen3_6MoeForConditionalGeneration`, and `Qwen3_6MoeForCausalLM`) to enable seamless, out-of-the-box conversion.
+- **Speculative, Quantization, and Concurrency Fixes**:
+  - Modified `ggml-cuda/cross-ring-interleave.cu` to clamp `cross_len` to prevent GPU buffer OOB writes, and corrected a peer-to-peer capability check.
+  - Corrected block-wise quantization/dot-product logic for `Q8_K64` CPU activations in `ggml-iq2-bn.c`.
+  - Added `GGML_TYPE_TURBO2_0` to token-tracking InnerQ calibration checks in `set-rows.cu`.
+  - Resolved MSVC warning C4319 in `tests/test-gguf.cpp` and demoted checkpoint matching logs to `LOG_DBG` in prompt matching loops.
+  - Dynamically scaled loop guard constraints and fixed suffix tree dangling references during alternate sequence removal.
+
+## v0.3.2 (2026-07-03)
 
 - **Single-branch consolidation:** `main` is the only published integration branch; merged `quant-god` IQ2_BN; legacy topic branches retired after publish.
 - **Cadre stability:** survive recurrent expand failure after prompt-cache shrink; recurrent shrink/expand around idle-slot cache save. Verified Cadre HumanEval solo-coder 5/5. See [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md).

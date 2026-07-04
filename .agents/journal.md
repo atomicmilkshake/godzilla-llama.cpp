@@ -157,6 +157,7 @@ Sensitive local paths, machine-specific details, and external session identifier
 - **Goal**: Make Qwen 3.6 MTP model conversion fully seamless and automatic, addressing differences in weight naming conventions (`model.mtp_layer` / `model.mtp_layers`) and registering Qwen 3.6 HF architecture identifiers.
 - **Changes Completed**:
   - Modified [conversion/qwen.py](file:///J:/LLM/godzilla-llama.cpp/conversion/qwen.py) to normalize `model.mtp_layer.`, `model.mtp_layers.`, `mtp_layer.`, and `mtp_layers.` prefixes into standard `mtp.` prefixes during HF-to-GGUF conversion. Also registered `Qwen3_6ForConditionalGeneration`, `Qwen3_6ForCausalLM`, `Qwen3_6MoeForConditionalGeneration`, and `Qwen3_6MoeForCausalLM` to utilize the Qwen 3.5 conversion classes automatically.
+  - Modified [CHANGELOG.md](file:///J:/LLM/godzilla-llama.cpp/CHANGELOG.md) to add release notes for `v0.3.3` and update historical notes for `v0.3.2`.
   - Modified [docs/quickstart-qwen36-dflash.md](file:///J:/LLM/godzilla-llama.cpp/docs/quickstart-qwen36-dflash.md) to add troubleshooting details for Qwen 3.6 MTP model conversion and naming conventions.
   - Created a test script [scratch/test_qwen_mtp.py](file:///J:/LLM/godzilla-llama.cpp/scratch/test_qwen_mtp.py) to verify the new tensor key normalization mapping rules.
 - **Findings & Decisions**:
