@@ -656,7 +656,8 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VS_PATH=%%i"
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake -S . -B build -G "Ninja Multi-Config" ^
             -D CMAKE_TOOLCHAIN_FILE=cmake/x64-windows-llvm.cmake ^
             -DLLAMA_BUILD_BORINGSSL=ON ^
@@ -677,7 +678,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $bin = ".\build\bin\Release"
           Copy-Item ".\LICENSE" $bin
-          $redistRoot = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $redistRoot = $vsPath
           $omp = Get-ChildItem $redistRoot -Recurse -Filter "libomp140.x86_64.dll" |
             Where-Object { $_.FullName -like "*Microsoft.VC*.OpenMP.LLVM*\libomp140.x86_64.dll" } |
             Sort-Object FullName -Descending |
