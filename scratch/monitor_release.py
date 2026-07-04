@@ -30,7 +30,7 @@ def main():
     else:
         try:
             run_list = subprocess.run(
-                ["gh", "run", "list", "--repo", repo, "--limit", "1", "--json", "databaseId"],
+                ["gh", "run", "list", "--repo", repo, "--workflow", "release.yml", "--limit", "1", "--json", "databaseId"],
                 capture_output=True,
                 text=True,
                 shell=True
