@@ -10,9 +10,41 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
         
-    run_id = "28717696903"
-    repo = "atomicmilkshake/godzilla-llama.cpp"
+    import re
     console = Console()
+    
+    # Default repo
+    repo = "atomicmilkshake/godzilla-llama.cpp"
+    try:
+        rem = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, shell=True)
+        if rem.returncode == 0:
+            match = re.search(r"github\.com[:/]([^/]+/[^/]+)", rem.stdout.strip())
+            if match:
+                repo = match.group(1).replace(".git", "")
+    except Exception:
+        pass
+        
+    run_id = None
+    if len(sys.argv) > 1:
+        run_id = sys.argv[1]
+    else:
+        try:
+            run_list = subprocess.run(
+                ["gh", "run", "list", "--repo", repo, "--limit", "1", "--json", "databaseId"],
+                capture_output=True,
+                text=True,
+                shell=True
+            )
+            if run_list.returncode == 0:
+                runs = json.loads(run_list.stdout)
+                if runs:
+                    run_id = str(runs[0]["databaseId"])
+        except Exception:
+            pass
+            
+    if not run_id:
+        # Fallback to current active run ID
+        run_id = "28717696903"
     
     # ASCII Art Banner (Matrix / Hackers style)
     banner = r"""
