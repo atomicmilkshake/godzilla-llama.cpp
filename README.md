@@ -18,6 +18,7 @@ Godzilla is a BeeLlama/llama.cpp fork that integrates speculative decoding, KV c
 - Adaptive draft-max controllers (`profit`, `fringe`)
 - CopySpec/suffix/recycle and n-gram speculative variants
 - Server-side reasoning loop guard
+- Native MTP speculative decoding (draft-mtp) with automated Qwen 3.5/3.6 conversion
 
 Reference docs:
 
@@ -125,6 +126,16 @@ cmake --build build -j
   --spec-branch-budget 0 \
   --spec-dflash-cross-ctx 512
 ```
+
+### Native MTP (Multi-Token Prediction)
+
+```bash
+./build/bin/llama-server \
+  -m /path/to/Qwen3.6-27B-MTP.gguf \
+  --spec-type draft-mtp \
+  --spec-draft-n-max 3
+```
+
 
 ## Testing and validation
 
