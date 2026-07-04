@@ -22,6 +22,7 @@ static inline bool llama_dflash_gpu_hidden_supported_arch(llm_arch arch) {
         case LLM_ARCH_QWEN35:
         case LLM_ARCH_QWEN35MOE:
         case LLM_ARCH_GEMMA4:
+        case LLM_ARCH_GEMMA4_ASSISTANT:
             return true;
         default:
             return false;
