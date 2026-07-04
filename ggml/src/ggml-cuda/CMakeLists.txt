@@ -423,6 +423,9 @@ if (CUDAToolkit_FOUND)
 
     if (NOT MSVC)
         list(APPEND CUDA_CXX_FLAGS -Wno-pedantic)
+        if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64")
+            list(APPEND CUDA_CXX_FLAGS -mcmodel=large)
+        endif()
     else()
         # CCCL 3.2 onwards will require a cpp-standard-compliant preprocessor for MSVC
         # https://github.com/NVIDIA/cccl/pull/6827
@@ -436,6 +439,12 @@ if (CUDAToolkit_FOUND)
     endif()
 
     target_compile_options(ggml-cuda PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:${CUDA_FLAGS}>")
+
+    if (NOT WIN32)
+        if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64")
+            target_compile_options(ggml-cuda PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mcmodel=large>)
+        endif()
+    endif()
 else()
     message(FATAL_ERROR "CUDA Toolkit not found")
 endif()
