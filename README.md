@@ -18,7 +18,9 @@ Godzilla is a BeeLlama/llama.cpp fork that integrates speculative decoding, KV c
 - Adaptive draft-max controllers (`profit`, `fringe`)
 - CopySpec/suffix/recycle and n-gram speculative variants
 - Server-side reasoning loop guard
-- Native MTP speculative decoding (draft-mtp) with automated Qwen 3.5/3.6 conversion
+- Native MTP speculative decoding (draft-mtp)
+  > [!NOTE]
+  > **Qwen 3.6 Compatibility**: This fork includes a custom conversion patch in `convert_hf_to_gguf.py` that automatically maps Qwen 3.6 `mtp_layer`/`mtp_layers` tensor prefixes and registers Qwen 3.6 HF architectures. This enables seamless, out-of-the-box conversion of Qwen 3.6 MTP weights, bridging naming limitations in upstream.
 
 Reference docs:
 
