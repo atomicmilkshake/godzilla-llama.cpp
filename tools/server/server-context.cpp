@@ -516,7 +516,7 @@ static dflash_reduced_verify_plan dflash_select_reduced_verify_plan(
         plan.reason = "dynamic-temp";
         return plan;
     }
-    if (sampling.reasoning_budget_tokens >= 0) {
+    if (sampling.reasoning_budget_tokens >= 0 || sampling.reasoning_budget_tracking) {
         plan.reason = "finite-reasoning-budget";
         return plan;
     }
@@ -5456,7 +5456,7 @@ private:
                                         slot.prompt.checkpoints.rend(),
                                         [&, func_name = __func__](const auto & cur) {
                                             // guarantee that a checkpoint will result in at least one token being processed [TAG_PROMPT_LOGITS]
-                                            LOG_INF("slot %12.*s: id %2d | task %d | Checking checkpoint with [%d, %d] against %d...\n", 12,
+                                            LOG_DBG("slot %12.*s: id %2d | task %d | Checking checkpoint with [%d, %d] against %d...\n", 12,
                                                 func_name, (slot).id, ((slot).task ? (slot).task->id : -1), cur.pos_min, cur.pos_max, pos_min_thold);
                                             // for hybrid/recurrent models (DeltaNet, Mamba), pos_min always equals
                                             // the full sequence length, so the SWA-based pos_min check always fails.

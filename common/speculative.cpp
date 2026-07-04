@@ -471,22 +471,22 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
         // noop
     }
 
-    bool process(const llama_batch & batch) override {
+    bool process(const llama_batch & batch_in) override {
         auto * ctx_dft = params.ctx_dft;
 
         std::vector<llama_pos> pos_min_by_seq(n_seq, 0);
         std::vector<bool> seen_seq(n_seq, false);
-        for (int32_t i = 0; i < batch.n_tokens; ++i) {
-            if (!batch.seq_id || !batch.seq_id[i]) {
+        for (int32_t i = 0; i < batch_in.n_tokens; ++i) {
+            if (!batch_in.seq_id || !batch_in.seq_id[i]) {
                 continue;
             }
-            for (int32_t j = 0; j < batch.n_seq_id[i]; ++j) {
-                const llama_seq_id seq_id = batch.seq_id[i][j];
+            for (int32_t j = 0; j < batch_in.n_seq_id[i]; ++j) {
+                const llama_seq_id seq_id = batch_in.seq_id[i][j];
                 if (seq_id < 0 || seq_id >= (llama_seq_id) n_seq) {
                     continue;
                 }
-                if (!seen_seq[seq_id] || batch.pos[i] < pos_min_by_seq[seq_id]) {
-                    pos_min_by_seq[seq_id] = batch.pos[i];
+                if (!seen_seq[seq_id] || batch_in.pos[i] < pos_min_by_seq[seq_id]) {
+                    pos_min_by_seq[seq_id] = batch_in.pos[i];
                     seen_seq[seq_id] = true;
                 }
             }
@@ -497,7 +497,7 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
             }
         }
 
-        const int ret = llama_decode(ctx_dft, batch);
+        const int ret = llama_decode(ctx_dft, batch_in);
 
         if (ret != 0) {
             LOG_ERR("%s: failed to decode draft batch, ret = %d\n", __func__, ret);

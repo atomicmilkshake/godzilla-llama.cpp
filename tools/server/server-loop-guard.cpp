@@ -215,7 +215,7 @@ server_loop_guard_result server_loop_guard::check_ngram_dominance(const std::vec
 
 server_loop_guard_result server_loop_guard::check_low_entropy(const std::vector<llama_token> & tokens) const {
     const int32_t n_tail = std::min<int32_t>({(int32_t) tokens.size(), params.window_tokens, 1024});
-    if (n_tail < 1024 || n_tail < params.min_repeated_coverage) {
+    if (n_tail < std::min(1024, params.window_tokens) || n_tail < params.min_repeated_coverage) {
         return {};
     }
 

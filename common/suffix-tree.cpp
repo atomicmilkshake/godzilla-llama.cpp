@@ -403,12 +403,18 @@ void SuffixTree::remove(int seq_id) {
             leaf = (*leaf->children.begin()).second.get();
             distance += leaf->length;
         }
-        if (leaf->endpoints.empty() || leaf->endpoints.contains(seq_id)) {
+        int32_t new_ref_seq = -1;
+        int32_t ref_idx = -1;
+        for (const auto & ep : leaf->endpoints) {
+            if (ep.first != seq_id) {
+                new_ref_seq = ep.first;
+                ref_idx = ep.second - distance;
+                break;
+            }
+        }
+        if (new_ref_seq == -1) {
             continue;
         }
-        const auto & ref = *leaf->endpoints.begin();
-        int32_t new_ref_seq = ref.first;
-        int32_t ref_idx = ref.second - distance;
         while (!path.empty()) {
             SuffixNode * n = path.back();
             path.pop_back();

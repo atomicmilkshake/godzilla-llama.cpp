@@ -341,6 +341,8 @@ Adaptive draft is highly configurable, so if you are interested in tinkering wit
 
 **Out of VRAM.** Reduce `--ctx-size` first, then cache types, then target quantization. See [Adjusting for your hardware](#adjusting-for-your-hardware).
 
+**MTP block missing nextn.eh_proj (or other MTP layers).** This assertion failure occurs when running a converted Qwen 3.5/3.6 model with MTP speculative decoding enabled, but the GGUF file lacks the MTP weights. Ensure you ran `convert_hf_to_gguf.py` with the `--mtp` flag. The repository's conversion script automatically normalizes Qwen 3.6 MTP weight naming variations (such as `model.mtp_layer` or `model.mtp_layers`) to ensure all draft layers are correctly compiled into the output GGUF.
+
 **`spec-type dflash is set but draft model is not a DFlash drafter`.** Bee accepts two DFlash drafter GGUF schemas: `dflash-draft` for the Bee/buun schema, and `dflash` for the upstream llama.cpp DFlash PR schema. If loading fails, check the exact error for missing DFlash metadata keys or tensors. A plain Qwen model is still not a DFlash drafter.
 
 **`model.n_devices() > 1: disabling parent_ids_gpu`.** Tree verification is disabled because the target model spans multiple GPUs. Flat DFlash still works. This is expected.

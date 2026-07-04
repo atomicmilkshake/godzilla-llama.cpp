@@ -570,8 +570,16 @@ class _Qwen35MtpMixin:
         if (titem := TextModel.filter_tensors(item)) is None:
             return None
         name, gen = titem
-        if name.startswith("model.mtp."):
+        if name.startswith("model.mtp_layer."):
+            name = name.replace("model.mtp_layer.", "mtp.", 1)
+        elif name.startswith("model.mtp_layers."):
+            name = name.replace("model.mtp_layers.", "mtp.layers.", 1)
+        elif name.startswith("model.mtp."):
             name = name.replace("model.", "", 1)
+        elif name.startswith("mtp_layer."):
+            name = name.replace("mtp_layer.", "mtp.", 1)
+        elif name.startswith("mtp_layers."):
+            name = name.replace("mtp_layers.", "mtp.layers.", 1)
         if name.startswith("mtp."):
             if cls.no_mtp:
                 return None

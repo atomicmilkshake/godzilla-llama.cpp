@@ -94,6 +94,10 @@ cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
+## Environment Variables
+
+- `GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS=1`: Warn instead of failing when a CUDA FlashAttention K/V cache quant pair was not compiled into the build.
+
 ## Launch examples
 
 ### TurboQuant + TriAttention

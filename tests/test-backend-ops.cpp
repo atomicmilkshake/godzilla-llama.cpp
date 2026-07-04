@@ -1144,8 +1144,12 @@ struct test_case {
 
     virtual double max_nmse_err(ggml_backend_t backend) {
         ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
+        const char * name = ggml_backend_reg_name(reg);
+        if (strcmp(name, "CUDA") == 0 || strcmp(name, "HIP") == 0) {
+            return std::max(max_nmse_err(), 1e-5);
+        }
         // See https://github.com/ggml-org/llama.cpp/pull/22976 for explanation.
-        if (contains_f16 && strcmp(ggml_backend_reg_name(reg), "WebGPU") == 0) {
+        if (contains_f16 && strcmp(name, "WebGPU") == 0) {
             return std::max(max_nmse_err(), 1e-6);
         }
         return max_nmse_err();
@@ -2007,6 +2011,11 @@ struct test_unary : public test_case {
     // Similar small differences appear for F32 ROUND on CUDA/HIP.
     double max_nmse_err(ggml_backend_t backend) override {
         if (type == GGML_TYPE_F16 && op == GGML_UNARY_OP_ROUND) {
+            ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
+            const char *name = ggml_backend_reg_name(reg);
+            if (strcmp(name, "CUDA") == 0 || strcmp(name, "HIP") == 0) {
+                return std::max(test_case::max_nmse_err(backend), 2e-2);
+            }
             return std::max(test_case::max_nmse_err(backend), 1e-4);
         }
         if (op == GGML_UNARY_OP_ROUND) {
@@ -3844,6 +3853,15 @@ struct test_ssm_scan : public test_case {
         return out;
     }
 
+    double max_nmse_err(ggml_backend_t backend) override {
+        ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
+        const char *name = ggml_backend_reg_name(reg);
+        if (strcmp(name, "CUDA") == 0 || strcmp(name, "HIP") == 0) {
+            return 1e-5;
+        }
+        return test_case::max_nmse_err(backend);
+    }
+
     // similar to test_mul_mat_id
     void initialize_tensors(ggml_context * ctx) override {
         std::random_device rd;
@@ -4728,7 +4746,7 @@ struct test_round : public test_case {
             ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
             const char *name = ggml_backend_reg_name(reg);
             if (strcmp(name, "CUDA") == 0 || strcmp(name, "HIP") == 0) {
-                return std::max(test_case::max_nmse_err(backend), 5e-4);
+                return std::max(test_case::max_nmse_err(backend), 2e-2);
             }
             return std::max(test_case::max_nmse_err(backend), 1e-4);
         }

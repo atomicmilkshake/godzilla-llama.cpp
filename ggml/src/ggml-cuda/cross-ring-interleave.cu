@@ -51,8 +51,8 @@ static bool dflash_cuda_enable_peer_access(int dst_device, int src_device) {
         return false;
     }
     if (!can_access) {
-        peer_copy_allowed[dst_device][src_device] = true;
-        return true;
+        peer_copy_allowed[dst_device][src_device] = false;
+        return false;
     }
 
     int prev_device = -1;
@@ -589,6 +589,9 @@ extern "C" const float * dflash_cross_ring_gpu_interleave(
     auto * ring = (dflash_cross_ring_gpu *)handle;
 
     int cross_len = filled < ctx_window ? filled : ctx_window;
+    if (cross_len > ring->ring_size) {
+        cross_len = ring->ring_size;
+    }
     if (cross_len <= 0) return nullptr;
 
     (void)cudaSetDevice(ring->device);

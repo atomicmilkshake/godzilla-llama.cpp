@@ -696,7 +696,7 @@ static bool handcrafted_check_tensors(const gguf_context * gguf_ctx, const unsig
             dummy.nb[j] = dummy.nb[j-1] * dummy.ne[j-1];
         }
         const size_t nbytes = ggml_nbytes(&dummy);
-        expected_offset += GGML_PAD(nbytes, alignment);
+        expected_offset += GGML_PAD(nbytes, (size_t) alignment);
     }
 
     return ok;

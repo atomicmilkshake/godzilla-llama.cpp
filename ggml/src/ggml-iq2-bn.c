@@ -122,29 +122,23 @@ void dequantize_row_iq2_bn_packed(const void * GGML_RESTRICT x, float * GGML_RES
 
 void quantize_row_q8_K64_ref(const float * GGML_RESTRICT x, block_q8_K64 * GGML_RESTRICT y, int64_t k) {
     assert(k % QK_IQ1BN == 0);
+    const int nblock = k / QK_IQ1BN;
 
-    float * dptr = (float *) y;
-    int8_t * qs = (int8_t *) (dptr + 4);
+    for (int ib = 0; ib < nblock; ++ib) {
+        float * dptr = &y[ib].d;
+        int8_t * qs = y[ib].qs;
+        const float * x_block = x + ib * QK_IQ1BN;
 
-    float aux[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    for (int j = 0; j < k; j += 16) {
-        for (int i = 0; i < 4; ++i) {
-            for (int l = 0; l < 4; ++l) {
-                const float ax = fabsf(x[j + 4 * i + l]);
-                aux[i] = aux[i] > ax ? aux[i] : ax;
-            }
+        float max_val = 0.0f;
+        for (int j = 0; j < 64; ++j) {
+            const float ax = fabsf(x_block[j]);
+            max_val = max_val > ax ? max_val : ax;
         }
-    }
-    for (int i = 0; i < 4; ++i) {
-        dptr[i] = aux[i] / 127.0f;
-        aux[i] = dptr[i] > 0.0f ? 1.0f / dptr[i] : 0.0f;
-    }
+        *dptr = max_val / 127.0f;
+        const float inv_d = *dptr > 0.0f ? 1.0f / *dptr : 0.0f;
 
-    for (int j = 0; j < k; j += 16) {
-        for (int i = 0; i < 4; ++i) {
-            for (int l = 0; l < 4; ++l) {
-                qs[j + 4 * i + l] = (int8_t) iq2_bn_nearest_int(aux[i] * x[j + 4 * i + l]);
-            }
+        for (int j = 0; j < 64; ++j) {
+            qs[j] = (int8_t) iq2_bn_nearest_int(inv_d * x_block[j]);
         }
     }
 }
@@ -167,14 +161,17 @@ void vec_dot_iq2_bn_q8_K64(int n, float * s, size_t bs, const void * vx, size_t 
     const float scale = *(const float *) vx;
     const block_iq2_bn * x = (const block_iq2_bn *) ((const char *) vx + IQ2_BN_ROW_META);
     const int nblock = n / QK_IQ1BN;
+    const block_q8_K64 * y = (const block_q8_K64 *) vy;
 
-    const float * d = (const float *) vy;
-    const int8_t * q8 = (const int8_t *) (d + 4);
-
-    int sum[16] = { 0 };
-    int sum0[4]  = { 0 };
+    float sumf = 0.0f;
 
     for (int i = 0; i < nblock; ++i) {
+        const float d = y[i].d;
+        const int8_t * q8 = y[i].qs;
+
+        int sum[16] = { 0 };
+        int sum0[4]  = { 0 };
+
         for (int j = 0; j < IQ2_BN_VEC_DOT_NJ / 4; ++j) {
             for (int l = 0; l < 4; ++l) {
                 sum[4 * j + 0] += q8[4 * j + l + 0    ] * (x[i].qs[4 * j + l] & 0x03);
@@ -184,12 +181,10 @@ void vec_dot_iq2_bn_q8_K64(int n, float * s, size_t bs, const void * vx, size_t 
                 sum0[j] += q8[4 * j + l] + q8[4 * j + l + 1 * IQ2_BN_VEC_DOT_NJ] + q8[4 * j + l + 2 * IQ2_BN_VEC_DOT_NJ] + q8[4 * j + l + 3 * IQ2_BN_VEC_DOT_NJ];
             }
         }
-        q8 += QK_IQ1BN;
-    }
 
-    float sumf = 0.0f;
-    for (int j = 0; j < 4; ++j) {
-        sumf += d[j] * (sum[4 * j + 0] + 0.25f * sum[4 * j + 1] + 0.0625f * sum[4 * j + 2] + 0.015625f * sum[4 * j + 3] - sum0[j]);
+        for (int j = 0; j < 4; ++j) {
+            sumf += d * (sum[4 * j + 0] + 0.25f * sum[4 * j + 1] + 0.0625f * sum[4 * j + 2] + 0.015625f * sum[4 * j + 3] - sum0[j]);
+        }
     }
     *s = scale * sumf;
 }
