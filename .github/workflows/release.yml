@@ -541,7 +541,7 @@ jobs:
           name: beellama-bin-ubuntu-sycl-x64.tar.gz
 
   ubuntu-cuda:
-    name: Ubuntu x64 CUDA ${{ matrix.cuda }}
+    name: Ubuntu x64 CUDA ${{ matrix.cuda }} (${{ matrix.arch_name }})
     needs: release-meta
     if: ${{ needs.release-meta.outputs.build_packages == 'true' }}
     runs-on: ubuntu-24.04
@@ -555,8 +555,20 @@ jobs:
         include:
           - cuda: "12.4"
             cuda_container: "12.4.1-devel-ubuntu22.04"
+            arch_name: "legacy"
+            cuda_archs: "75;80"
+          - cuda: "12.4"
+            cuda_container: "12.4.1-devel-ubuntu22.04"
+            arch_name: "modern"
+            cuda_archs: "86;89;90"
           - cuda: "13.1"
             cuda_container: "13.1.1-devel-ubuntu24.04"
+            arch_name: "legacy"
+            cuda_archs: "75;80"
+          - cuda: "13.1"
+            cuda_container: "13.1.1-devel-ubuntu24.04"
+            arch_name: "modern"
+            cuda_archs: "86;89;90"
     steps:
       - name: Dependencies
         run: |
@@ -579,7 +591,7 @@ jobs:
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
         with:
-          key: release-ubuntu-cuda-${{ matrix.cuda }}-x64
+          key: release-ubuntu-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64
           evict-old-files: 1d
 
       - name: Build
@@ -592,7 +604,7 @@ jobs:
             -DGGML_CUDA=ON \
             -DGGML_CUDA_FA=ON \
             -DGGML_CUDA_FA_ALL_QUANTS=ON \
-            -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
+            -DCMAKE_CUDA_ARCHITECTURES="${{ matrix.cuda_archs }}" \
             -DGGML_BACKEND_DL=ON \
             -DGGML_CPU_ALL_VARIANTS=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -615,15 +627,15 @@ jobs:
       - name: Pack artifacts
         run: |
           cp LICENSE ./build/bin/
-          tar -czvf "beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-cuda-${{ matrix.cuda }}-x64.tar.gz" \
+          tar -czvf "beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.tar.gz" \
             --transform "s,^\.,beellama-${{ needs.release-meta.outputs.tag_name }}," \
             -C ./build/bin .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          path: beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-cuda-${{ matrix.cuda }}-x64.tar.gz
-          name: beellama-bin-ubuntu-cuda-${{ matrix.cuda }}-x64.tar.gz
+          path: beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.tar.gz
+          name: beellama-bin-ubuntu-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.tar.gz
 
   windows-cpu:
     name: Windows x64 CPU
@@ -830,7 +842,7 @@ jobs:
           name: beellama-bin-win-sycl-x64.zip
 
   windows-cuda:
-    name: Windows x64 CUDA ${{ matrix.cuda }}
+    name: Windows x64 CUDA ${{ matrix.cuda }} (${{ matrix.arch_name }})
     needs: release-meta
     if: ${{ needs.release-meta.outputs.build_packages == 'true' }}
     runs-on: windows-2022
@@ -840,7 +852,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cuda: ["12.4", "13.1"]
+        include:
+          - cuda: "12.4"
+            arch_name: "legacy"
+            cuda_archs: "75;80"
+          - cuda: "12.4"
+            arch_name: "modern"
+            cuda_archs: "86;89;90"
+          - cuda: "13.1"
+            arch_name: "legacy"
+            cuda_archs: "75;80"
+          - cuda: "13.1"
+            arch_name: "modern"
+            cuda_archs: "86;89;90"
     steps:
       - name: Clone
         uses: actions/checkout@v6
@@ -858,7 +882,7 @@ jobs:
       - name: Install ccache
         uses: ggml-org/ccache-action@v1.2.21
         with:
-          key: release-windows-cuda-${{ matrix.cuda }}
+          key: release-windows-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}
           variant: ccache
           evict-old-files: 1d
 
@@ -909,7 +933,7 @@ jobs:
             -DGGML_CUDA=ON ^
             -DGGML_CUDA_FA=ON ^
             -DGGML_CUDA_FA_ALL_QUANTS=ON ^
-            -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" ^
+            -DCMAKE_CUDA_ARCHITECTURES="${{ matrix.cuda_archs }}" ^
             -DLLAMA_BUILD_BORINGSSL=ON ^
             -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache ^
             -DGGML_CUDA_CUB_3DOT2=ON
@@ -921,13 +945,13 @@ jobs:
         run: ccache --show-stats
 
       - name: Pack CUDA backend
-        run: 7z a -snl "beellama-bin-win-cuda-${{ matrix.cuda }}-x64.zip" .\build\bin\Release\ggml-cuda.dll
+        run: 7z a -snl "beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip" .\build\bin\Release\ggml-cuda.dll
 
       - name: Upload CUDA backend
         uses: actions/upload-artifact@v6
         with:
-          path: beellama-bin-win-cuda-${{ matrix.cuda }}-x64.zip
-          name: beellama-bin-win-cuda-${{ matrix.cuda }}-x64.zip
+          path: beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip
+          name: beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip
 
       - name: Pack CUDA runtime
         shell: pwsh
@@ -943,13 +967,13 @@ jobs:
                 Copy-Item -Destination $dst -Force
             }
           }
-          7z a "cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-x64.zip" "$dst\*"
+          7z a "cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip" "$dst\*"
 
       - name: Upload CUDA runtime
         uses: actions/upload-artifact@v6
         with:
-          path: cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-x64.zip
-          name: cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-x64.zip
+          path: cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip
+          name: cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip
 
   windows-hip:
     name: Windows x64 HIP/Radeon
@@ -1135,15 +1159,17 @@ jobs:
 
           python3 scripts/verify-windows-package.py release/beellama-${TAG_NAME}-bin-win-*.zip
           for cuda_version in 12.4 13.1; do
-            package_zip="release/beellama-${TAG_NAME}-bin-win-cuda-${cuda_version}-x64.zip"
-            runtime_zip="release/beellama-${TAG_NAME}-cudart-win-cuda-${cuda_version}-x64.zip"
-            if [[ -f "${package_zip}" && -f "${runtime_zip}" ]]; then
-              temp_dir="$(mktemp -d)"
-              unzip -q "${package_zip}" -d "${temp_dir}"
-              unzip -q "${runtime_zip}" -d "${temp_dir}"
-              python3 scripts/verify-windows-package.py "${temp_dir}"
-              rm -rf "${temp_dir}"
-            fi
+            for arch_name in legacy modern; do
+              package_zip="release/beellama-${TAG_NAME}-bin-win-cuda-${cuda_version}-${arch_name}-x64.zip"
+              runtime_zip="release/beellama-${TAG_NAME}-cudart-win-cuda-${cuda_version}-${arch_name}-x64.zip"
+              if [[ -f "${package_zip}" && -f "${runtime_zip}" ]]; then
+                temp_dir="$(mktemp -d)"
+                unzip -q "${package_zip}" -d "${temp_dir}"
+                unzip -q "${runtime_zip}" -d "${temp_dir}"
+                python3 scripts/verify-windows-package.py "${temp_dir}"
+                rm -rf "${temp_dir}"
+              fi
+            done
           done
           sha256sum release/* > release/SHA256SUMS.txt
           ls -lh release
@@ -1221,7 +1247,7 @@ jobs:
             group: cuda12
             arch: amd64
             platform: linux/amd64
-            artifact: beellama-bin-ubuntu-cuda-12.4-x64.tar.gz
+            artifact: beellama-bin-ubuntu-cuda-12.4-modern-x64.tar.gz
             dockerfile: .devops/runtime-server.Dockerfile
             base_image: nvidia/cuda:12.4.1-runtime-ubuntu22.04
             runtime_packages: ca-certificates curl libgomp1
@@ -1231,7 +1257,7 @@ jobs:
             group: cuda13
             arch: amd64
             platform: linux/amd64
-            artifact: beellama-bin-ubuntu-cuda-13.1-x64.tar.gz
+            artifact: beellama-bin-ubuntu-cuda-13.1-modern-x64.tar.gz
             dockerfile: .devops/runtime-server.Dockerfile
             base_image: nvidia/cuda:13.1.1-runtime-ubuntu24.04
             runtime_packages: ca-certificates curl libgomp1
