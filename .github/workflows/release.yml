@@ -333,13 +333,17 @@ jobs:
           name: beellama-bin-ubuntu-vulkan-x64.tar.gz
 
   ubuntu-rocm:
-    name: Ubuntu x64 ROCm
+    name: Ubuntu x64 ROCm (${{ matrix.gpu_target }})
     needs: release-meta
     if: ${{ needs.release-meta.outputs.build_packages == 'true' }}
     runs-on: ubuntu-22.04
     env:
       ROCM_VERSION: "7.2.1"
-      GPU_TARGETS: "gfx90a;gfx942;gfx1030;gfx1100;gfx1101;gfx1102"
+      GPU_TARGETS: "${{ matrix.gpu_target }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        gpu_target: ["gfx90a", "gfx942", "gfx1030", "gfx1100", "gfx1101", "gfx1102"]
     steps:
       - name: Clone
         uses: actions/checkout@v6
@@ -362,7 +366,7 @@ jobs:
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
         with:
-          key: release-ubuntu-rocm-${{ env.ROCM_VERSION }}-x64
+          key: release-ubuntu-rocm-${{ env.ROCM_VERSION }}-${{ matrix.gpu_target }}-x64
           evict-old-files: 1d
 
       - name: Dependencies
@@ -418,15 +422,15 @@ jobs:
         run: |
           rocm_short="$(echo "${ROCM_VERSION}" | cut -d '.' -f 1,2)"
           cp LICENSE ./build/bin/
-          tar -czvf "beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-rocm-${rocm_short}-x64.tar.gz" \
+          tar -czvf "beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-rocm-${rocm_short}-${{ matrix.gpu_target }}-x64.tar.gz" \
             --transform "s,^\.,beellama-${{ needs.release-meta.outputs.tag_name }}," \
             -C ./build/bin .
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          path: beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-rocm-7.2-x64.tar.gz
-          name: beellama-bin-ubuntu-rocm-7.2-x64.tar.gz
+          path: beellama-${{ needs.release-meta.outputs.tag_name }}-bin-ubuntu-rocm-7.2-${{ matrix.gpu_target }}-x64.tar.gz
+          name: beellama-bin-ubuntu-rocm-7.2-${{ matrix.gpu_target }}-x64.tar.gz
 
   ubuntu-sycl:
     name: Ubuntu x64 SYCL
@@ -555,20 +559,44 @@ jobs:
         include:
           - cuda: "12.4"
             cuda_container: "12.4.1-devel-ubuntu22.04"
-            arch_name: "legacy"
-            cuda_archs: "75;80"
+            arch_name: "cu75"
+            cuda_archs: "75"
           - cuda: "12.4"
             cuda_container: "12.4.1-devel-ubuntu22.04"
-            arch_name: "modern"
-            cuda_archs: "86;89;90"
+            arch_name: "cu80"
+            cuda_archs: "80"
+          - cuda: "12.4"
+            cuda_container: "12.4.1-devel-ubuntu22.04"
+            arch_name: "cu86"
+            cuda_archs: "86"
+          - cuda: "12.4"
+            cuda_container: "12.4.1-devel-ubuntu22.04"
+            arch_name: "cu89"
+            cuda_archs: "89"
+          - cuda: "12.4"
+            cuda_container: "12.4.1-devel-ubuntu22.04"
+            arch_name: "cu90"
+            cuda_archs: "90"
           - cuda: "13.1"
             cuda_container: "13.1.1-devel-ubuntu24.04"
-            arch_name: "legacy"
-            cuda_archs: "75;80"
+            arch_name: "cu75"
+            cuda_archs: "75"
           - cuda: "13.1"
             cuda_container: "13.1.1-devel-ubuntu24.04"
-            arch_name: "modern"
-            cuda_archs: "86;89;90"
+            arch_name: "cu80"
+            cuda_archs: "80"
+          - cuda: "13.1"
+            cuda_container: "13.1.1-devel-ubuntu24.04"
+            arch_name: "cu86"
+            cuda_archs: "86"
+          - cuda: "13.1"
+            cuda_container: "13.1.1-devel-ubuntu24.04"
+            arch_name: "cu89"
+            cuda_archs: "89"
+          - cuda: "13.1"
+            cuda_container: "13.1.1-devel-ubuntu24.04"
+            arch_name: "cu90"
+            cuda_archs: "90"
     steps:
       - name: Dependencies
         run: |
@@ -854,17 +882,35 @@ jobs:
       matrix:
         include:
           - cuda: "12.4"
-            arch_name: "legacy"
-            cuda_archs: "75;80"
+            arch_name: "cu75"
+            cuda_archs: "75"
           - cuda: "12.4"
-            arch_name: "modern"
-            cuda_archs: "86;89;90"
+            arch_name: "cu80"
+            cuda_archs: "80"
+          - cuda: "12.4"
+            arch_name: "cu86"
+            cuda_archs: "86"
+          - cuda: "12.4"
+            arch_name: "cu89"
+            cuda_archs: "89"
+          - cuda: "12.4"
+            arch_name: "cu90"
+            cuda_archs: "90"
           - cuda: "13.1"
-            arch_name: "legacy"
-            cuda_archs: "75;80"
+            arch_name: "cu75"
+            cuda_archs: "75"
           - cuda: "13.1"
-            arch_name: "modern"
-            cuda_archs: "86;89;90"
+            arch_name: "cu80"
+            cuda_archs: "80"
+          - cuda: "13.1"
+            arch_name: "cu86"
+            cuda_archs: "86"
+          - cuda: "13.1"
+            arch_name: "cu89"
+            cuda_archs: "89"
+          - cuda: "13.1"
+            arch_name: "cu90"
+            cuda_archs: "90"
     steps:
       - name: Clone
         uses: actions/checkout@v6
@@ -976,13 +1022,17 @@ jobs:
           name: cudart-beellama-bin-win-cuda-${{ matrix.cuda }}-${{ matrix.arch_name }}-x64.zip
 
   windows-hip:
-    name: Windows x64 HIP/Radeon
+    name: Windows x64 HIP/Radeon (${{ matrix.gpu_target }})
     needs: release-meta
     if: ${{ needs.release-meta.outputs.build_packages == 'true' }}
     runs-on: windows-2022
     env:
       HIPSDK_INSTALLER_VERSION: "26.Q1"
-      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102"
+      GPU_TARGETS: "${{ matrix.gpu_target }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        gpu_target: ["gfx1030", "gfx1100", "gfx1101", "gfx1102"]
     steps:
       - name: Clone
         uses: actions/checkout@v6
@@ -1013,7 +1063,7 @@ jobs:
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
         with:
-          key: release-windows-hip-${{ env.HIPSDK_INSTALLER_VERSION }}-x64
+          key: release-windows-hip-${{ env.HIPSDK_INSTALLER_VERSION }}-${{ matrix.gpu_target }}-x64
           evict-old-files: 1d
 
       - name: Install ROCm
@@ -1074,13 +1124,13 @@ jobs:
       - name: Pack artifacts
         run: |
           python scripts\verify-windows-package.py .\build\bin
-          7z a -snl "beellama-bin-win-hip-radeon-x64.zip" .\build\bin\*
+          7z a -snl "beellama-bin-win-hip-radeon-${{ matrix.gpu_target }}-x64.zip" .\build\bin\*
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          path: beellama-bin-win-hip-radeon-x64.zip
-          name: beellama-bin-win-hip-radeon-x64.zip
+          path: beellama-bin-win-hip-radeon-${{ matrix.gpu_target }}-x64.zip
+          name: beellama-bin-win-hip-radeon-${{ matrix.gpu_target }}-x64.zip
 
   package-assets:
     name: Assemble release assets
@@ -1159,7 +1209,7 @@ jobs:
 
           python3 scripts/verify-windows-package.py release/beellama-${TAG_NAME}-bin-win-*.zip
           for cuda_version in 12.4 13.1; do
-            for arch_name in legacy modern; do
+            for arch_name in cu75 cu80 cu86 cu89 cu90; do
               package_zip="release/beellama-${TAG_NAME}-bin-win-cuda-${cuda_version}-${arch_name}-x64.zip"
               runtime_zip="release/beellama-${TAG_NAME}-cudart-win-cuda-${cuda_version}-${arch_name}-x64.zip"
               if [[ -f "${package_zip}" && -f "${runtime_zip}" ]]; then
@@ -1247,7 +1297,7 @@ jobs:
             group: cuda12
             arch: amd64
             platform: linux/amd64
-            artifact: beellama-bin-ubuntu-cuda-12.4-modern-x64.tar.gz
+            artifact: beellama-bin-ubuntu-cuda-12.4-cu86-x64.tar.gz
             dockerfile: .devops/runtime-server.Dockerfile
             base_image: nvidia/cuda:12.4.1-runtime-ubuntu22.04
             runtime_packages: ca-certificates curl libgomp1
@@ -1257,7 +1307,7 @@ jobs:
             group: cuda13
             arch: amd64
             platform: linux/amd64
-            artifact: beellama-bin-ubuntu-cuda-13.1-modern-x64.tar.gz
+            artifact: beellama-bin-ubuntu-cuda-13.1-cu86-x64.tar.gz
             dockerfile: .devops/runtime-server.Dockerfile
             base_image: nvidia/cuda:13.1.1-runtime-ubuntu24.04
             runtime_packages: ca-certificates curl libgomp1
@@ -1267,7 +1317,7 @@ jobs:
             group: rocm
             arch: amd64
             platform: linux/amd64
-            artifact: beellama-bin-ubuntu-rocm-7.2-x64.tar.gz
+            artifact: beellama-bin-ubuntu-rocm-7.2-gfx1100-x64.tar.gz
             dockerfile: .devops/runtime-server.Dockerfile
             base_image: rocm/dev-ubuntu-24.04:7.2.1-complete
             runtime_packages: ca-certificates curl libgomp1
