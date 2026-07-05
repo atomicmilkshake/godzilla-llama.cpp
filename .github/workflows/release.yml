@@ -339,7 +339,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ROCM_VERSION: "7.2.1"
-      GPU_TARGETS: "gfx908;gfx90a;gfx942;gfx1030;gfx1100;gfx1101;gfx1102;gfx1151;gfx1150;gfx1200;gfx1201"
+      GPU_TARGETS: "gfx90a;gfx942;gfx1030;gfx1100;gfx1101;gfx1102"
     steps:
       - name: Clone
         uses: actions/checkout@v6
@@ -592,6 +592,7 @@ jobs:
             -DGGML_CUDA=ON \
             -DGGML_CUDA_FA=ON \
             -DGGML_CUDA_FA_ALL_QUANTS=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
             -DGGML_BACKEND_DL=ON \
             -DGGML_CPU_ALL_VARIANTS=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -908,6 +909,7 @@ jobs:
             -DGGML_CUDA=ON ^
             -DGGML_CUDA_FA=ON ^
             -DGGML_CUDA_FA_ALL_QUANTS=ON ^
+            -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" ^
             -DLLAMA_BUILD_BORINGSSL=ON ^
             -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache ^
             -DGGML_CUDA_CUB_3DOT2=ON
@@ -956,7 +958,7 @@ jobs:
     runs-on: windows-2022
     env:
       HIPSDK_INSTALLER_VERSION: "26.Q1"
-      GPU_TARGETS: "gfx1150;gfx1151;gfx1200;gfx1201;gfx1100;gfx1101;gfx1102;gfx1030;gfx1031;gfx1032"
+      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102"
     steps:
       - name: Clone
         uses: actions/checkout@v6
