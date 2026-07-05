@@ -5,9 +5,39 @@ import sys
 import re
 import os
 import time
+import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+
+def parse_utc_timestamp(ts_str):
+    if not ts_str or ts_str.startswith("0001-"):
+        return None
+    clean_str = ts_str.replace("Z", "+00:00")
+    try:
+        return datetime.datetime.fromisoformat(clean_str)
+    except Exception:
+        try:
+            return datetime.datetime.strptime(clean_str.split("+")[0], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+        except Exception:
+            return None
+
+def format_duration(td):
+    if not td:
+        return ""
+    total_seconds = int(td.total_seconds())
+    if total_seconds < 0:
+        total_seconds = 0
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    elif minutes > 0:
+        return f"{minutes}m {seconds}s"
+    else:
+        return f"{seconds}s"
 
 def main():
     if hasattr(sys.stdout, "reconfigure"):
@@ -125,11 +155,25 @@ def main():
             j_conclusion = job.get("conclusion", "none") or "none"
             job_id = str(job.get("id", ""))
             
+            started_at = parse_utc_timestamp(job.get("startedAt"))
+            completed_at = parse_utc_timestamp(job.get("completedAt"))
+            
+            duration_str = ""
+            if started_at:
+                if j_status == "completed" and completed_at:
+                    duration_str = format_duration(completed_at - started_at)
+                elif j_status == "in_progress":
+                    now_utc = datetime.datetime.now(datetime.timezone.utc)
+                    duration_str = format_duration(now_utc - started_at)
+            
             if j_status == "in_progress":
                 in_progress_count += 1
                 all_success = False
                 status_str = "[bold blink cyan]⌛ RUNNING[/bold blink cyan]"
-                result_str = "[cyan]compiling...[/cyan]"
+                if duration_str:
+                    result_str = f"[cyan]compiling... ({duration_str})[/cyan]"
+                else:
+                    result_str = "[cyan]compiling...[/cyan]"
             elif j_status == "queued":
                 queued_count += 1
                 all_success = False
@@ -139,9 +183,15 @@ def main():
                 completed_count += 1
                 status_str = "[bold green]🏁 DONE[/bold green]"
                 if j_conclusion == "success":
-                    result_str = "[bold green]✅ SUCCESS[/bold green]"
+                    if duration_str:
+                        result_str = f"[bold green]✅ SUCCESS ({duration_str})[/bold green]"
+                    else:
+                        result_str = "[bold green]✅ SUCCESS[/bold green]"
                 else:
-                    result_str = "[bold red]❌ FAILED[/bold red]"
+                    if duration_str:
+                        result_str = f"[bold red]❌ FAILED ({duration_str})[/bold red]"
+                    else:
+                        result_str = "[bold red]❌ FAILED[/bold red]"
                     any_failed = True
                     all_success = False
             else:
