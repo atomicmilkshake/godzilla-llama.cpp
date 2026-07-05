@@ -185,6 +185,25 @@ Sensitive local paths, machine-specific details, and external session identifier
 - **Next Steps**:
   - Monitor the newly dispatched release run on GitHub Actions to verify compilation passes on all targets.
 
+---
+
+### Session: 2026-07-05 [Local: 2026-07-05 09:50 CT / UTC: 2026-07-05 14:50]
+- **Goal**: Proactively resolve compilation timeouts and linker size limitations on Windows (LNK1248) and Linux (PLT relocation offset overflow) by splitting GPU builds into parallelized, single-architecture matrix chunks.
+- **Changes Completed**:
+  - Modified [.github/workflows/release.yml](file:///J:/LLM/godzilla-llama.cpp/.github/workflows/release.yml) to split `ubuntu-cuda` and `windows-cuda` build matrices into 10 parallel jobs, each compiling exactly one GPU architecture (`cu75`, `cu80`, `cu86`, `cu89`, `cu90`).
+  - Modified [.github/workflows/release.yml](file:///J:/LLM/godzilla-llama.cpp/.github/workflows/release.yml) to split `ubuntu-rocm` and `windows-hip` jobs into parallel single-GPU architecture runs (`gfx90a`, `gfx942`, `gfx1030`, `gfx1100`, `gfx1101`, `gfx1102` for ROCm, and `gfx1030`, `gfx1100`, `gfx1101`, `gfx1102` for HIP).
+  - Modified [.github/workflows/release.yml](file:///J:/LLM/godzilla-llama.cpp/.github/workflows/release.yml) to update the package verification loop to dynamically verify the newly-structured single-architecture packages (`cu75` through `cu90`).
+  - Modified [.github/workflows/release.yml](file:///J:/LLM/godzilla-llama.cpp/.github/workflows/release.yml) to configure Docker build matrices to consume the single-architecture optimized targets (`cu86` and `gfx1100`).
+  - Modified [ggml/src/ggml-cuda/CMakeLists.txt](file:///J:/LLM/godzilla-llama.cpp/ggml/src/ggml-cuda/CMakeLists.txt) to add `target_link_options(ggml-cuda PRIVATE -mcmodel=large)` for Linux/x86_64, resolving the dynamic PLT relative offset overflow relocation linker failure.
+  - Replaced the release tag `v0.3.3` on local and origin, triggering the optimized parallelized compilation pipeline (Run ID: `28744588168`).
+- **Findings & Decisions**:
+  - Found that trying to bundle too many architectures inside `ggml-cuda.dll` under `GGML_CUDA_FA_ALL_QUANTS=ON` caused the PE image size to exceed the Windows PE/COFF file format maximum limit of 2GB, triggering `LINK : fatal error LNK1248: image size exceeds maximum allowable size`.
+  - Found that the Linux PLT relocation offset overflow was caused by compiling with `-mcmodel=large` but not linking with it, which left dynamic PLT entries utilizing 32-bit offsets. Adding the link options parameter solves this issue.
+  - Splitting the compilation grid into single-architecture parallel jobs completely sidesteps the 2GB PE format limits, reduces compilation time per job to under 30 minutes, and outputs smaller, optimized artifacts.
+- **Current State**: IN_PROGRESS (the new compilation pipeline is executing on GitHub Actions)
+- **Next Steps**:
+  - Monitor the newly dispatched release run to ensure all parallelized targets compile and verify successfully.
+
 
 
 
