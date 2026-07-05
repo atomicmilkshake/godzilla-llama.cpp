@@ -39,6 +39,23 @@ def format_duration(td):
     else:
         return f"{seconds}s"
 
+def estimate_total_duration(job_name):
+    name = job_name.lower()
+    if "cuda" in name:
+        return 8100  # 2 hours 15 minutes (single arch)
+    elif "rocm" in name or "hip" in name:
+        return 5400  # 1 hour 30 minutes (single arch)
+    elif "sycl" in name:
+        return 1500  # 25 minutes
+    elif "vulkan" in name:
+        return 300   # 5 minutes
+    elif "cpu" in name:
+        return 600   # 10 minutes
+    elif "metadata" in name:
+        return 20    # 20 seconds
+    else:
+        return 1800  # 30 minutes default
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -101,28 +118,34 @@ def main():
 [bold cyan]                       ::: COMPILATION SYSTEM ACTIVE :::[/bold cyan]
 """
 
+    last_api_fetch = 0.0
+    poll_interval = 15.0
+    data = None
+
     while True:
-        if not once:
-            os.system("cls" if os.name == "nt" else "clear")
-            
-        try:
-            result = subprocess.run(
-                ["gh", "run", "view", run_id, "--repo", repo, "--json", "status,conclusion,jobs"],
-                capture_output=True,
-                text=True,
-                shell=True
-            )
-            if result.returncode != 0:
+        current_time = time.time()
+        should_fetch = (data is None) or (current_time - last_api_fetch >= poll_interval)
+
+        if should_fetch:
+            try:
+                result = subprocess.run(
+                    ["gh", "run", "view", run_id, "--repo", repo, "--json", "status,conclusion,jobs"],
+                    capture_output=True,
+                    text=True,
+                    shell=True
+                )
+                if result.returncode != 0:
+                    console.print(banner)
+                    console.print(f"[bold red]Error calling gh CLI:[/bold red] {result.stderr.strip()}")
+                    sys.exit(1)
+                    
+                data = json.loads(result.stdout)
+                last_api_fetch = current_time
+            except Exception as e:
                 console.print(banner)
-                console.print(f"[bold red]Error calling gh CLI:[/bold red] {result.stderr.strip()}")
+                console.print(f"[bold red]Exception checking build:[/bold red] {e}")
                 sys.exit(1)
-                
-            data = json.loads(result.stdout)
-        except Exception as e:
-            console.print(banner)
-            console.print(f"[bold red]Exception checking build:[/bold red] {e}")
-            sys.exit(1)
-            
+
         status = data.get("status", "unknown")
         conclusion = data.get("conclusion", "none") or "none"
         jobs = data.get("jobs", [])
@@ -159,21 +182,39 @@ def main():
             completed_at = parse_utc_timestamp(job.get("completedAt"))
             
             duration_str = ""
+            eta_str = ""
             if started_at:
                 if j_status == "completed" and completed_at:
                     duration_str = format_duration(completed_at - started_at)
                 elif j_status == "in_progress":
                     now_utc = datetime.datetime.now(datetime.timezone.utc)
-                    duration_str = format_duration(now_utc - started_at)
+                    elapsed = now_utc - started_at
+                    duration_str = format_duration(elapsed)
+                    
+                    # Estimate ETA
+                    est_total = estimate_total_duration(name)
+                    remaining = est_total - elapsed.total_seconds()
+                    if remaining > 0:
+                        rem_minutes = int(remaining // 60)
+                        if rem_minutes > 60:
+                            eta_str = f"ETA: ~{rem_minutes // 60}h {rem_minutes % 60}m"
+                        elif rem_minutes > 0:
+                            eta_str = f"ETA: ~{rem_minutes}m"
+                        else:
+                            eta_str = "ETA: soon"
+                    else:
+                        eta_str = "ETA: soon"
             
             if j_status == "in_progress":
                 in_progress_count += 1
                 all_success = False
                 status_str = "[bold blink cyan]⌛ RUNNING[/bold blink cyan]"
+                res_parts = ["compiling..."]
                 if duration_str:
-                    result_str = f"[cyan]compiling... ({duration_str})[/cyan]"
-                else:
-                    result_str = "[cyan]compiling...[/cyan]"
+                    res_parts.append(f"({duration_str})")
+                if eta_str:
+                    res_parts.append(f"[{eta_str}]")
+                result_str = f"[cyan]{' '.join(res_parts)}[/cyan]"
             elif j_status == "queued":
                 queued_count += 1
                 all_success = False
@@ -212,7 +253,9 @@ def main():
             f"[cyan]{in_progress_count}[/cyan] compiling | [yellow]{queued_count}[/yellow] in queue"
         )
         
-        # Print system output
+        if not once:
+            os.system("cls" if os.name == "nt" else "clear")
+            
         console.print(banner)
         console.print(Panel(dashboard_text, title="📟 TACTICAL DASHBOARD", border_style="bold green"))
         if total_jobs > 0:
@@ -230,9 +273,13 @@ def main():
         if once:
             break
             
-        console.print("\n[bold cyan]🛸 System polling active. Auto-refreshing in 15 seconds... [Ctrl+C to Exit][/bold cyan]")
+        next_check = int(poll_interval - (time.time() - last_api_fetch))
+        if next_check < 0:
+            next_check = 0
+            
+        console.print(f"\n[bold cyan]🛸 System polling active. Next API check in {next_check}s. Running live counts... [Ctrl+C to Exit][/bold cyan]")
         try:
-            time.sleep(15)
+            time.sleep(1)
         except KeyboardInterrupt:
             console.print("\n[bold yellow]Monitoring interrupted by user. Exiting.[/bold yellow]")
             sys.exit(0)
