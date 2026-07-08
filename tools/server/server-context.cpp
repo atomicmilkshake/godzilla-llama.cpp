@@ -2812,7 +2812,7 @@ private:
             // narrow (cheap), multi-slot servers get a compute buffer big enough for
             // the batched cross-attention. Runtime widening past this cap requires a
             // larger compute buffer than is available.
-            ctx_dft_shared.reset(common_speculative_create_ctx_dft(params_base.speculative, dflash_slots_cap));
+            ctx_dft_shared.reset(common_speculative_create_ctx_dft(params_base.speculative, ctx_tgt, dflash_slots_cap));
             if (!ctx_dft_shared) {
                 SRV_ERR("%s", "failed to create shared DFlash drafter context\n");
                 return false;

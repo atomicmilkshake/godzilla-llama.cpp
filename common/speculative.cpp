@@ -4277,13 +4277,14 @@ bool common_dflash_invalid_reduced_logits_fail_closed_for_test(
 // Fork-specific init and dispatch functions
 // ============================================================================
 
-llama_context * common_speculative_create_ctx_dft(const common_params_speculative & params, int dflash_n_slots) {
+llama_context * common_speculative_create_ctx_dft(const common_params_speculative & params, llama_context * ctx_tgt, int dflash_n_slots) {
     if (!params.model_dft) {
         return nullptr;
     }
     llama_context_params cparams_dft = params.cparams_dft;
     cparams_dft.dflash_n_slots = dflash_n_slots;
     cparams_dft.dflash_cross_ctx = params.dflash_cross_ctx;
+    cparams_dft.ctx_other = ctx_tgt;
     llama_context * ctx_dft = llama_init_from_model(params.model_dft, cparams_dft);
     if (ctx_dft == nullptr) {
         LOG_ERR("%s", "failed to create draft context\n");
@@ -4335,7 +4336,7 @@ common_speculative * common_speculative_init(
     const bool owns_ctx_dft = (ctx_dft_shared == nullptr);
     llama_context * ctx_dft = ctx_dft_shared;
     if (ctx_dft == nullptr && params.model_dft) {
-        ctx_dft = common_speculative_create_ctx_dft(params);
+        ctx_dft = common_speculative_create_ctx_dft(params, ctx_tgt);
     }
 
     std::vector<common_speculative_config> configs = {};

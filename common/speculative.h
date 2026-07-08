@@ -154,7 +154,7 @@ struct common_speculative_deleter {
 typedef std::unique_ptr<common_speculative, common_speculative_deleter> common_speculative_ptr;
 
 // fork: per-slot init (n_seq=1, shared drafter context)
-llama_context * common_speculative_create_ctx_dft(const common_params_speculative & params, int dflash_n_slots = 1);
+llama_context * common_speculative_create_ctx_dft(const common_params_speculative & params, llama_context * ctx_tgt = nullptr, int dflash_n_slots = 1);
 common_speculative * common_speculative_init(
         common_params_speculative & params,
         llama_context             * ctx_tgt,
