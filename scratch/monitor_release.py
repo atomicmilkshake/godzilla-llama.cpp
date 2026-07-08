@@ -86,23 +86,31 @@ def main():
     if len(sys.argv) > 1:
         run_id = sys.argv[1]
     else:
+        # Scan recent runs — prefer the most recent one that's still active
         try:
             run_list = subprocess.run(
-                ["gh", "run", "list", "--repo", repo, "--workflow", "release.yml", "--limit", "1", "--json", "databaseId"],
+                ["gh", "run", "list", "--repo", repo, "--workflow", "release.yml", "--limit", "20", "--json", "databaseId,status"],
                 capture_output=True,
                 text=True,
                 shell=True
             )
             if run_list.returncode == 0:
                 runs = json.loads(run_list.stdout)
-                if runs:
+                # First pass: pick the most recent in-progress or queued run
+                for r in runs:
+                    if r.get("status") in ("in_progress", "queued", "waiting", "requested", "pending"):
+                        run_id = str(r["databaseId"])
+                        break
+                # Second pass: if nothing active, take the most recent run of any status
+                if not run_id and runs:
                     run_id = str(runs[0]["databaseId"])
         except Exception:
             pass
             
     if not run_id:
-        # Fallback to current active run ID
-        run_id = "28717696903"
+        console.print(banner)
+        console.print("[bold red]No recent workflow runs found. Start a release build first, or pass a run ID explicitly.[/bold red]")
+        sys.exit(1)
     
     # ASCII Art Banner (Matrix / Hackers style)
     banner = r"""
