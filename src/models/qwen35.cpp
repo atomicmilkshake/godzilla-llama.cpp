@@ -16,6 +16,8 @@ void llama_model_qwen35::load_arch_hparams(llama_model_loader & ml) {
     // NextN/MTP (Qwen3.5/3.6): extra decoder block appended beyond the main stack
     ml.get_key(LLM_KV_NEXTN_PREDICT_LAYERS, hparams.nextn_predict_layers, false);
     GGML_ASSERT(hparams.nextn_predict_layers < hparams.n_layer && "nextn_predict_layers must be < n_layer");
+    // llama_init_from_model + graph use n_layer_nextn for MTP context enablement
+    hparams.n_layer_nextn = hparams.nextn_predict_layers;
 
     // Mark recurrent layers (linear attention layers). MTP layers are dense
     // attention-only and must be flagged non-recurrent.
@@ -168,8 +170,33 @@ llama_model_qwen35::graph::graph(const llama_model & model, const llm_graph_para
     const int64_t dflash_capture_n_tokens =
         ubatch.n_seqs_unq > 1 ? n_seq_tokens : (int64_t) ubatch.n_tokens;
 
+    // multi-layer hidden-state tap: collect the captured layer outputs here in
+    // capture order, then concatenate them along dim0 after the layer loop.
+    std::vector<ggml_tensor *> h_capture(cparams.n_capture_layers, nullptr);
+
     // MTP/NextN layers are loaded as extra decoder blocks but not executed in the main pass.
     const int n_transformer_layers = n_layer - (int) hparams.nextn_predict_layers;
+
+    // Capture narrow-timing interacts with last-layer residual / nextn layout.
+    // Dense capture of the last transformer layer forces us to keep full-width
+    // through the last layer so the tap sees every position; lm_head narrowing
+    // is then deferred post-loop (same idea as need_full_h_nextn).
+    bool capture_taps_last_layer = false;
+    for (uint32_t c = 0; c < cparams.n_capture_layers; ++c) {
+        if (cparams.capture_layer_idx[c] == n_transformer_layers - 1) {
+            capture_taps_last_layer = true;
+            break;
+        }
+    }
+    const bool capture_wants_dense = capture_taps_last_layer && !cparams.embeddings_capture_masked;
+
+    GGML_ASSERT(!(capture_wants_dense && cparams.embeddings_nextn && cparams.embeddings_nextn_masked) &&
+                "dspark dense capture (embeddings_capture_masked=false) is incompatible with simultaneous "
+                "masked MTP nextn extraction -- they share the same narrow-timing decision");
+
+    // Narrow early unless nextn or dense last-layer capture needs full width.
+    const bool narrow_before_last_layer = !need_full_h_nextn && !capture_wants_dense;
+
     for (int il = 0; il < n_transformer_layers; ++il) {
         ggml_tensor * inpSA = inpL;
 
@@ -187,7 +214,7 @@ llama_model_qwen35::graph::graph(const llama_model & model, const llm_graph_para
             cur = build_layer_attn(inp->get_attn(), cur, inp_pos, sections, il);
         }
 
-        if (il == n_transformer_layers - 1 && inp_out_ids && !need_full_h_nextn) {
+        if (il == n_transformer_layers - 1 && inp_out_ids && narrow_before_last_layer) {
             cur   = ggml_get_rows(ctx0, cur, inp_out_ids);
             inpSA = ggml_get_rows(ctx0, inpSA, inp_out_ids);
         }
@@ -287,6 +314,19 @@ llama_model_qwen35::graph::graph(const llama_model & model, const llm_graph_para
             }
         }
 
+        // multi-layer hidden-state tap (EAGLE3 / dspark): if this layer index is
+        // registered for capture, optionally slice to output rows and stash it.
+        for (uint32_t c = 0; c < cparams.n_capture_layers; ++c) {
+            if (cparams.capture_layer_idx[c] == il) {
+                ggml_tensor * cap = cur;
+                if (cparams.embeddings_capture_masked && inp_out_ids) {
+                    cap = ggml_get_rows(ctx0, cap, inp_out_ids);
+                }
+                cb(cap, "h_capture", il);
+                h_capture[c] = cap;
+            }
+        }
+
         // Input for next layer
         inpL = cur;
     }
@@ -297,7 +337,23 @@ llama_model_qwen35::graph::graph(const llama_model & model, const llm_graph_para
     cb(cur, "h_nextn", -1);
     res->t_h_nextn = cur;
 
-    if (need_full_h_nextn && inp_out_ids) {
+    // multi-layer hidden-state tap: concatenate captured layers along dim0 into a
+    // single [n_capture * n_embd, n_outputs] tensor for one bulk host copy.
+    if (cparams.n_capture_layers > 0) {
+        ggml_tensor * cap = h_capture[0];
+        GGML_ASSERT(cap && "capture layer 0 was not produced (index out of executed range?)");
+        for (uint32_t c = 1; c < cparams.n_capture_layers; ++c) {
+            GGML_ASSERT(h_capture[c] && "a requested capture layer was not produced");
+            cap = ggml_concat(ctx0, cap, h_capture[c], 0);
+        }
+        cb(cap, "h_capture_cat", -1);
+        res->t_h_capture = cap;
+
+        // Side-branch: must be expanded into gf or the scheduler never visits it.
+        ggml_build_forward_expand(gf, cap);
+    }
+
+    if (!narrow_before_last_layer && inp_out_ids) {
         cur = ggml_get_rows(ctx0, cur, inp_out_ids);
     }
 

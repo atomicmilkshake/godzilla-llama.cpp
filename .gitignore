@@ -183,3 +183,15 @@ AGENTS.local.md
 
 # Codebooks are intentionally tracked despite *.bin
 !codebooks/**/*.bin
+
+# Local build artifacts and scratch/session files
+/release-bin/
+/_ninja_explain.txt
+/_ucrt_test/
+/_wait_rebuild.py
+/_rebuild_mtp_detached.cmd
+/_rebuild_mtp_detached.pid
+/_rebuild_mtp_fix.cmd
+/_tmp_rebuild_mtp.cmd
+/godzilla_bonsai_conversation_*.md
+

@@ -26,7 +26,22 @@ Treat the local codebase as the source of truth for implementation behavior.
 
 ## Build
 
-Prebuilt Windows binaries (CUDA 12.4/13.1) are on the releases page. Otherwise build from source:
+### This lab (Windows / Godzilla king) — use these first
+
+> [!IMPORTANT]
+> Do **not** freestyle MSVC/CUDA paths. On this machine:
+>
+> 1. `python scripts/agent_bootstrap_godzilla.py` — live status + next command  
+> 2. Read `docs/AGENT-BUILD-WORKFLOW.md` — reliable workflow (one ninja, stage release-bin, MTP fix)  
+> 3. Read `docs/WINDOWS-BUILD-TOOLCHAIN.md` — UCRT pin (`S:\WADK102`, never invent paths)  
+> 4. Rebuild: `scripts\rebuild_incremental.cmd` (src-only) · `scripts\rebuild_detached.cmd` (long) · `rebuild_king.cmd` (clean full)  
+> 5. Runtime package is always **`release-bin\`** after `stage-release-bin.ps1`
+>
+> **Never** start a second concurrent ninja on `build-king`. **Never** kill a mid-CUDA rebuild if you can detach instead.
+
+### Upstream-style builds (non-lab / other OS)
+
+Prebuilt Windows binaries may exist on releases. Otherwise:
 
 ```bash
 # Linux (GCC + CUDA)
@@ -35,7 +50,7 @@ cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-# Windows (MSVC + CUDA)
+# Windows (MSVC + CUDA) — lab still prefers env-godzilla-msvc + build-king
 cmake -B build -DGGML_CUDA=ON -DGGML_NATIVE=ON ^
   -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON ^
   -DCMAKE_BUILD_TYPE=Release
@@ -46,9 +61,9 @@ cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-`GGML_CUDA_FA_ALL_QUANTS=ON` is required for TurboQuant and TCQ cache types. Add `-DCMAKE_CUDA_ARCHITECTURES=86` for RTX 3090, or `-DCMAKE_CUDA_ARCHITECTURES=89` for RTX 4090, if cross-compiling or building in CI without a GPU.
+`GGML_CUDA_FA_ALL_QUANTS=ON` is required for TurboQuant and TCQ cache types. Lab GPU: **`-DCMAKE_CUDA_ARCHITECTURES=86`** (RTX 3080).
 
-Key binaries: `build/bin/llama-server`, `build/bin/llama-cli`, `build/bin/llama-bench`, `build/bin/llama-perplexity`.
+Lab runtime binary: `release-bin/llama-server.exe` (not raw `build-king` without staging).
 
 ## Architecture
 

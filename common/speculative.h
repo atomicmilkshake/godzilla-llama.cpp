@@ -103,6 +103,10 @@ bool common_speculative_need_embd(common_speculative * spec);
 // true if any implementation requires target nextn embeddings to be extracted
 bool common_speculative_need_embd_nextn(common_speculative * spec);
 
+// true if any implementation requires multi-layer hidden-state capture
+// (see llama_set_capture_layers / llama_get_embeddings_capture_ith)
+bool common_speculative_need_embd_capture(common_speculative * spec);
+
 // generate drafts for the sequences specified with `common_speculative_get_draft_params`
 void common_speculative_draft(common_speculative * spec);
 

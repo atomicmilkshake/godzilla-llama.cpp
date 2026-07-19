@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <map>
+#include <vector>
 
 // Reserve a new compute graph. It is valid until the next call to llama_graph_reserve.
 LLAMA_API struct ggml_cgraph * llama_graph_reserve(
@@ -108,3 +109,60 @@ LLAMA_API float * llama_get_embeddings_nextn(struct llama_context * ctx);
 
 // LLAMA_API float * llama_get_embeddings_ith(struct llama_context * ctx, int32_t i);
 LLAMA_API float * llama_get_embeddings_nextn_ith(struct llama_context * ctx, int32_t i);
+
+//
+// multi-layer hidden-state tap (EAGLE3 / dspark target-feature reuse)
+//
+// Register an ordered set of intermediate decoder layers to capture. After a
+// decode, the per-layer outputs are concatenated per position into a row of
+// width [n_capture_layers * n_embd], laid out [layer0 | layer1 | ...] in the
+// same order as layer_ids. Pass n_layers == 0 to disable.
+// If masked == true (default), capture is narrowed to output rows (batch.logits
+// != 0) at the tap point. If masked == false, capture stays dense.
+LLAMA_API void            llama_set_capture_layers(struct llama_context * ctx,
+                                                   const int32_t *        layer_ids,
+                                                   size_t                 n_layers,
+                                                   bool                   masked = true);
+LLAMA_API uint32_t llama_get_n_capture(struct llama_context * ctx);
+LLAMA_API float *  llama_get_embeddings_capture    (struct llama_context * ctx);
+LLAMA_API float *  llama_get_embeddings_capture_ith(struct llama_context * ctx, int32_t i);
+
+//
+// dspark drafter: target-tap context window staging
+//
+// feat is [n_ctx_rows * n_embd_cap] row-major. Pass n_ctx_rows <= 0 or feat ==
+// nullptr to clear the staged context.
+LLAMA_API void llama_set_dspark_ctx(
+        struct llama_context * ctx,
+        const float           * feat,
+              int64_t           n_ctx_rows,
+              int64_t           n_embd_cap);
+
+struct llama_dspark_meta {
+    int64_t n_embd        = 0;
+    int64_t n_vocab       = 0; // from token_embd.weight's own shape, not the (empty) vocab
+    int64_t n_capture     = 0; // target_layer_ids count
+    int64_t n_embd_cap    = 0; // n_capture * n_embd (raw pre-fc tap width)
+    int32_t block_size    = 0;
+    int32_t mask_token_id = 0;
+    int64_t markov_rank   = 0; // 0 if the checkpoint has no markov head
+};
+
+// Returns false if `model` is not a loaded dspark model (block_size == 0).
+LLAMA_API bool llama_model_dspark_get_meta(
+        const struct llama_model * model,
+              llama_dspark_meta   * out);
+
+// Copy the ordered target-layer ids this drafter taps into `out` (up to n_out).
+// Returns the number of layers written, or 0 if not a dspark model / buffer too small.
+LLAMA_API int32_t llama_model_dspark_get_target_layers(
+        const struct llama_model * model,
+              int32_t            * out,
+              int32_t              n_out);
+
+// w1 and w2 are both returned as [n_vocab * n_rank] row-major.
+// Returns false if the model has no markov head.
+LLAMA_API bool llama_model_dspark_get_markov(
+        const struct llama_model * model,
+        std::vector<float>       & w1,
+        std::vector<float>       & w2);

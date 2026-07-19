@@ -251,6 +251,31 @@ struct llama_hparams {
     uint32_t dflash_n_target_layers   = 0;
     uint32_t dflash_target_layer_ids[8] = {};
 
+    // dspark drafter (EAGLE-style block-diffusion speculative decoder). the
+    // trunk itself is a plain dense Qwen3-style stack (n_layer/n_head/n_ff etc.
+    // above already cover it); these are the extra fields the block-draft head
+    // needs. target_layer_ids indexes into the TARGET model's layers, not this
+    // drafter's own (tiny) layer count.
+    uint32_t dspark_block_size                   = 0; // number of masked positions predicted per block
+    uint32_t dspark_mask_token_id                = 0; // vocab id used to seed un-drafted block positions
+    uint32_t dspark_markov_rank                  = 0; // low-rank factor width for the markov logit-bias head
+    bool     dspark_confidence_head              = false;
+    bool     dspark_confidence_head_with_markov  = false;
+
+    // GIDD log-SNR / noise-level conditioning (LogSnrEmbed)
+    bool     dspark_log_snr_conditioning         = false;
+    float    dspark_min_log_snr                  = 0.0f;
+    float    dspark_max_log_snr                  = 0.0f;
+
+    // ordered set of target-model layer indices this drafter taps; n_dspark_target_layers
+    // is also the concatenation width multiplier (n_capture) for dspark.fc's input.
+    uint32_t n_dspark_target_layers = 0;
+    // uint32_t (not int32_t): matches an existing explicit template
+    // instantiation of llama_model_loader::get_key_or_arr for
+    // std::array<uint32_t, LLAMA_MAX_LAYERS>; layer indices are non-negative
+    // so the signed/unsigned choice loses nothing.
+    std::array<uint32_t, LLAMA_MAX_LAYERS> dspark_target_layers = {};
+
     // needed by encoder-decoder models (e.g. T5, FLAN-T5)
     // ref: https://github.com/ggml-org/llama.cpp/pull/8141
     llama_token dec_start_token_id = LLAMA_TOKEN_NULL;

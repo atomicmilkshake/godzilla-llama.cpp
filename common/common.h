@@ -170,6 +170,7 @@ enum common_speculative_type {
     COMMON_SPECULATIVE_TYPE_COPYSPEC,      // model-free copy-from-context speculative decoding
     COMMON_SPECULATIVE_TYPE_RECYCLE,       // model-free token recycling (adjacency matrix)
     COMMON_SPECULATIVE_TYPE_DFLASH,        // DFlash block-diffusion speculative decoding
+    COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK,  // dspark: EAGLE-style block-diffusion drafter
     COMMON_SPECULATIVE_TYPE_COUNT          // number of types, unknown type
 };
 
@@ -493,8 +494,14 @@ struct common_params_speculative {
     }
 
     uint32_t need_n_rs_seq() const {
+        // MTP, dspark, and flat DFlash verify a whole draft block against the
+        // target then crop with PARTIAL llama_memory_seq_rm(). Hybrid GDN
+        // targets need the recurrent-state rollback ring (n_rs_seq) sized
+        // up front or the crop silently no-ops and GDN keeps absorbing the
+        // rejected draft tail.
         bool needs_rs_seq = std::any_of(types.begin(), types.end(), [&](auto t) {
             return t == COMMON_SPECULATIVE_TYPE_DRAFT_MTP ||
+                   t == COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK ||
                    (t == COMMON_SPECULATIVE_TYPE_DFLASH && branch_budget == 0);
         });
 

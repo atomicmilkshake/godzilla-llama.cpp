@@ -2632,6 +2632,7 @@ private:
 
             // Upstream MTP: create draft context from target model's MTP heads
             const bool spec_mtp = params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_MTP);
+            const bool spec_dspark = params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK);
             if (spec_mtp && params_base.speculative.type() != COMMON_SPECULATIVE_TYPE_DFLASH) {
                 auto cparams = common_context_params_to_llama(params_dft);
                 cparams.ctx_type = LLAMA_CONTEXT_TYPE_MTP;
@@ -2653,6 +2654,44 @@ private:
                 params_base.speculative.draft.ctx_dft = ctx_dft.get();
             } else if (params_base.speculative.type() != COMMON_SPECULATIVE_TYPE_DFLASH) {
                 auto cparams = common_context_params_to_llama(params_dft);
+
+                // dspark drafts a full block per round and stages all context
+                // rows since its cache position PLUS the block in ONE batch.
+                if (spec_dspark) {
+                    llama_dspark_meta meta {};
+                    if (llama_model_dspark_get_meta(model_dft.get(), &meta) && meta.block_size > 0) {
+                        const uint32_t block_size = (uint32_t) meta.block_size;
+                        const uint32_t n_out_dspark = (uint32_t) params_base.n_parallel * (1u + block_size);
+                        if (cparams.n_outputs_max < n_out_dspark) {
+                            SRV_INF("draft-dspark: raising draft ctx n_outputs_max %u -> %u (block_size=%u)\n",
+                                    cparams.n_outputs_max, n_out_dspark, block_size);
+                            cparams.n_outputs_max = n_out_dspark;
+                        }
+
+                        const uint32_t n_batch_dspark = cparams.n_ctx + block_size;
+                        if (cparams.n_batch < n_batch_dspark) {
+                            SRV_INF("draft-dspark: raising draft ctx n_batch %u -> %u (full-context staging + block)\n",
+                                    cparams.n_batch, n_batch_dspark);
+                            cparams.n_batch = n_batch_dspark;
+                        }
+                        if (cparams.n_ubatch < cparams.n_batch) {
+                            cparams.n_ubatch = cparams.n_batch;
+                        }
+
+                        // enforce / clamp n_max to block_size (draft always emits a full block)
+                        if (params_base.speculative.draft.n_max != (int32_t) block_size) {
+                            SRV_WRN("draft-dspark: clamping --spec-draft-n-max %d -> block_size %u\n",
+                                    params_base.speculative.draft.n_max, block_size);
+                            params_base.speculative.draft.n_max = (int32_t) block_size;
+                            params_base.speculative.n_max       = (int32_t) block_size;
+                        }
+                    } else {
+                        SRV_ERR("draft-dspark: draft model '%s' is not a valid dspark drafter\n",
+                                params_dft.model.path.c_str());
+                        return false;
+                    }
+                }
+
                 ctx_dft.reset(llama_init_from_model(model_dft.get(), cparams));
                 if (ctx_dft == nullptr) {
                     SRV_ERR("failed to create draft context, '%s'\n", params_dft.model.path.c_str());
@@ -2839,6 +2878,37 @@ private:
             SRV_INF("%s", "speculative decoding context initialized\n");
         } else {
             ctx_dft.reset();
+        }
+
+        // dspark needs the target to capture the drafter's tap layers on every
+        // decode -- without this the first draft round fails (null capture rows).
+        // masked=false keeps batch.logits narrow (no per-row full-vocab lm_head).
+        if (spec && common_speculative_need_embd_capture(spec.get()) && model_dft) {
+            llama_dspark_meta meta {};
+            if (!llama_model_dspark_get_meta(model_dft.get(), &meta) || meta.n_capture <= 0) {
+                SRV_ERR("%s", "draft-dspark: failed to read dspark meta from draft model -- disabling speculative decoding\n");
+                spec.reset();
+            } else {
+                std::vector<int32_t> capture_layers((size_t) meta.n_capture);
+                const int32_t n_read = llama_model_dspark_get_target_layers(
+                        model_dft.get(), capture_layers.data(), (int32_t) capture_layers.size());
+                if (n_read <= 0 || n_read != (int32_t) meta.n_capture) {
+                    SRV_ERR("%s", "draft-dspark: failed to read dspark.target_layers -- disabling speculative decoding\n");
+                    spec.reset();
+                } else {
+                    llama_set_capture_layers(ctx_tgt, capture_layers.data(), capture_layers.size(), /* masked = */ false);
+                    SRV_INF("draft-dspark: target tap capture engaged on %zu layers\n", capture_layers.size());
+
+                    if (params_base.ctx_shift) {
+                        params_base.ctx_shift = false;
+                        SRV_WRN("%s\n", "ctx_shift is not supported with draft-dspark capture, it will be disabled");
+                    }
+                }
+            }
+            if (!spec) {
+                ctx_dft.reset();
+                params_base.speculative.draft.ctx_dft = nullptr;
+            }
         }
 
         for (int i = 0; i < params_base.n_parallel; i++) {
@@ -4920,7 +4990,11 @@ private:
                     SLT_DBG(slot, "%s", "DDTree draft unavailable, falling back to flat speculative decode\n");
                 }
 
-                const bool use_mtp_spec = params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_MTP) &&
+                // multi-seq block-verify draft models (MTP + DSpark) share the
+                // collect-then-draft-then-checkpoint-then-batch path.
+                const bool use_mtp_spec =
+                    (params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_MTP) ||
+                     params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK)) &&
                     params_base.speculative.type() != COMMON_SPECULATIVE_TYPE_DFLASH;
                 const llama_pos draft_n_past = use_mtp_spec ? slot.prompt.n_tokens() : -1;
                 if (use_mtp_spec) {
@@ -5245,6 +5319,14 @@ private:
 
                         slot.state = SLOT_STATE_PROCESSING_PROMPT;
 
+                        // capture-type drafters (dspark): begin() clears the per-seq staged
+                        // feature window, so it must run BEFORE the prompt is decoded --
+                        // the prompt chunks' capture rows are staged by
+                        // common_speculative_process() after each decode.
+                        if (slot.can_speculate() && common_speculative_need_embd_capture(slot.get_spec())) {
+                            common_speculative_begin(slot.get_spec(), slot.id, slot.task->tokens.get_text_tokens());
+                        }
+
                         SLT_TRC(slot, "new prompt, n_ctx_slot = %d, n_keep = %d, task.n_tokens = %d\n",
                                 slot.n_ctx, slot.task->params.n_keep, slot.task->n_tokens());
 
@@ -5315,7 +5397,16 @@ private:
                                 continue;
                             }
 
-                            if (slot.task->params.cache_prompt) {
+                            // capture-type drafters need a capture row staged for every
+                            // prompt position; KV-cache prefix reuse would skip decoding
+                            // (and thus capturing) the reused positions.
+                            const bool spec_needs_full_prompt =
+                                slot.can_speculate() && common_speculative_need_embd_capture(slot.get_spec());
+                            if (spec_needs_full_prompt && slot.task->params.cache_prompt) {
+                                SLT_DBG(slot, "%s", "draft-dspark: disabling prompt cache reuse (capture rows needed for every position)\n");
+                            }
+
+                            if (slot.task->params.cache_prompt && !spec_needs_full_prompt) {
                                 // reuse any previously computed tokens that are common with the new prompt
                                 n_past = slot.prompt.tokens.get_common_prefix(input_tokens);
 
@@ -6431,6 +6522,10 @@ private:
 
                     if (slot.can_speculate()) {
                         bool begin_speculative_state = true;
+                        // capture-type drafters already ran begin() before prompt decode
+                        if (common_speculative_need_embd_capture(slot.get_spec())) {
+                            begin_speculative_state = false;
+                        }
                         if (params_base.speculative.type() == COMMON_SPECULATIVE_TYPE_DFLASH) {
                             llama_dflash_set_active_slot(ctx_tgt, slot.id);
                             if (dflash_should_skip_begin(slot.id)) {
@@ -6662,14 +6757,15 @@ private:
                     profile_accept_phase_start = now;
                 };
 
-                // MTP-only speculative accept — hard-isolated upstream lifecycle
+                // MTP / DSpark speculative accept — hard-isolated upstream lifecycle
                 // Upstream contract: sample_and_accept_n() → n_rollback → on rollback
                 // ckpt-restore+continue (skip accept), on commit accept+insert[0..N-2]+sampled=N-1.
                 // This block replaces the DFlash-era generic accept path for MTP because
                 // that path has speculative_has_bonus/n_prompt_insert bugs and calls
                 // common_speculative_accept() before the rollback decision.
                 const bool use_mtp_spec_accept =
-                    params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_MTP) &&
+                    (params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_MTP) ||
+                     params_base.speculative.has_type(COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK)) &&
                     params_base.speculative.type() != COMMON_SPECULATIVE_TYPE_DFLASH &&
                     !is_draft_tree;
 

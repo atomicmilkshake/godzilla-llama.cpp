@@ -207,3 +207,118 @@ Sensitive local paths, machine-specific details, and external session identifier
 
 
 
+
+---
+
+### Session: 2026-07-17 (agent build workflow + bootstrap)
+- **Goal**: Document reliable Godzilla Windows build path and bootstrap future agents.
+- **Changes Completed**:
+  - docs/AGENT-BUILD-WORKFLOW.md
+  - scripts/agent_bootstrap_godzilla.py
+  - scripts/rebuild_incremental.cmd + rebuild_detached.cmd
+  - Pointers in WINDOWS-BUILD-TOOLCHAIN, AGENTS.md, doc_map, global Agents.md, Vandelay GODZILLA-BUILD, engines BUILD-WINDOWS
+- **Findings**: One ninja only; never kill mid-CUDA; always stage release-bin; MTP fix in sources but objs still stale.
+- **Current State**: Docs/bootstrap done; binary rebuild still needed for MTP.
+- **Next Steps**: rebuild_detached or rebuild_incremental; smoke draft-mtp.
+
+
+---
+
+### Session: 2026-07-18 (resume Cursor → VN lifecycle fixes)
+- **Goal**: Resume Cursor session cd04bb46; continue blocked "Build" of VandelayNexus lifecycle plan (Cursor billing had blocked implement agent).
+- **Changes Completed**:
+  - No godzilla-llama.cpp source edits this turn.
+  - VandelayNexus Phases A–D implemented under X:/My Drive/VandelayNexus (ServerManager singleton, start switch, no forced triattention, promote/blacklist/facade UX, tests).
+  - GGUF matrix overnight already complete earlier (27/28 godzilla OK; dspark shared fail).
+- **Findings & Decisions**:
+  - Cursor session stop point was unpaid invoice; resumed and built in Grok.
+  - Matrix verdict keep_godzilla already ingested into VN.
+- **Current State**: VN lifecycle fixes applied + unit tests green.
+- **Next Steps**:
+  - Manual GUI smoke (Start switch, Optimize lock, Promote, blacklist chip).
+  - Optional: commit VN when user asks (no git repo at VN path).
+
+---
+
+### Session: 2026-07-19 (Phase C Bonsai godzilla cell — VandelayNexus)
+- **Goal**: Ensure Bonsai main can be served on godzilla honestly (config cell, not a code change).
+- **Changes Completed**:
+  - Confirmed release-bin llama-server.exe present (version 10218).
+  - VandelayNexus: added preset godzilla-bonsai-27b (baseline-8k FA only, no DSpark).
+  - Evidence: VandelayNexus data/evidence/bonsai-godzilla-cell-20260719.md
+- **Findings & Decisions**:
+  - Prior Bonsai cells were prism-only (baseline-8k + dspark). Godzilla lacks draft-dspark → main Q1_0 only.
+- **Current State**: COMPLETED (config)
+- **Next Steps**:
+  - Optional: live serve smoke of godzilla-bonsai-27b::godzilla::baseline-8k if user requests.
+
+
+---
+
+### Session: 2026-07-18 (DSpark Phase A+B port)
+- **Goal**: Port DSpark draft architecture load + multi-layer capture scaffolding from prism into godzilla (Phase A+B only).
+- **Changes Completed**:
+  - Appended LLM_ARCH_DSPARK (after DFLASH_DRAFT, before UNKNOWN) + KV keys + tensor names/infos.
+  - Added dspark hparams, model tensors, factory registration, rope NEOX, get_meta/get_markov.
+  - Added src/models/dspark.cpp + llama_model_dspark (real forward graph from prism, no stubs).
+  - Graph: llama_dspark_ctx, dspark inputs, t_h_capture, graph_params.dspark_ctx.
+  - Multi-layer capture API in cparams/context/llama-ext; wired into qwen35.cpp.
+  - Built on J:/LLM/engines/godzilla-llama.cpp (cmake reconfigure for GLOB); staged release-bin.
+- **Findings & Decisions**:
+  - Load proof: llama-cli -m Bonsai-27B-dspark-Q4_1.gguf reaches model banner; NOT unknown architecture. Later vocab/tokenizer assert is expected (vocab-none).
+  - Target Bonsai-27B-Q1_0.gguf still loads to interactive.
+  - Remaining: draft-dspark speculative impl + server wiring + optional markov CUDA.
+- **Current State**: COMPLETED (Phase A+B)
+- **Next Steps**:
+  - Port common_speculative_impl_draft_dspark + server draft-dspark.
+  - Merge isolation worktree into godzilla branch if needed.
+
+
+---
+
+### Session: 2026-07-18 (Phase C draft-dspark functional path)
+- **Goal**: Real --spec-type draft-dspark end-to-end on godzilla (no stubs).
+- **Changes Completed**:
+  - common/common.h: COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK (+ need_n_rs_seq).
+  - common/speculative.{h,cpp}: type string draft-dspark, host-markov common_speculative_impl_draft_dspark, 
+eed_embd_capture API.
+  - src/llama-ext.h + src/llama-model.cpp: llama_model_dspark_get_target_layers.
+  - 	ools/server/server-context.cpp: raise draft n_batch/n_outputs_max, clamp n_max to block_size, set_capture_layers, begin-before-prompt, disable cache reuse, MTP-like draft/accept path for dspark.
+  - Rebuild incremental + stage release-bin.
+- **Live proof** (required):
+  - 
+elease-bin/llama-server.exe + Bonsai-27B-Q1_0 + Bonsai-27B-dspark-Q4_1, --spec-type draft-dspark --spec-draft-n-max 4, port 18099.
+  - POST /v1/chat/completions returned tokens; process stayed up.
+  - Log: capture on 5 layers, has_markov=1, accepted 4/4 x4 + 2/2, draft acceptance 1.0 (18/18).
+  - Evidence: J:/LLM/diagnostics/dspark-phase-c-proof.json, server log J:/LLM/diagnostics/dspark-phase-c-server.log.
+- **Findings & Decisions**:
+  - Host Markov resample is sufficient for v1; CUDA/Metal markov optional later.
+  - Parent may flip VN ccelerators.py allowlist for godzilla+dspark.
+- **Current State**: PHASE C COMPLETE (functional draft path proven live).
+- **Next Steps**:
+  - Optional CUDA markov path; VN allowlist flip; longer bench / quality checks.
+
+
+---
+
+### Session: 2026-07-19 (DSpark draft-dspark e2e)
+- **Goal**: Port DSpark so godzilla runs Bonsai target+draft; no stubs.
+- **Changes**: Phase A/B load+capture; Phase C speculative+server; live proof accept 18/18.
+- **Evidence**: J:/LLM/diagnostics/dspark-phase-c-proof.json
+- **State**: COMPLETE for draft-dspark serve path.
+- **Next**: optional CUDA markov; merge worktree if needed; VN already allowlists godzilla dspark.
+
+---
+
+### Session: 2026-07-18 [Local: 2026-07-18 23:11 CT / UTC: 2026-07-19 04:11]
+- **Goal**: Rephrase the final conversation status and recommendations in an expository, fully-formed sentence structure.
+- **Changes Completed**:
+  - None.
+- **Findings & Decisions**:
+  - Drafted an expository rephrasing covering workspace status, GUI verification, version control commits, and technical enhancements.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Await user choice on which task to perform.
+
+
+

@@ -56,3 +56,29 @@ function Get-WdkRoot {
     if ($env:WDK_ROOT) { return $env:WDK_ROOT.TrimEnd('\', '/') }
     return $null
 }
+
+function Get-LabCudaPath {
+    # Prefer env, then lab pin CUDA 13.2, then newest installed toolkit under the NVIDIA path.
+    if ($env:CUDA_PATH -and (Test-Path -LiteralPath $env:CUDA_PATH)) {
+        return $env:CUDA_PATH.TrimEnd('\', '/')
+    }
+    $candidates = @(
+        "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2",
+        "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.1",
+        "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path -LiteralPath (Join-Path $c "bin\nvcc.exe")) {
+            return $c
+        }
+    }
+    $root = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
+    if (Test-Path -LiteralPath $root) {
+        $hit = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "bin\nvcc.exe") } |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+        if ($hit) { return $hit.FullName }
+    }
+    return $null
+}

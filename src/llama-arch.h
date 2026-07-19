@@ -144,6 +144,7 @@ enum llm_arch {
     LLM_ARCH_MELLUM,
     LLM_ARCH_DFLASH,
     LLM_ARCH_DFLASH_DRAFT,
+    LLM_ARCH_DSPARK,
     LLM_ARCH_UNKNOWN,
 };
 
@@ -295,6 +296,17 @@ enum llm_kv {
     LLM_KV_DFLASH_MASK_TOKEN_ID,
     LLM_KV_DFLASH_TARGET_LAYER_IDS,
     LLM_KV_DFLASH_N_TARGET_FEATURES,
+
+    // dspark drafter hyperparameters (block-diffusion EAGLE-style drafter)
+    LLM_KV_DSPARK_BLOCK_SIZE,
+    LLM_KV_DSPARK_MASK_TOKEN_ID,
+    LLM_KV_DSPARK_TARGET_LAYERS,
+    LLM_KV_DSPARK_MARKOV_RANK,
+    LLM_KV_DSPARK_CONFIDENCE_HEAD,
+    LLM_KV_DSPARK_CONFIDENCE_WITH_MARKOV,
+    LLM_KV_DSPARK_LOG_SNR_CONDITIONING,
+    LLM_KV_DSPARK_MIN_LOG_SNR,
+    LLM_KV_DSPARK_MAX_LOG_SNR,
 
     LLM_KV_TOKENIZER_MODEL,
     LLM_KV_TOKENIZER_PRE,
@@ -578,6 +590,16 @@ enum llm_tensor {
     LLM_TENSOR_DFLASH_HIDDEN_NORM,
     LLM_TENSOR_DFLASH_UPSTREAM_FC,
     LLM_TENSOR_DFLASH_UPSTREAM_HIDDEN_NORM,
+    // dspark drafter tensors. The decoder blocks reuse the standard
+    // attn_*/ffn_* tensor names; these are the additional output-level
+    // dspark-specific extras.
+    LLM_TENSOR_DSPARK_FC,              // [n_capture * target_hidden, hidden] feature projection
+    LLM_TENSOR_DSPARK_HIDDEN_NORM,    // RMSNorm after fc
+    LLM_TENSOR_DSPARK_MARKOV_HEAD_A,  // low-rank logit-bias factor A
+    LLM_TENSOR_DSPARK_MARKOV_HEAD_B,  // low-rank logit-bias factor B
+    LLM_TENSOR_DSPARK_CONFIDENCE_HEAD, // accept-rate predictor
+    LLM_TENSOR_DSPARK_LOG_SNR_FC1,     // GIDD log-SNR embed: [n_freq -> hidden]
+    LLM_TENSOR_DSPARK_LOG_SNR_FC2,     // GIDD log-SNR embed: [hidden -> hidden]
     LLM_TENSOR_MASKED_EMBD_CENTROIDS,
     LLM_TENSOR_MASKED_EMBD_ORDERING,
 };

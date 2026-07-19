@@ -528,6 +528,13 @@ struct llama_context {
     float * get_embeddings_nextn();
     float * get_embeddings_nextn_ith(int32_t i);
 
+    // multi-layer hidden-state tap (EAGLE3 / dspark target-feature reuse).
+    // get_embeddings_capture_ith returns the concatenated [n_capture * n_embd] row
+    // for output position i, captured layers laid out in capture order.
+    float *  get_embeddings_capture();
+    float *  get_embeddings_capture_ith(int32_t i);
+    uint32_t get_n_capture() const;
+
     llama_token * get_sampled_tokens() const;
     llama_token   get_sampled_token_ith(int32_t idx);
 
@@ -552,6 +559,16 @@ struct llama_context {
 
     void set_embeddings (bool value);
     void set_embeddings_nextn(bool value, bool masked);
+
+    // register the ordered set of intermediate layers to capture. pass an empty
+    // list to disable. the concatenation order follows the order of layer_ids.
+    void set_capture_layers(const std::vector<int32_t> & layer_ids, bool masked = true);
+
+    // dspark drafter: stage the target-tap context window consumed by the next
+    // decode() call. feat is [n_ctx_rows * n_embd_cap] row-major.
+    // pass n_ctx_rows <= 0 (or feat == nullptr) to clear the staged context.
+    void set_dspark_ctx(const float * feat, int64_t n_ctx_rows, int64_t n_embd_cap);
+
     void set_causal_attn(bool value);
     void set_warmup(bool value);
     bool resize_recurrent_memory(uint32_t new_n_seq_max, bool expand);
@@ -852,6 +869,9 @@ private:
 
     llama_cross cross; // TODO: tmp for handling cross-attention - need something better probably
 
+    // dspark drafter: staged target-tap context window for the next decode call.
+    llama_dspark_ctx dspark_ctx;
+
     std::unique_ptr<llama_memory_i> memory;
 
     // decode output (2-dimensional array: [n_outputs][n_vocab])
@@ -871,6 +891,10 @@ private:
     // populated only when cparams.embeddings_nextn is enabled and the model graph
     // sets llm_graph_result::t_h_nextn
     buffer_view<float> embd_nextn = {nullptr, 0};
+
+    // multi-layer capture embeddings ([n_outputs][n_capture_layers * n_embd]).
+    // populated only when cparams.n_capture_layers > 0 and the model graph filled t_h_capture.
+    buffer_view<float> embd_capture = {nullptr, 0};
 
     struct sampling_info {
         // !samplers.empty() to check if any samplers are active
