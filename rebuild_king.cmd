@@ -50,8 +50,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [rebuild_king] building llama-server ...
-cmake --build build-king --target llama-server --parallel > build_king_build.log 2>&1
+echo [rebuild_king] building llama-server and llama-cli ...
+cmake --build build-king --target llama-server llama-cli --parallel > build_king_build.log 2>&1
 if errorlevel 1 (
   echo BUILD_FAIL >> build_king_rebuild.log
   echo [rebuild_king] build failed — see build_king_build.log

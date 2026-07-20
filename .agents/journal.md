@@ -370,9 +370,9 @@ elease-bin/llama-server.exe + Bonsai-27B-Q1_0 + Bonsai-27B-dspark-Q4_1, --spec-t
 - **Findings & Decisions**:
   - Verified PE dependency closure and binary readiness via `agent_bootstrap_godzilla.py`.
   - Target `release.yml` workflow requires explicitly scoping `-R atomicmilkshake/godzilla-llama.cpp` when dispatching via `gh` CLI from fork context.
-- **Current State**: COMPLETED
+- **Current State**: COMPLETED (`rebuild_king.cmd` finished; `llama-server.exe` & `llama-cli.exe` version 10221 compiled and staged to `release-bin\`)
 - **Next Steps**:
-  - Monitor GitHub Actions release build `29752324160` until completion.
+  - Runtime binaries ready in `release-bin\`. Baseline & MTP model serving ready.
 
 
 

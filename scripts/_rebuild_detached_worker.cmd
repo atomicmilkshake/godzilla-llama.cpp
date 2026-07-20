@@ -21,8 +21,8 @@ if not exist "build-king\CMakeCache.txt" (
   )
 )
 
-echo [detached] building llama-server ... >> "%LOG%"
-cmake --build build-king --target llama-server --parallel >> "%LOG%" 2>&1
+echo [detached] building llama-server and llama-cli ... >> "%LOG%"
+cmake --build build-king --target llama-server llama-cli --parallel >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo BUILD_FAIL >> "%LOG%"
   exit /b 2
