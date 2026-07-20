@@ -310,15 +310,57 @@ elease-bin/llama-server.exe + Bonsai-27B-Q1_0 + Bonsai-27B-dspark-Q4_1, --spec-t
 
 ---
 
-### Session: 2026-07-18 [Local: 2026-07-18 23:11 CT / UTC: 2026-07-19 04:11]
-- **Goal**: Rephrase the final conversation status and recommendations in an expository, fully-formed sentence structure.
+### Session: 2026-07-18 [Local: 2026-07-18 23:15 CT / UTC: 2026-07-19 04:15]
+- **Goal**: Rephrase conversation status and push all local DSpark changes/build scripts to GitHub.
 - **Changes Completed**:
-  - None.
+  - Modified [J:\LLM\engines\godzilla-llama.cpp\.gitignore](file:///J:/LLM/engines/godzilla-llama.cpp/.gitignore) to exclude `/release-bin/` and local scratch files.
+  - Staged, committed, and pushed uncommitted DSpark speculative decoding source files, custom Windows build scripts, and documentation files to origin `godzilla` branch.
 - **Findings & Decisions**:
-  - Drafted an expository rephrasing covering workspace status, GUI verification, version control commits, and technical enhancements.
+  - Avoided committing the 2GB+ binaries in `/release-bin/` by properly ignoring them, keeping the repository clean.
+  - Verified push completed successfully.
 - **Current State**: COMPLETED
 - **Next Steps**:
-  - Await user choice on which task to perform.
+  - Await user choice on which task to perform next.
+
+---
+
+### Session: 2026-07-18 [Local: 2026-07-18 23:25 CT / UTC: 2026-07-19 04:25]
+- **Goal**: Chat with the served Bonsai DSpark model and diagnose 503 error. Implement process sweep for lingering servers on startup.
+- **Changes Completed**:
+  - Modified [X:\My Drive\VandelayNexus\src\vandelaynexus\server\manager.py](file:///X:/My%20Drive/VandelayNexus/src/vandelaynexus/server/manager.py) to use `RLock`, reload `_persisted` state from disk on `status()`, and verify process life via `psutil`.
+  - Installed `psutil` package in VandelayNexus virtual environment.
+  - Restarted VandelayNexus processes and initiated chat completion test.
+  - Added a process sweep in `ServerManager.__init__` to terminate lingering `llama-server` processes upon app startup.
+  - Configured `VANDELAYNEXUS_SWEEP_ON_STARTUP` environment variable inside `vandelaynexus/app.py` and `vandelaynexus/__main__.py` entry points to trigger the sweep only on main application initialization.
+- **Findings & Decisions**:
+  - Found that the 503 error was caused by the API facade process holding a stale `None` value in `self._persisted` in-memory state. Reloading `_persisted` from disk on `status()` resolved the issue, enabling correct health reporting (`serving: true`).
+  - Found that `ModuleNotFoundError: No module named 'psutil'` was raised in the VandelayNexus venv when running health status checks, which immediately aborted and closed the HTTP sockets without response. Installing `psutil` resolved the crash.
+  - Tested chat completion streaming and non-streaming requests. Verified successful speculative decoding with `draft-dspark` showing a high acceptance rate (~92.6% in prompt/simple generation phase, ~42% in reasoning phase).
+  - Restricting the sweep via the `VANDELAYNEXUS_SWEEP_ON_STARTUP` flag prevents temporary CLI commands or one-off tools (which import `manager.py` and instantiate `ServerManager`) from killing the running model server spawned by the main app.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Await further instructions from the user.
+
+---
+
+### Session: 2026-07-18 [Local: 2026-07-18 23:45 CT / UTC: 2026-07-19 04:45]
+- **Goal**: Address context window limits (8192) in cell listings, configure `--kv-ram` (Godzilla-exclusive) and `-nkvo` variants for 16K/32K contexts, and test reasoning controls.
+- **Changes Completed**:
+  - Updated [settings.yaml](file:///X:/My%20Drive/VandelayNexus/config/settings.yaml) under `godzilla-bonsai-27b` to add `dspark-8k-kvram`, `dspark-16k-kvram`, and `dspark-32k-kvram` cell variants using `--kv-ram` and `--spec-type draft-dspark`.
+  - Updated [settings.yaml](file:///X:/My%20Drive/VandelayNexus/config/settings.yaml) under `prism-bonsai-27b` to add `dspark-16k-ramkv` and `dspark-32k-ramkv` using `-nkvo`.
+  - Verified `common_params_apply_kv_ram` implementation in [common/common.cpp](file:///J:/LLM/engines/godzilla-llama.cpp/common/common.cpp#L1753) mapping `--kv-ram` to `no_kv_offload=true` and `f16` KV cache fallback.
+  - Identified `thinking_budget_tokens: 0` as the JSON request field for Godzilla's reasoning budget sampler.
+- **Findings & Decisions**:
+  - Context size defaults to 8192 to prevent 10GB GPU VRAM overflow when serving a 27B model.
+  - Adding `--kv-ram` keeps the KV cache in system RAM, freeing GPU memory and allowing 16K or 32K context windows without CUDA OOM.
+  - In Godzilla, DSpark speculative decoding uses `--spec-type draft-dspark`, whereas DFlash uses `--spec-type dflash`.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Use `dspark-16k-kvram` or `dspark-32k-kvram` when launching Bonsai 27B for extended context window requirements.
+
+
+
+
 
 
 
