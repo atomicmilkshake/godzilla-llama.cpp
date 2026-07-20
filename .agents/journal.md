@@ -358,6 +358,22 @@ elease-bin/llama-server.exe + Bonsai-27B-Q1_0 + Bonsai-27B-dspark-Q4_1, --spec-t
 - **Next Steps**:
   - Use `dspark-16k-kvram` or `dspark-32k-kvram` when launching Bonsai 27B for extended context window requirements.
 
+---
+
+### Session: 2026-07-20 [Local: 2026-07-20 09:48 CT / UTC: 2026-07-20 14:48]
+- **Goal**: Rebuild Godzilla binaries, synchronize latest changes to GitHub, and launch release build for `v0.3.4`.
+- **Changes Completed**:
+  - Rebuilt core binaries via `scripts\rebuild_incremental.cmd` and staged `release-bin\` (verified `llama-server.exe` build 10219).
+  - Committed journal updates (`76b34f5200d449bafb0969b63ed30e39f9259351`) and pushed `godzilla` branch to `origin`.
+  - Created annotated tag `v0.3.4` and pushed tag to `origin`.
+  - Dispatched GitHub Actions `release.yml` workflow (Run ID: `29752324160`) for release `v0.3.4` on `atomicmilkshake/godzilla-llama.cpp`.
+- **Findings & Decisions**:
+  - Verified PE dependency closure and binary readiness via `agent_bootstrap_godzilla.py`.
+  - Target `release.yml` workflow requires explicitly scoping `-R atomicmilkshake/godzilla-llama.cpp` when dispatching via `gh` CLI from fork context.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Monitor GitHub Actions release build `29752324160` until completion.
+
 
 
 
