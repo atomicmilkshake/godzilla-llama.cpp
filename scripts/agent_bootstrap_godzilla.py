@@ -22,8 +22,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WDK_DEFAULT = Path(r"S:\WADK102")
-CUDA_DEFAULT = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2")
+WDK_DEFAULT = Path(os.getenv("WDK_ROOT", r"C:\Program Files (x86)\Windows Kits\10"))
+CUDA_DEFAULT = Path(os.getenv("CUDA_PATH", r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2"))
 DOC = ROOT / "docs" / "AGENT-BUILD-WORKFLOW.md"
 TOOLCHAIN = ROOT / "docs" / "WINDOWS-BUILD-TOOLCHAIN.md"
 
