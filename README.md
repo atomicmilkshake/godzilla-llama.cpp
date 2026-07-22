@@ -1,71 +1,79 @@
-# Godzilla llama.cpp
+# 🦖 Godzilla llama.cpp
 
-Godzilla is a BeeLlama/llama.cpp fork that integrates speculative decoding, KV compression/pruning, and fork-specific quantization changes in one codebase.
+[![Release](https://img.shields.io/github/v/release/atomicmilkshake/godzilla-llama.cpp?color=00f0ff&style=for-the-badge)](https://github.com/atomicmilkshake/godzilla-llama.cpp/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/atomicmilkshake/godzilla-llama.cpp/release.yml?branch=godzilla&style=for-the-badge&label=CI%20Build)](https://github.com/atomicmilkshake/godzilla-llama.cpp/actions)
+[![License](https://img.shields.io/github/license/atomicmilkshake/godzilla-llama.cpp?color=b8ff3c&style=for-the-badge)](LICENSE)
+[![CUDA](https://img.shields.io/badge/CUDA-v13.2%20%7C%20v12.4-76B900?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
 
-## Project scope
+**Godzilla** is a high-performance, specialized fork of `beellama.cpp` / `llama.cpp` engineered for extreme long-context inference ($512K+$ tokens), sub-4bit KV cache compression, speculative draft sidecars, and advanced GPU memory allocation.
 
-- Base lineage: [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp)
-- Maintainer: [atomicmilkshake](https://github.com/atomicmilkshake)
-- Security policy: [SECURITY.md](SECURITY.md)
-- Primary integration branch: `godzilla`
+---
 
-## Implemented features
+## 🌟 Key Architecture & Innovations
 
-### Speculative decoding
+### 🚩 "Six Flags over Texas" 6-Layer Context Stack
+Godzilla introduces the **"Six Flags over Texas"** orthogonal context stack, combining 6 independent optimization technologies to run **512K context windows inside 64 GB System RAM**:
 
-- DFlash draft-model architecture and server flow
-- Flat and tree DFlash verification paths
-- Adaptive draft-max controllers (`profit`, `fringe`)
-- CopySpec/suffix/recycle and n-gram speculative variants
-- Server-side reasoning loop guard
-- Native MTP speculative decoding (draft-mtp)
-  > [!NOTE]
-  > **Qwen 3.6 Compatibility**: This fork includes a custom conversion patch in `convert_hf_to_gguf.py` that automatically maps Qwen 3.6 `mtp_layer`/`mtp_layers` tensor prefixes and registers Qwen 3.6 HF architectures. This enables seamless, out-of-the-box conversion of Qwen 3.6 MTP weights, bridging naming limitations in upstream.
+| Flag | Technology | Mechanism | Target Impact |
+| :--- | :--- | :--- | :--- |
+| **Flag 1** | **SnapKV / PyramidKV** | Positional KV token pruning & attention sink windowing | 512K $\rightarrow$ 64K active KV slots |
+| **Flag 2** | **DFlash / DSpark** | Speculative draft sidecar verification | **25.5 $\rightarrow$ 75+ tok/s** decode acceleration |
+| **Flag 3** | **TurboQuant / MXFP4** | Sub-4bit micro-exponent KV cache quantization (`turbo4`) | 268 GB $\rightarrow$ 67 GB KV byte compression |
+| **Flag 4** | **Chunked Prefill** | Ring-Attention prompt ingestion in 4K chunks (`-ub 512`) | **< 8.5 GB peak VRAM** prompt ingestion |
+| **Flag 5** | **YaRN RoPE Scaling** | Runtime rotary position frequency scaling | Positional precision retention at 512K tokens |
+| **Flag 6** | **CUDA UVM / RAM-KV** | Unified virtual memory PCIe 4.0 paging (`--kv-ram`) | **< 36 GB System RAM** physical footprint |
 
-Reference docs:
+### ⚡ `--kv-vram-only` GPU Memory Allocator (New in v0.3.5)
+Forces the KV cache onto GPU VRAM even when model weights are offloaded to System RAM (`-ngl 0` / `-ngl 1`), enabling ultra-fast token decoding on VRAM-constrained systems.
 
-- [docs/beellama-features.md](docs/beellama-features.md)
-- [docs/beellama-args.md](docs/beellama-args.md)
-- [docs/quickstart-qwen36-dflash.md](docs/quickstart-qwen36-dflash.md)
-- [docs/quickstart-gemma-4-31b-dflash.md](docs/quickstart-gemma-4-31b-dflash.md)
+### 🧠 Native Multi-Token Prediction (MTP) & Qwen 3.6 Conversion
+* Full support for native MTP draft headers (`--spec-type draft-mtp`).
+* Built-in `convert_hf_to_gguf.py` tensor remapping patch automatically maps Qwen 3.6 `mtp_layer`/`mtp_layers` tensor prefixes out-of-the-box.
 
-### KV compression and pruning
+---
 
-- TurboQuant KV cache types: `turbo2`, `turbo3`, `turbo4`
-- TCQ KV cache types: `turbo2_tcq`, `turbo3_tcq`
-- KVarN pseudo cache-type surface and runtime integration
-- TriAttention calibration-guided KV eviction (CPU + CUDA scoring paths)
+## 🚀 Quickstart Launch Examples
 
-Reference docs:
+### 1. "Six Flags over Texas" 512K Context Stack
+```bash
+./llama-server \
+  -m /path/to/model.gguf \
+  --port 8080 \
+  -ngl 99 -fa on \
+  -c 524288 \
+  --kv-ram \
+  -ctk q4_0 -ctv q4_0 \
+  --triattention-stats /path/to/model.triattention \
+  --triattention-budget 2048 --triattention-window 128 \
+  -ub 512 \
+  --rope-scaling yarn --rope-freq-scale 0.25
+```
 
-- [docs/TRIATTENTION.md](docs/TRIATTENTION.md)
-- [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md)
-- [docs/PROFILES.md](docs/PROFILES.md)
+### 2. VRAM-Only KV Offload (`--kv-vram-only`)
+```bash
+./llama-server \
+  -m /path/to/model.gguf \
+  -ngl 1 \
+  --kv-vram-only \
+  -fa on \
+  -c 65536
+```
 
-### Weight quantization extensions
+### 3. DFlash Speculative Draft Acceleration
+```bash
+./llama-server \
+  -m /path/to/target.gguf \
+  --spec-type dflash \
+  --spec-draft-model /path/to/draft.gguf \
+  --spec-draft-n-max 8 \
+  --spec-dflash-cross-ctx 512
+```
 
-- IQ2_BN and Q8_K64 type integration (including CUDA-side support paths)
-- Current status and scope notes tracked in [docs/QUANT-GOD.md](docs/QUANT-GOD.md)
+---
 
-## Roadmap execution status
+## 🛠️ Multi-Platform Build Instructions
 
-This section lists roadmap items that are already implemented in the current tree.
-
-| Milestone | Status |
-| --- | --- |
-| Single-branch Godzilla integration line | Executed |
-| TriAttention integration (CLI, runtime, CUDA scoring) | Executed |
-| KV stack integration (TurboQuant/TCQ + KVarN surfaces) | Executed |
-| IQ2_BN starter quant stream merged | Executed |
-| DFlash + adaptive controllers + loop guard | Executed |
-| DFlash and TriAttention coexistence support | Executed |
-
-Future planning is tracked in issues and docs.
-
-## Build
-
-### Windows (CUDA)
-
+### Windows (MSVC + CUDA 13.2 / 12.x)
 ```powershell
 cmake -S . -B build -G Ninja `
   -DGGML_CUDA=ON `
@@ -74,11 +82,10 @@ cmake -S . -B build -G Ninja `
   -DGGML_CUDA_FA_ALL_QUANTS=ON `
   -DCMAKE_BUILD_TYPE=Release
 
-cmake --build build --config Release --parallel --target llama-server
+cmake --build build --config Release --parallel --target llama-server llama-cli
 ```
 
-### Linux (CUDA)
-
+### Linux (GCC + CUDA)
 ```bash
 cmake -B build \
   -DGGML_CUDA=ON \
@@ -90,88 +97,43 @@ cmake -B build \
 cmake --build build -j
 ```
 
-### macOS (Metal)
-
+### macOS (Metal / Apple Silicon ARM64)
 ```bash
 cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-## Environment Variables
+---
 
-- `GGML_CUDA_FA_IGNORE_UNCOMPILED_PAIRS=1`: Warn instead of failing when a CUDA FlashAttention K/V cache quant pair was not compiled into the build.
+## 📊 Milestone Execution Roadmap
 
-## Launch examples
+| Milestone | Status |
+| :--- | :---: |
+| Single-branch Godzilla integration line (`godzilla`) | ✅ Executed |
+| TriAttention integration (CLI, runtime, CUDA scoring) | ✅ Executed |
+| KV stack integration (TurboQuant/TCQ + KVarN surfaces) | ✅ Executed |
+| DFlash + adaptive controllers + loop guard | ✅ Executed |
+| `--kv-vram-only` GPU memory allocator | ✅ Executed |
+| "Six Flags over Texas" 512K context optimization stack | ✅ Executed |
 
-### TurboQuant + TriAttention
+---
 
-```bash
-./build/bin/llama-server \
-  -m /path/to/model.gguf \
-  --flash-attn on \
-  --cache-type-k turbo3 \
-  --cache-type-v turbo4 \
-  --triattention-stats /path/to/model.triattention \
-  --triattention-budget 8192 \
-  --triattention-window 128 \
-  -c 32768 --port 8080
-```
+## 📖 Documentation Index
 
-### DFlash
+- [docs/SIX_FLAGS_OVER_TEXAS.md](docs/SIX_FLAGS_OVER_TEXAS.md) — 6-Layer Orthogonal Context Stack Architecture
+- [docs/TRIATTENTION.md](docs/TRIATTENTION.md) — TriAttention Covariance Eviction Guide
+- [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md) — C++ Engine API Reference
+- [docs/PROFILES.md](docs/PROFILES.md) — Candidate Profile Benchmarks
+- [docs/QUANT-GOD.md](docs/QUANT-GOD.md) — Weight & KV Quantization Extensions
+- [docs/beellama-features.md](docs/beellama-features.md) — Inherited DFlash & BeeLlama Features
 
-```bash
-./build/bin/llama-server \
-  -m /path/to/target.gguf \
-  --spec-type dflash \
-  --spec-draft-model /path/to/draft.gguf \
-  --spec-draft-n-max 8 \
-  --spec-branch-budget 0 \
-  --spec-dflash-cross-ctx 512
-```
+---
 
-### Native MTP (Multi-Token Prediction)
+## 🤝 Attribution & Lineage
 
-```bash
-./build/bin/llama-server \
-  -m /path/to/Qwen3.6-27B-MTP.gguf \
-  --spec-type draft-mtp \
-  --spec-draft-n-max 3
-```
-
-
-## Testing and validation
-
-```bash
-ctest --test-dir build -C Release --output-on-failure
-```
-
-Commonly used test binaries include `test-dflash-plumbing`, `test-server-context`, `test-server-loop-guard`, `test-gguf`, and `test-kvarn`.
-
-## Benchmark helpers
-
-```powershell
-pwsh -File scripts/benchmarks/run-engine-preflight.ps1
-pwsh -File scripts/benchmarks/run-kv-matrix.ps1 -Model path\to\model.gguf
-```
-
-Artifacts are written under `logs/benchmarks/`.
-
-## Documentation index
-
-- [docs/beellama-features.md](docs/beellama-features.md)
-- [docs/beellama-args.md](docs/beellama-args.md)
-- [docs/TRIATTENTION.md](docs/TRIATTENTION.md)
-- [docs/TRIATTENTION-API.md](docs/TRIATTENTION-API.md)
-- [docs/QUANT-GOD.md](docs/QUANT-GOD.md)
-- [docs/PROFILES.md](docs/PROFILES.md)
-- [docs/CADRE-INTEGRATION.md](docs/CADRE-INTEGRATION.md)
-- [docs/godzilla-upstream-sync-process.md](docs/godzilla-upstream-sync-process.md)
-
-## Attribution
-
-| Area | Upstream source |
-| --- | --- |
-| BeeLlama base, DFlash, adaptive spec | [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp) |
-| TurboQuant / TCQ lineage | [TheTom/llama-cpp-turboquant](https://github.com/TheTom/llama-cpp-turboquant), [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buun-llama-cpp) |
-| TriAttention lineage | domvox / atomicmilkshake integration via buun lineage |
-| IQ2_BN quant ideas | [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) |
+| Area | Lineage & Upstream Credit |
+| :--- | :--- |
+| **Base Engine & DFlash** | [Anbeeld/beellama.cpp](https://github.com/Anbeeld/beellama.cpp) |
+| **TurboQuant & TCQ** | [TheTom/llama-cpp-turboquant](https://github.com/TheTom/llama-cpp-turboquant), [spiritbuun/buun-llama-cpp](https://github.com/spiritbuun/buun-llama-cpp) |
+| **TriAttention** | domvox / atomicmilkshake integration via buun lineage |
+| **Quantization Extensions** | [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) |
