@@ -130,6 +130,7 @@ llama_kv_cache::llama_kv_cache(
                 ggml_type   type_v,
                      bool   v_trans,
                      bool   offload,
+                     bool   kv_vram_only,
                      bool   unified,
                  uint32_t   kv_size,
                  uint32_t   n_seq_max,
@@ -276,8 +277,9 @@ llama_kv_cache::llama_kv_cache(
 
         ggml_backend_buffer_type_t buft = ggml_backend_cpu_buffer_type();
 
-        if (offload) {
-            auto * dev = model.dev_layer(il);
+        // --kv-vram-only: allocate KV on GPU even when weight layers are on CPU (-ngl 0)
+        if (offload || kv_vram_only) {
+            auto * dev = model.dev_kv_layer(il, kv_vram_only);
             buft = ggml_backend_dev_buffer_type(dev);
 
             dev_name = ggml_backend_dev_name(dev);

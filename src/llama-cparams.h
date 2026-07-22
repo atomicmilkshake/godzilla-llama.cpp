@@ -52,6 +52,7 @@ struct llama_cparams {
 
     bool causal_attn;
     bool offload_kqv;
+    bool kv_vram_only; // force KV cache to VRAM even if weights are on host RAM
     bool flash_attn;
     bool auto_fa;
     bool flash_attn_required;

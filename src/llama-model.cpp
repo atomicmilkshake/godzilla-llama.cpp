@@ -1909,6 +1909,30 @@ ggml_backend_dev_t llama_model::dev_layer(int il) const {
     return pimpl->dev_layer.at(il).dev;
 }
 
+ggml_backend_dev_t llama_model::dev_kv_layer(int il, bool kv_vram_only) const {
+    ggml_backend_dev_t dev = dev_layer(il);
+    if (!kv_vram_only) {
+        return dev;
+    }
+    if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) {
+        return dev;
+    }
+
+    std::vector<ggml_backend_dev_t> gpu_devs;
+    gpu_devs.reserve(devices.size());
+    for (const auto & d : devices) {
+        if (ggml_backend_dev_type(d.dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+            gpu_devs.push_back(d.dev);
+        }
+    }
+    if (!gpu_devs.empty()) {
+        return gpu_devs[(size_t) il % gpu_devs.size()];
+    }
+
+    LLAMA_LOG_WARN("%s: --kv-vram-only specified but no discrete GPU device detected; falling back to CPU\n", __func__);
+    return dev;
+}
+
 ggml_backend_dev_t llama_model::dev_output() const {
     return pimpl->dev_output.dev;
 }
@@ -2034,6 +2058,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                         params.type_v,
                         !cparams.flash_attn,
                         cparams.offload_kqv,
+                        cparams.kv_vram_only,
                         cparams.kv_unified,
                         cparams.n_ctx_seq,
                         cparams.n_seq_max,
@@ -2059,6 +2084,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             GGML_TYPE_F32,
                             GGML_TYPE_F32,
                             cparams.offload_kqv,
+                            cparams.kv_vram_only,
                             std::max((uint32_t) 1, cparams.n_seq_max),
                             cparams.n_seq_max,
                             cparams.n_rs_seq,
@@ -2105,6 +2131,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* n_seq_max         */ cparams.n_seq_max,
                             /* n_rs_seq          */ cparams.n_rs_seq,
                             /* offload           */ cparams.offload_kqv,
+                            /* kv_vram_only      */ cparams.kv_vram_only,
                             /* unified           */ cparams.kv_unified,
                             /* filter_attn       */ std::move(filter_attn),
                             /* filter_recr       */ std::move(filter_recr),
@@ -2125,6 +2152,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* n_seq_max         */ cparams.n_seq_max,
                             /* n_rs_seq          */ cparams.n_rs_seq,
                             /* offload           */ cparams.offload_kqv,
+                            /* kv_vram_only      */ cparams.kv_vram_only,
                             /* unified           */ cparams.kv_unified,
                             /* filter_attn       */ std::move(filter_attn),
                             /* filter_recr       */ std::move(filter_recr));
@@ -2157,6 +2185,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 params.type_v,
                                 !cparams.flash_attn,
                                 cparams.offload_kqv,
+                                cparams.kv_vram_only,
                                 params.swa_full,
                                 cparams.kv_unified,
                                 cparams.n_ctx_seq,
@@ -2178,6 +2207,7 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 params.type_v,
                                 !cparams.flash_attn,
                                 cparams.offload_kqv,
+                                cparams.kv_vram_only,
                                 cparams.kv_unified,
                                 cparams.n_ctx_seq,
                                 cparams.n_seq_max,

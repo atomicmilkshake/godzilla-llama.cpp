@@ -33,6 +33,7 @@ llama_memory_recurrent::llama_memory_recurrent(
                 ggml_type   type_r,
                 ggml_type   type_s,
                      bool   offload,
+                     bool   kv_vram_only,
                  uint32_t   mem_size,
                  uint32_t   n_seq_max,
                  uint32_t   n_rs_seq,
@@ -87,8 +88,8 @@ llama_memory_recurrent::llama_memory_recurrent(
 
         ggml_backend_buffer_type_t buft = ggml_backend_cpu_buffer_type();
 
-        if (offload) {
-            auto * dev = model.dev_layer(i);
+        if (offload || kv_vram_only) {
+            auto * dev = model.dev_kv_layer(i, kv_vram_only);
             buft = ggml_backend_dev_buffer_type(dev);
 
             dev_name = ggml_backend_dev_name(dev);

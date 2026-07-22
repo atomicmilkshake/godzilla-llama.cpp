@@ -89,6 +89,7 @@ public:
             const llama_hparams & hparams,
             llama_kvarn_params params,
             bool offload,
+            bool kv_vram_only,
             bool unified,
             uint32_t kv_size,
             uint32_t n_seq_max,

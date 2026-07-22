@@ -403,6 +403,7 @@ llama_kv_cache_kvarn::llama_kv_cache_kvarn(
         const llama_hparams & hparams,
         llama_kvarn_params params,
         bool offload,
+        bool kv_vram_only,
         bool unified,
         uint32_t kv_size,
         uint32_t n_seq_max,
@@ -426,6 +427,7 @@ llama_kv_cache_kvarn::llama_kv_cache_kvarn(
         hparams,
         GGML_TYPE_F16,
         GGML_TYPE_F16,
+        false,
         false,
         false,
         unified,
@@ -492,8 +494,8 @@ llama_kv_cache_kvarn::llama_kv_cache_kvarn(
             continue;
         }
 
-        auto * dev = offload ? model.dev_layer(il) : nullptr;
-        if (offload && !kvarn_backend_supports_native_ops(dev)) {
+        auto * dev = (offload || kv_vram_only) ? model.dev_kv_layer(il, kv_vram_only) : nullptr;
+        if ((offload || kv_vram_only) && !kvarn_backend_supports_native_ops(dev)) {
             throw std::runtime_error(format(
                 "KVarN cache layer %u is assigned to backend %s, which has no native KVarN operations "
                 "or does not meet KVarN kernel limits; use a backend with native KVarN support, "
@@ -501,7 +503,7 @@ llama_kv_cache_kvarn::llama_kv_cache_kvarn(
                 il, dev ? ggml_backend_dev_name(dev) : "unknown"));
         }
 
-        auto * buft = offload ? ggml_backend_dev_buffer_type(dev) : ggml_backend_cpu_buffer_type();
+        auto * buft = (offload || kv_vram_only) ? ggml_backend_dev_buffer_type(dev) : ggml_backend_cpu_buffer_type();
         auto * ctx = ctx_for_buft(buft);
         if (!ctx) {
             throw std::runtime_error("failed to create KVarN cache tensor context");

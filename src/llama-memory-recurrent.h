@@ -22,6 +22,7 @@ public:
                     ggml_type   type_r,
                     ggml_type   type_s,
                          bool   offload,
+                         bool   kv_vram_only,
                      uint32_t   mem_size,
                      uint32_t   n_seq_max,
                      uint32_t   n_rs_seq,

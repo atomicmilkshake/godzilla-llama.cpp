@@ -719,6 +719,7 @@ struct common_params {
     bool display_prompt    = true;  // print prompt before generation
     bool no_kv_offload     = false; // disable KV offloading
     bool kv_ram            = false; // --kv-ram: keep KV cache in host RAM (see common_params_apply_kv_ram)
+    bool kv_vram_only      = false; // --kv-vram-only: force KV cache to VRAM even if weights are on host RAM
     bool warmup            = true;  // warmup run
     bool check_tensors     = false; // validate tensor data
     bool no_op_offload     = false; // globally disable offload host tensor operations to device

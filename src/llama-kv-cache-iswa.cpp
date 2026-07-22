@@ -19,6 +19,7 @@ llama_kv_cache_iswa::llama_kv_cache_iswa(
                 ggml_type   type_v,
                      bool   v_trans,
                      bool   offload,
+                     bool   kv_vram_only,
                      bool   swa_full,
                      bool   unified,
                  uint32_t   kv_size,
@@ -81,6 +82,7 @@ llama_kv_cache_iswa::llama_kv_cache_iswa(
                     hparams,
                     kvarn,
                     offload,
+                    kv_vram_only,
                     unified,
                     size,
                     n_seq_max,
@@ -93,7 +95,7 @@ llama_kv_cache_iswa::llama_kv_cache_iswa(
 
         return std::make_unique<llama_kv_cache>(
                 model, hparams, type_k, type_v,
-                v_trans, offload, unified, size, n_seq_max, n_pad,
+                v_trans, offload, kv_vram_only, unified, size, n_seq_max, n_pad,
                 n_swa, swa_type, cache_mem_other, layer_filter, reuse, share);
     };
 

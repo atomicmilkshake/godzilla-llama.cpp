@@ -636,6 +636,9 @@ struct llama_model {
     void print_info() const;
 
     ggml_backend_dev_t dev_layer(int il) const;
+    // Resolve the device for KV/recurrent state buffers. When kv_vram_only is set and
+    // the weight layer is on CPU, redirect to a discrete GPU (round-robin by layer).
+    ggml_backend_dev_t dev_kv_layer(int il, bool kv_vram_only) const;
     ggml_backend_dev_t dev_output() const;
 
     ggml_backend_buffer_type_t select_buft(int il) const;

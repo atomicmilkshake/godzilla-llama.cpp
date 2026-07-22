@@ -722,6 +722,13 @@ static bool common_params_parse_ex(int argc, char ** argv, common_params_context
     common_params_triattention_normalize(params);
     common_params_speculative_normalize(params);
 
+    if (params.kv_vram_only && params.no_kv_offload) {
+        throw std::invalid_argument("error: --kv-vram-only cannot be used with --no-kv-offload (-nkvo)");
+    }
+    if (params.kv_vram_only && params.kv_ram) {
+        throw std::invalid_argument("error: --kv-vram-only cannot be used with --kv-ram");
+    }
+
     if (params.prompt_cache_all && (params.interactive || params.interactive_first)) {
         throw std::invalid_argument("error: --prompt-cache-all not supported in interactive mode yet\n");
     }
@@ -2350,6 +2357,14 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             }
         }
     ).set_env("LLAMA_ARG_KV_RAM"));
+    add_opt(common_arg(
+        {"--kv-vram-only"},
+        {},
+        "force the KV cache to VRAM: allocates the KV cache on GPU even if weights are primarily in host RAM (e.g. with -ngl 0)",
+        [](common_params & params, bool value) {
+            params.kv_vram_only = value;
+        }
+    ).set_env("LLAMA_ARG_KV_VRAM_ONLY"));
     add_opt(common_arg(
         {"--repack"},
         {"-nr", "--no-repack"},

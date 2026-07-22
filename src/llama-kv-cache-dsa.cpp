@@ -17,6 +17,7 @@ llama_kv_cache_dsa::llama_kv_cache_dsa(
                 ggml_type   type_v,
                      bool   v_trans,
                      bool   offload,
+                     bool   kv_vram_only,
                      bool   unified,
                  uint32_t   kv_size,
                  uint32_t   n_seq_max,
@@ -31,7 +32,7 @@ llama_kv_cache_dsa::llama_kv_cache_dsa(
 
     kv_mla = std::make_unique<llama_kv_cache>(
             model, model.hparams, type_k, type_v,
-            v_trans, offload, unified, kv_size, n_seq_max, n_pad,
+            v_trans, offload, kv_vram_only, unified, kv_size, n_seq_max, n_pad,
             n_swa, swa_type, nullptr, filter, reuse, nullptr);
 
     // we use llama_kv_cache for caching indexer keys
@@ -48,7 +49,7 @@ llama_kv_cache_dsa::llama_kv_cache_dsa(
 
     kv_lid = std::make_unique<llama_kv_cache>(
             model, hparams_lid, type_k, type_v,
-            v_trans, offload, unified, kv_size, n_seq_max, n_pad,
+            v_trans, offload, kv_vram_only, unified, kv_size, n_seq_max, n_pad,
             n_swa, swa_type, nullptr, filter, reuse, nullptr);
 }
 

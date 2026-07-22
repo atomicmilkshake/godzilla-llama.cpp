@@ -20,6 +20,7 @@ public:
                     ggml_type   type_v,
                          bool   v_trans,
                          bool   offload,
+                         bool   kv_vram_only,
                          bool   unified,
                      uint32_t   kv_size,
                      uint32_t   n_seq_max,
