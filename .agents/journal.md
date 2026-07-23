@@ -420,6 +420,23 @@ elease-bin/llama-server.exe + Bonsai-27B-Q1_0 + Bonsai-27B-dspark-Q4_1, --spec-t
   - Warnings only: fit abort (user `-ngl 99`), eos/eot not in eog set, `n_ctx_seq < n_ctx_train`.
 - **Current State**: COMPLETED
 - **Next Steps**:
-  - Optional Q4_K_M smoke and a short generate request for quality sanity.
+  - Optional Q4_K_M load and a short generate request for quality sanity.
   - Commit when requested (uncommitted Laguna port + journal).
+
+---
+
+### Session: 2026-07-23 [Local: 2026-07-23 ~09:00 CT]
+- **Goal**: Commit/push Laguna port and publish GitHub release `v0.3.6`.
+- **Changes Completed**:
+  - Added `CHANGELOG.md` `## v0.3.6` (Laguna XS.2/M.1 load + convert; MXFP4 CUDA not the prior load failure).
+  - Committed Laguna port + docs: `8d830dad25bab62d4b7c054d6dda27c531328026` (`feat(models): add Laguna architecture support for XS.2/M.1 GGUFs`).
+  - Pushed `godzilla` to `origin`; annotated tag `v0.3.6` pushed.
+  - Created notes release: https://github.com/atomicmilkshake/godzilla-llama.cpp/releases/tag/v0.3.6 (zero binary assets, same pattern as v0.3.5).
+  - Dispatched `release.yml` (Run ID `30013681511`).
+- **Findings & Decisions**:
+  - Actions failed immediately: account locked due to a billing issue (Release metadata job not started). Packaged ZIPs need billing unlock + re-dispatch.
+  - Notes-only `v0.3.6` left as Latest.
+- **Current State**: COMPLETED (code + notes release published; CI packages blocked)
+- **Next Steps**:
+  - Unlock GitHub Actions billing, then re-dispatch `release.yml` with `source_ref=godzilla`, `source_sha=8d830dad25bab62d4b7c054d6dda27c531328026`, `tag_name=v0.3.6`, `publish_release=true`.
 
