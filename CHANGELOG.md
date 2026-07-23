@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.6 (2026-07-23)
+
+- **Laguna architecture**: Added `LLM_ARCH_LAGUNA` load/graph support for Laguna XS.2 / M.1 GGUFs (`src/models/laguna.cpp`), chat template (`models/templates/laguna.jinja`), and HF-to-GGUF conversion registration (`conversion/laguna.py` + gguf-py tensor mapping).
+- Confirmed Laguna-XS-2.1-MXFP4_MOE loads and the server listens successfully; the previous failure was missing Laguna arch support, not MXFP4 CUDA kernels (those were already present).
+
 ## v0.3.3 (2026-07-04)
 
 - **Qwen 3.6 MTP Conversion Fixes**: Normalized `model.mtp_layer`, `model.mtp_layers`, `mtp_layer`, and `mtp_layers` tensor prefixes to `mtp.` during HF-to-GGUF conversion. Registered Qwen 3.6 architectures (`Qwen3_6ForConditionalGeneration`, `Qwen3_6ForCausalLM`, `Qwen3_6MoeForConditionalGeneration`, and `Qwen3_6MoeForCausalLM`) to enable seamless, out-of-the-box conversion.

@@ -374,9 +374,52 @@ elease-bin/llama-server.exe + Bonsai-27B-Q1_0 + Bonsai-27B-dspark-Q4_1, --spec-t
 - **Next Steps**:
   - Runtime binaries ready in `release-bin\`. Baseline & MTP model serving ready.
 
+---
+
+### Session: 2026-07-23 [Local]
+- **Goal**: Explore MXFP4 CUDA support status in godzilla-llama.cpp (rejection paths, kernels, CMake gates, MXFP4_MOE).
+- **Changes Completed**:
+  - Read-only codebase search across `ggml/src/ggml-cuda/*`, quant ftype handling, and CMake CUDA arch flags.
+- **Findings & Decisions**:
+  - MXFP4 CUDA kernels exist (MMQ/MMVQ/convert); not missing.
+  - Native FP4 MMQ path gated by `BLACKWELL_MMA_AVAILABLE` / `blackwell_mma_available` (sm_120+); sm_86 uses generic table+DP4A/MMA path.
+  - No CUDA abort message matching "unsupported MXFP4" / "kernels for MXFP4".
+  - `GGML_CUDA_FA*` does not gate weight MXFP4; `MXFP4_MOE` is quant-time ftype mixing MXFP4 experts + Q8_0.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - If runtime failures occur on sm_86, check offloading/GET_ROWS gaps or build arch list rather than assuming kernels are absent.
+
+---
+
+### Session: 2026-07-23 [Local: 2026-07-23 ~08:33 CT]
+- **Goal**: Find why Laguna-XS-2.1-MXFP4_MOE (or any MXFP4_MOE) would fail startup with “CUDA kernels for MXFP4 quants unsupported”.
+- **Changes Completed**:
+  - Read-only search of error strings, `ggml_cuda_should_use_mmq`, CUDA type_traits, `#ifdef` gates, journal, OPENCL MXFP4 docs, build-king/release-bin notes.
+- **Findings & Decisions**:
+  - Exact phrase “CUDA kernels for MXFP4…” does **not** exist in godzilla (server/llama/ggml). Likely misdiagnosis.
+  - MXFP4 CUDA weight path **is compiled** (`mmq-instance-mxfp4.cu` in build logs; `CMAKE_CUDA_ARCHITECTURES=86`; `GGML_CUDA_FA_ALL_QUANTS=OFF` only affects FA KV pairs, not weight MXFP4).
+  - Real Laguna blocker: **`LLM_ARCH_LAGUNA` absent** in godzilla; load throws `unsupported model architecture` at `src/llama-model.cpp:303`. Laguna lives in `atomic-llama-cpp-turboquant` (`src/models/laguna.cpp`).
+  - Generic MXFP4_MOE (e.g. gpt-oss) should run on current CUDA build; expert tensors → MXFP4, others → Q8_0 (`src/llama-quant.cpp`).
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Port Laguna arch from atomic-llama into godzilla (not an MXFP4 CUDA rebuild).
+  - Validate gpt-oss MXFP4_MOE on `release-bin` if needing proof MXFP4 weights work independently of Laguna.
 
 
 
-
-
+### Session: 2026-07-23 [Local: 2026-07-23 ~08:41 CT]
+- **Goal**: Port Laguna architecture from atomic-llama-cpp-turboquant into godzilla; rebuild; smoke-load Laguna-XS-2.1-MXFP4_MOE.gguf.
+- **Changes Completed**:
+  - Core: `LLM_ARCH_LAGUNA`, `src/models/laguna.cpp`, `models.h`, `llama-model.cpp` factory + NEOX rope, vocab pre-type `LAGUNA=56`.
+  - Chat/convert: `common/chat.cpp` Laguna PEG parser, `models/templates/laguna.jinja`, `conversion/laguna.py` + `__init__`/`base.py`/`convert_hf_to_gguf_update.py`, gguf-py `MODEL_ARCH.LAGUNA` + tensor map `e_score_correction`.
+  - Godzilla adaptation: `hparams.n_layer()` → `hparams.n_layer` (field, not method).
+  - CMake reconfigure (GLOB), `scripts\rebuild_incremental.cmd`, staged `release-bin\`.
+- **Findings & Decisions**:
+  - Smoke **PASS**: no `unknown model architecture: 'laguna'`; `model loaded`; listening on `:18099`.
+  - Chat template example already renders Laguna `<assistant>/<think>` markers.
+  - Warnings only: fit abort (user `-ngl 99`), eos/eot not in eog set, `n_ctx_seq < n_ctx_train`.
+- **Current State**: COMPLETED
+- **Next Steps**:
+  - Optional Q4_K_M smoke and a short generate request for quality sanity.
+  - Commit when requested (uncommitted Laguna port + journal).
 
