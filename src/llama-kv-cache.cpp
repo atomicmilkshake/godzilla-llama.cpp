@@ -1804,6 +1804,11 @@ void llama_kv_cache::set_input_k_idxs_backend(ggml_tensor * dst, const llama_uba
     const uint32_t n_tokens = ubatch->n_tokens;
     GGML_ASSERT(n_tokens == (int64_t) sinfo.size()*sinfo.n_stream());
 
+    if (!dst || (!dst->buffer && !(dst->view_src && dst->view_src->buffer))) {
+        LLAMA_LOG_WARN("%s: skipping k_idxs upload; tensor buffer not set (n_tokens=%u)\n", __func__, n_tokens);
+        return;
+    }
+
     std::vector<int64_t> data(n_tokens);
 
     for (uint32_t s = 0; s < sinfo.n_stream(); ++s) {

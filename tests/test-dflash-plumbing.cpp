@@ -121,6 +121,7 @@ int main(int argc, char ** argv) {
     const std::string qwen35 = read_file(root + "/src/models/qwen35.cpp");
     const std::string qwen35moe = read_file(root + "/src/models/qwen35moe.cpp");
     const std::string gemma4_iswa = read_file(root + "/src/models/gemma4.cpp");
+    const std::string laguna = read_file(root + "/src/models/laguna.cpp");
     const std::string convert_py = read_file(root + "/convert_hf_to_gguf.py");
     const std::string dflash_conversion = read_file(root + "/conversion/dflash.py");
     const std::string graph_h = read_file(root + "/src/llama-graph.h");
@@ -720,6 +721,7 @@ int main(int argc, char ** argv) {
     ok &= expect(qwen35.find("cparams.hidden_gpu_n_seqs > 0") != std::string::npos, "Qwen3.5 must graph-copy l_out into GPU hidden buffers");
     ok &= expect(qwen35moe.find("cparams.hidden_gpu_n_seqs > 0") != std::string::npos, "Qwen3.5-MoE must graph-copy l_out into GPU hidden buffers");
     ok &= expect(gemma4_iswa.find("cparams.hidden_gpu_n_seqs > 0") != std::string::npos, "Gemma4-ISWA must graph-copy l_out into GPU hidden buffers");
+    ok &= expect(laguna.find("cparams.hidden_gpu_n_seqs > 0") != std::string::npos, "Laguna must graph-copy l_out into GPU hidden buffers");
     ok &= expect(cuda_ring.find("dflash_cross_ring_gpu_write_d2d") != std::string::npos, "CUDA ring must expose D2D hidden writes");
     ok &= expect(cuda_reg.find("\"dflash_cross_ring_gpu_write_d2d\"") != std::string::npos, "CUDA backend registry must publish D2D ring writes");
     ok &= expect(llama_h.find("llama_dflash_cross_ring_gpu_write_hidden") != std::string::npos, "public DFlash API must expose hidden GPU ring writes");
@@ -1981,18 +1983,20 @@ int main(int argc, char ** argv) {
         false, true, false),
         "inactive plan must not suppress callback");
 
-    // Planned-span prefill staging must use the planned suffix size, not the
-    // current internal ubatch token count.  A 280-token suffix split into
-    // 256+24 internal ubatches must keep using prefill staging for both parts.
+    // Any active prefill plan uses staging so multi-ubatch suffixes accumulate.
     ok &= expect(llama_dflash_prefill_plan_needs_staging_for_test(280, 256),
         "280-token plan needs staging even when current ubatch is 256");
     ok &= expect(llama_dflash_prefill_plan_needs_staging_for_test(280, 24),
         "280-token plan needs staging even when current ubatch tail is 24");
-    ok &= expect(!llama_dflash_prefill_plan_needs_staging_for_test(4, 4),
-        "4-token verify-sized plan does not need staging");
-    ok &= expect(!llama_dflash_prefill_plan_needs_staging_for_test(
+    ok &= expect(llama_dflash_prefill_plan_needs_staging_for_test(4, 1),
+        "4-token plan needs staging when current ubatch is a 1-token tail");
+    ok &= expect(llama_dflash_prefill_plan_needs_staging_for_test(4, 4),
+        "4-token plan still stages while plan is active");
+    ok &= expect(llama_dflash_prefill_plan_needs_staging_for_test(
         LLAMA_DFLASH_MAX_VERIFY_TOKENS, LLAMA_DFLASH_MAX_VERIFY_TOKENS),
-        "verify-max plan does not need staging");
+        "verify-max plan stages while plan is active");
+    ok &= expect(!llama_dflash_prefill_plan_needs_staging_for_test(0, 4),
+        "inactive/empty plan does not need staging");
 
     // Tree/indexed update must fail closed when only GPU hidden capture is
     // available (no CPU hidden data). GPU ring + no CPU hidden means the

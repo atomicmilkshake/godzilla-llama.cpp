@@ -59,7 +59,7 @@ static inline bool llama_dflash_prefill_plan_needs_staging_for_test(
         int planned_tokens,
         int current_ubatch_tokens) {
     GGML_UNUSED(current_ubatch_tokens);
-    return planned_tokens > LLAMA_DFLASH_MAX_VERIFY_TOKENS;
+    return planned_tokens > 0;
 }
 
 static inline bool llama_dflash_replay_gdn_supported_s_for_test(int64_t s) {

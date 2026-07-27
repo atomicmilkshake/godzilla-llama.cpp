@@ -4714,8 +4714,10 @@ llama_context * common_speculative_create_ctx_dft(const common_params_speculativ
         llama_set_dflash_sample_temp(ctx_dft, params.sample_temp);
     }
 
-    // warmup the draft context
-    {
+    // DFlash graphs require target hidden states; a plain llama_decode warmup is
+    // invalid and can trip ggml buffer asserts on unset inputs. Context creation
+    // already runs sched_reserve(); skip the decode warmup for DFlash drafters.
+    if (llama_model_dflash_block_size(llama_get_model(ctx_dft)) <= 0) {
         const llama_vocab * vocab_dft = llama_model_get_vocab(llama_get_model(ctx_dft));
 
         llama_token bos = llama_vocab_bos(vocab_dft);
@@ -4740,6 +4742,8 @@ llama_context * common_speculative_create_ctx_dft(const common_params_speculativ
         llama_perf_context_reset(ctx_dft);
 
         LOG_INF("%s: draft model warmup complete\n", __func__);
+    } else {
+        LOG_INF("%s: skipping DFlash draft warmup decode (needs target hiddens)\n", __func__);
     }
 
     return ctx_dft;

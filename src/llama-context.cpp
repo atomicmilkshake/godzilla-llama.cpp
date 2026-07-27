@@ -552,9 +552,11 @@ llama_context::llama_context(
 
     cparams.ctx_other = nullptr;
 
-    // TODO: more generic
-    if (model.arch == LLM_ARCH_GEMMA4_ASSISTANT) {
-        if (params.ctx_other == nullptr) {
+    // Gemma4 assistant and DFlash drafters need the target context for cross/shared memory.
+    // create_ctx_dft sets params.ctx_other = ctx_tgt; clearing it here left DFlash with
+    // mem_other=null and broke shared-tensor / cross-context wiring.
+    if (model.arch == LLM_ARCH_GEMMA4_ASSISTANT || llm_arch_is_dflash_drafter(model.arch)) {
+        if (model.arch == LLM_ARCH_GEMMA4_ASSISTANT && params.ctx_other == nullptr) {
             // TODO: change from runtime_error to llama_exception to avoid printing error message
             throw std::runtime_error("Gemma4Assistant requires ctx_other to be set (this is normal during memory fitting)");
         }
@@ -779,6 +781,17 @@ llama_context::llama_context(
         }
     }
 
+    // Quantized V / turbo KV require Flash Attention. Reject before KV alloc /
+    // sched_reserve — otherwise FA-off + q8_0 + --kv-vram-only can AV in ISWA.
+    if (!cparams.flash_attn && !cparams.auto_fa) {
+        if (ggml_is_quantized(params.type_v)) {
+            throw std::runtime_error("quantized V cache was requested, but this requires Flash Attention");
+        }
+        if (llama_cache_type_is_turbo(params.type_k) || llama_cache_type_is_turbo(params.type_v)) {
+            throw std::runtime_error("turbo KV cache was requested, but this requires Flash Attention");
+        }
+    }
+
     // init the memory module
     if (!hparams.vocab_only) {
         llama_memory_params params_mem = {
@@ -787,7 +800,11 @@ llama_context::llama_context(
             /*.swa_full  =*/ params.swa_full,
             /*.ctx_type  =*/ cparams.ctx_type,
             /*.kvarn     =*/ cparams.kvarn,
-            /*.mem_other =*/ llama_get_memory(cparams.ctx_other),
+            // Only Gemma4Assistant shares KV cells with ctx_other. DFlash keeps
+            // ctx_other for get_ctx_other() but must allocate its own KV cache.
+            /*.mem_other =*/ model.arch == LLM_ARCH_GEMMA4_ASSISTANT
+                ? llama_get_memory(cparams.ctx_other)
+                : nullptr,
         };
 
         memory.reset(model.create_memory(params_mem, cparams));
@@ -6885,9 +6902,11 @@ int llama_context::decode(const llama_batch & batch_inp) {
                         // internal ubatch, and that tail must still append into the same
                         // prefill_gpu staging buffer.
                         dflash_prefill_plan_max_tokens = dflash_capture->max_prefill_plan_tokens();
-                        const bool prefill_plan_needs_staging =
-                            dflash_prefill_plan_active &&
-                            dflash_prefill_plan_max_tokens > LLAMA_DFLASH_MAX_VERIFY_TOKENS;
+                        // Always stage while a prefill plan is active so multi-ubatch
+                        // suffixes (including short 3+1 splits) accumulate into
+                        // prefill_gpu. Verify-sized hidden_gpu only holds the last
+                        // ubatch and makes flush_prefill see ntok=1 for a planned N.
+                        const bool prefill_plan_needs_staging = dflash_prefill_plan_active;
 
                         dflash_use_prefill_staging = prefill_plan_needs_staging;
 
@@ -8871,7 +8890,12 @@ llama_context * llama_init_from_model(
     }
 
     if (ggml_is_quantized(params.type_v) && params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_DISABLED) {
-        LLAMA_LOG_ERROR("%s: V cache quantization requires flash_attn\n", __func__);
+        LLAMA_LOG_ERROR("%s: V cache quantization requires flash_attn (refusing q8/turbo V with -fa off)\n", __func__);
+        return nullptr;
+    }
+    if (params.kv_vram_only && params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_DISABLED &&
+            (ggml_is_quantized(params.type_k) || ggml_is_quantized(params.type_v))) {
+        LLAMA_LOG_ERROR("%s: --kv-vram-only with FA disabled requires f16 KV (quantized K/V AVs on ISWA)\n", __func__);
         return nullptr;
     }
 

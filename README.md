@@ -23,8 +23,14 @@ Godzilla introduces the **"Six Flags over Texas"** orthogonal context stack, com
 | **Flag 5** | **YaRN RoPE Scaling** | Runtime rotary position frequency scaling | Positional precision retention at 512K tokens |
 | **Flag 6** | **CUDA UVM / RAM-KV** | Unified virtual memory PCIe 4.0 paging (`--kv-ram`) | **< 36 GB System RAM** physical footprint |
 
-### ⚡ `--kv-vram-only` GPU Memory Allocator (New in v0.3.5)
-Forces the KV cache onto GPU VRAM even when model weights are offloaded to System RAM (`-ngl 0` / `-ngl 1`), enabling ultra-fast token decoding on VRAM-constrained systems.
+### ⚡ Kimi Delta Attention (KDA / FlashKDA) & Gated DeltaNet (New in v0.3.7)
+* **Zero-Stub CUDA Kernel**: Real CUDA kernel (`gated_delta_net_cuda<..., KDA=true>`) implementing $O(1)$ memory state transitions:
+  $$S_t = \bigl(I - \beta_t k_t k_t^T\bigr) \text{Diag}(\alpha_t) S_{t-1} + \beta_t k_t v_t^T$$
+* **Multi-Head Latent Attention (MLA) Hybrid**: Native `LLM_ARCH_KIMI_LINEAR` ("kimi-linear") architecture support combining KDA linear recurrence with periodic MLA layers for million-token context scaling.
+* **Auto-Fused GDN**: Fused CUDA Gated DeltaNet kernel execution with `--no-fused-gdn` isolation fallback flags.
+
+### ⚡ `--kv-vram-only` GPU Memory Allocator (v0.3.5)
+* Forces the KV cache onto GPU VRAM even when model weights are offloaded to System RAM (`-ngl 0` / `-ngl 1`), enabling ultra-fast token decoding on VRAM-constrained systems.
 
 ### 🧠 Native Multi-Token Prediction (MTP) & Qwen 3.6 Conversion
 * Full support for native MTP draft headers (`--spec-type draft-mtp`).

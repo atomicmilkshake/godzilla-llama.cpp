@@ -829,10 +829,12 @@ static const std::map<llm_tensor, llm_tensor_info> LLM_TENSOR_INFOS = {
     {LLM_TENSOR_DFLASH_UPSTREAM_HIDDEN_NORM,{LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL}},
 };
 
-LLM_KV::LLM_KV(llm_arch arch, const char * suffix) : arch(arch), suffix(suffix) {}
+LLM_KV::LLM_KV(llm_arch arch, const char * suffix, const char * arch_prefix)
+    : arch(arch), suffix(suffix), arch_prefix(arch_prefix ? arch_prefix : "") {}
 
 std::string LLM_KV::operator()(llm_kv kv) const {
-    std::string name = ::format(LLM_KV_NAMES.at(kv), LLM_ARCH_NAMES.at(arch));
+    const char * aname = !arch_prefix.empty() ? arch_prefix.c_str() : LLM_ARCH_NAMES.at(arch);
+    std::string name = ::format(LLM_KV_NAMES.at(kv), aname);
 
     if (suffix != nullptr) {
         name += ".";
@@ -877,6 +879,10 @@ const char * llm_arch_name(llm_arch arch) {
 }
 
 llm_arch llm_arch_from_string(const std::string & name) {
+    // Lucebox / community DFlash GGUFs sometimes ship as qwen35-dflash-draft.
+    if (name == "qwen35-dflash-draft") {
+        return LLM_ARCH_DFLASH_DRAFT;
+    }
     for (const auto & kv : LLM_ARCH_NAMES) { // NOLINT
         if (kv.second == name) {
             return kv.first;

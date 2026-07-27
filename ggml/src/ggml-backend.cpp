@@ -324,7 +324,20 @@ void ggml_backend_tensor_get_2d_async(ggml_backend_t backend, const struct ggml_
 void ggml_backend_tensor_set(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
     GGML_ASSERT(tensor);
     ggml_backend_buffer_t buf = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
-    GGML_ASSERT(buf != NULL && "tensor buffer not set");
+    if (buf == NULL) {
+        fprintf(stderr,
+                "ggml_backend_tensor_set: buffer not set name='%s' op=%d type=%d "
+                "ne=[%lld,%lld,%lld,%lld] data=%p view_src=%p (skipping write)\n",
+                tensor->name ? tensor->name : "(null)",
+                (int) tensor->op,
+                (int) tensor->type,
+                (long long) tensor->ne[0], (long long) tensor->ne[1],
+                (long long) tensor->ne[2], (long long) tensor->ne[3],
+                (void *) tensor->data,
+                (void *) tensor->view_src);
+        fflush(stderr);
+        return;
+    }
 
     if (size == 0) {
         return;

@@ -1486,7 +1486,9 @@ bool llama_model_base::load_tensors(llama_model_loader & ml) {
             }
         }
     }
-    ml.done_getting_tensors();
+    // Lucebox / community DFlash GGUFs may carry Laguna-only extras (attn_gate,
+    // aux_hidden_norm) that this loader does not consume yet.
+    ml.done_getting_tensors(/*partial=*/llm_arch_is_dflash_drafter(arch));
 
     GGML_ASSERT(!(output && tok_embd &&
             strcmp(output->name, tok_embd->name) == 0 &&

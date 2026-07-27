@@ -613,10 +613,14 @@ enum llm_tensor_layer {
 };
 
 struct LLM_KV {
-    LLM_KV(llm_arch arch, const char * suffix = nullptr);
+    // arch_prefix: when non-null/non-empty, use as the "%s" metadata prefix instead of
+    // the canonical LLM_ARCH_NAMES entry. Needed for aliases such as Lucebox
+    // "qwen35-dflash-draft" → LLM_ARCH_DFLASH_DRAFT while keys stay file-prefixed.
+    LLM_KV(llm_arch arch, const char * suffix = nullptr, const char * arch_prefix = nullptr);
 
     llm_arch arch;
     const char * suffix;
+    std::string arch_prefix;
 
     std::string operator()(llm_kv kv) const;
 };
