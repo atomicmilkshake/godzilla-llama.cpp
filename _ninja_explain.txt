@@ -1,0 +1,944 @@
+[1/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-f16-q6_1.cu.obj
+[2/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-f16-q6_0.cu.obj
+[3/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-f16-q5_0.cu.obj
+[4/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-bf16-q6_1.cu.obj
+[5/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-bf16-q6_0.cu.obj
+[6/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-bf16-q5_0.cu.obj
+[7/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q8_0.cu.obj
+[8/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q6_1.cu.obj
+[9/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q6_0.cu.obj
+[10/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q5_1.cu.obj
+[11/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q5_0.cu.obj
+[12/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q4_1.cu.obj
+[13/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q8_0-q4_0.cu.obj
+[14/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_1-q6_1.cu.obj
+[15/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_1-q6_0.cu.obj
+[16/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_1-q5_1.cu.obj
+[17/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_1-q5_0.cu.obj
+[18/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_1-q4_1.cu.obj
+[19/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_1-q4_0.cu.obj
+[20/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_0-q6_0.cu.obj
+[21/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_0-q5_1.cu.obj
+[22/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_0-q5_0.cu.obj
+[23/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_0-q4_1.cu.obj
+[24/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q6_0-q4_0.cu.obj
+[25/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_1-q5_1.cu.obj
+[26/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_1-q5_0.cu.obj
+[27/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_1-q4_1.cu.obj
+[28/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_1-q4_0.cu.obj
+[29/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_1-q3_1.cu.obj
+[30/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_1-q3_0.cu.obj
+[31/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_0-q5_0.cu.obj
+[32/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_0-q4_1.cu.obj
+[33/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_0-q4_0.cu.obj
+[34/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_0-q3_1.cu.obj
+[35/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q5_0-q3_0.cu.obj
+[36/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_1-q4_1.cu.obj
+[37/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_1-q4_0.cu.obj
+[38/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_1-q3_1.cu.obj
+[39/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_1-q3_0.cu.obj
+[40/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_1-q2_1.cu.obj
+[41/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_1-q2_0.cu.obj
+[42/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_0-q4_0.cu.obj
+[43/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_0-q3_1.cu.obj
+[44/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_0-q3_0.cu.obj
+[45/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_0-q2_1.cu.obj
+[46/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q4_0-q2_0.cu.obj
+[47/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_1-q3_1.cu.obj
+[48/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_1-q3_0.cu.obj
+[49/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_1-q2_1.cu.obj
+[50/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_1-q2_0.cu.obj
+[51/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_0-q3_0.cu.obj
+[52/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_0-q2_1.cu.obj
+[53/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q3_0-q2_0.cu.obj
+[54/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q2_1-q2_1.cu.obj
+[55/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q2_1-q2_0.cu.obj
+[56/311] Building CUDA object ggml\src\ggml-cuda\CMakeFiles\ggml-cuda.dir\template-instances\fattn-vec-instance-q2_0-q2_0.cu.obj
+[57/311] Building CXX object ggml\src\CMakeFiles\ggml.dir\ggml-backend-reg.cpp.obj
+[58/311] Linking CXX shared library bin\ggml-cpu.dll
+[59/311] Building CXX object tools\ui\CMakeFiles\llama-ui-embed.dir\embed.cpp.obj
+[60/311] Building CXX object src\CMakeFiles\llama.dir\llama.cpp.obj
+[61/311] Building CXX object src\CMakeFiles\llama.dir\llama-adapter.cpp.obj
+[62/311] Building CXX object src\CMakeFiles\llama.dir\llama-arch.cpp.obj
+[63/311] Building CXX object src\CMakeFiles\llama.dir\llama-batch.cpp.obj
+[64/311] Building CXX object src\CMakeFiles\llama.dir\llama-chat.cpp.obj
+[65/311] Building CXX object src\CMakeFiles\llama.dir\llama-context.cpp.obj
+[66/311] Building CXX object src\CMakeFiles\llama.dir\llama-cparams.cpp.obj
+[67/311] Building CXX object src\CMakeFiles\llama.dir\llama-grammar.cpp.obj
+[68/311] Building CXX object src\CMakeFiles\llama.dir\llama-graph.cpp.obj
+[69/311] Building CXX object src\CMakeFiles\llama.dir\llama-hparams.cpp.obj
+[70/311] Building CXX object src\CMakeFiles\llama.dir\llama-impl.cpp.obj
+[71/311] Building CXX object src\CMakeFiles\llama.dir\llama-kvarn.cpp.obj
+[72/311] Building CXX object src\CMakeFiles\llama.dir\llama-kv-cache.cpp.obj
+[73/311] Building CXX object src\CMakeFiles\llama.dir\llama-kv-cache-kvarn.cpp.obj
+[74/311] Building CXX object src\CMakeFiles\llama.dir\llama-kv-cache-iswa.cpp.obj
+[75/311] Building CXX object src\CMakeFiles\llama.dir\llama-kv-cache-dsa.cpp.obj
+[76/311] Building CXX object src\CMakeFiles\llama.dir\llama-triattention.cpp.obj
+[77/311] Building CXX object src\CMakeFiles\llama.dir\llama-memory.cpp.obj
+[78/311] Building CXX object src\CMakeFiles\llama.dir\llama-memory-hybrid.cpp.obj
+[79/311] Building CXX object src\CMakeFiles\llama.dir\llama-memory-hybrid-iswa.cpp.obj
+[80/311] Building CXX object src\CMakeFiles\llama.dir\llama-memory-recurrent.cpp.obj
+[81/311] Building CXX object src\CMakeFiles\llama.dir\llama-mmap.cpp.obj
+[82/311] Building CXX object src\CMakeFiles\llama.dir\llama-model-loader.cpp.obj
+[83/311] Building CXX object src\CMakeFiles\llama.dir\llama-model-saver.cpp.obj
+[84/311] Building CXX object src\CMakeFiles\llama.dir\llama-model.cpp.obj
+[85/311] Building CXX object src\CMakeFiles\llama.dir\llama-quant.cpp.obj
+[86/311] Building CXX object src\CMakeFiles\llama.dir\llama-sampler.cpp.obj
+[87/311] Building CXX object src\CMakeFiles\llama.dir\llama-vocab.cpp.obj
+[88/311] Building CXX object src\CMakeFiles\llama.dir\models\afmoe.cpp.obj
+[89/311] Building CXX object src\CMakeFiles\llama.dir\models\apertus.cpp.obj
+[90/311] Building CXX object src\CMakeFiles\llama.dir\models\arcee.cpp.obj
+[91/311] Building CXX object src\CMakeFiles\llama.dir\models\arctic.cpp.obj
+[92/311] Building CXX object src\CMakeFiles\llama.dir\models\arwkv7.cpp.obj
+[93/311] Building CXX object src\CMakeFiles\llama.dir\models\baichuan.cpp.obj
+[94/311] Building CXX object src\CMakeFiles\llama.dir\models\bailingmoe.cpp.obj
+[95/311] Building CXX object src\CMakeFiles\llama.dir\models\bailingmoe2.cpp.obj
+[96/311] Building CXX object src\CMakeFiles\llama.dir\models\bert.cpp.obj
+[97/311] Building CXX object src\CMakeFiles\llama.dir\models\bitnet.cpp.obj
+[98/311] Building CXX object src\CMakeFiles\llama.dir\models\bloom.cpp.obj
+[99/311] Building CXX object src\CMakeFiles\llama.dir\models\chameleon.cpp.obj
+[100/311] Building CXX object src\CMakeFiles\llama.dir\models\chatglm.cpp.obj
+[101/311] Building CXX object src\CMakeFiles\llama.dir\models\codeshell.cpp.obj
+[102/311] Building CXX object src\CMakeFiles\llama.dir\models\cogvlm.cpp.obj
+[103/311] Building CXX object src\CMakeFiles\llama.dir\models\cohere2.cpp.obj
+[104/311] Building CXX object src\CMakeFiles\llama.dir\models\command-r.cpp.obj
+[105/311] Building CXX object src\CMakeFiles\llama.dir\models\dbrx.cpp.obj
+[106/311] Building CXX object src\CMakeFiles\llama.dir\models\deci.cpp.obj
+[107/311] Building CXX object src\CMakeFiles\llama.dir\models\deepseek.cpp.obj
+[108/311] Building CXX object src\CMakeFiles\llama.dir\models\deepseek2.cpp.obj
+[109/311] Building CXX object src\CMakeFiles\llama.dir\models\deepseek2ocr.cpp.obj
+[110/311] Building CXX object src\CMakeFiles\llama.dir\models\deepseek32.cpp.obj
+[111/311] Building CXX object src\CMakeFiles\llama.dir\models\delta-net-base.cpp.obj
+[112/311] Building CXX object src\CMakeFiles\llama.dir\models\dflash_draft.cpp.obj
+[113/311] Building CXX object src\CMakeFiles\llama.dir\models\dots1.cpp.obj
+[114/311] Building CXX object src\CMakeFiles\llama.dir\models\dream.cpp.obj
+[115/311] Building CXX object src\CMakeFiles\llama.dir\models\ernie4-5-moe.cpp.obj
+[116/311] Building CXX object src\CMakeFiles\llama.dir\models\ernie4-5.cpp.obj
+[117/311] Building CXX object src\CMakeFiles\llama.dir\models\eurobert.cpp.obj
+[118/311] Building CXX object src\CMakeFiles\llama.dir\models\exaone-moe.cpp.obj
+[119/311] Building CXX object src\CMakeFiles\llama.dir\models\exaone.cpp.obj
+[120/311] Building CXX object src\CMakeFiles\llama.dir\models\exaone4.cpp.obj
+[121/311] Building CXX object src\CMakeFiles\llama.dir\models\falcon-h1.cpp.obj
+[122/311] Building CXX object src\CMakeFiles\llama.dir\models\falcon.cpp.obj
+[123/311] Building CXX object src\CMakeFiles\llama.dir\models\gemma-embedding.cpp.obj
+[124/311] Building CXX object src\CMakeFiles\llama.dir\models\gemma.cpp.obj
+[125/311] Building CXX object src\CMakeFiles\llama.dir\models\gemma2.cpp.obj
+[126/311] Building CXX object src\CMakeFiles\llama.dir\models\gemma3.cpp.obj
+[127/311] Building CXX object src\CMakeFiles\llama.dir\models\gemma3n.cpp.obj
+[128/311] Building CXX object src\CMakeFiles\llama.dir\models\gemma4.cpp.obj
+[129/311] Building CXX object src\CMakeFiles\llama.dir\models\glm-dsa.cpp.obj
+[130/311] Building CXX object src\CMakeFiles\llama.dir\models\glm4-moe.cpp.obj
+[131/311] Building CXX object src\CMakeFiles\llama.dir\models\glm4.cpp.obj
+[132/311] Building CXX object src\CMakeFiles\llama.dir\models\gpt2.cpp.obj
+[133/311] Building CXX object src\CMakeFiles\llama.dir\models\gptneox.cpp.obj
+[134/311] Building CXX object src\CMakeFiles\llama.dir\models\granite-hybrid.cpp.obj
+[135/311] Building CXX object src\CMakeFiles\llama.dir\models\granite-moe.cpp.obj
+[136/311] Building CXX object src\CMakeFiles\llama.dir\models\granite.cpp.obj
+[137/311] Building CXX object src\CMakeFiles\llama.dir\models\grok.cpp.obj
+[138/311] Building CXX object src\CMakeFiles\llama.dir\models\grovemoe.cpp.obj
+[139/311] Building CXX object src\CMakeFiles\llama.dir\models\hunyuan-dense.cpp.obj
+[140/311] Building CXX object src\CMakeFiles\llama.dir\models\hunyuan-moe.cpp.obj
+[141/311] Building CXX object src\CMakeFiles\llama.dir\models\hunyuan-vl.cpp.obj
+[142/311] Building CXX object src\CMakeFiles\llama.dir\models\internlm2.cpp.obj
+[143/311] Building CXX object src\CMakeFiles\llama.dir\models\jais.cpp.obj
+[144/311] Building CXX object src\CMakeFiles\llama.dir\models\jais2.cpp.obj
+[145/311] Building CXX object src\CMakeFiles\llama.dir\models\jamba.cpp.obj
+[146/311] Building CXX object src\CMakeFiles\llama.dir\models\jina-bert-v2.cpp.obj
+[147/311] Building CXX object src\CMakeFiles\llama.dir\models\jina-bert-v3.cpp.obj
+[148/311] Building CXX object src\CMakeFiles\llama.dir\models\kimi-linear.cpp.obj
+[149/311] Building CXX object src\CMakeFiles\llama.dir\models\lfm2.cpp.obj
+[150/311] Building CXX object src\CMakeFiles\llama.dir\models\lfm2moe.cpp.obj
+[151/311] Building CXX object src\CMakeFiles\llama.dir\models\llada-moe.cpp.obj
+[152/311] Building CXX object src\CMakeFiles\llama.dir\models\llada.cpp.obj
+[153/311] Building CXX object src\CMakeFiles\llama.dir\models\llama-embed.cpp.obj
+[154/311] Building CXX object src\CMakeFiles\llama.dir\models\llama.cpp.obj
+[155/311] Building CXX object src\CMakeFiles\llama.dir\models\llama4.cpp.obj
+[156/311] Building CXX object src\CMakeFiles\llama.dir\models\maincoder.cpp.obj
+[157/311] Building CXX object src\CMakeFiles\llama.dir\models\mamba-base.cpp.obj
+[158/311] Building CXX object src\CMakeFiles\llama.dir\models\mamba.cpp.obj
+[159/311] Building CXX object src\CMakeFiles\llama.dir\models\mamba2.cpp.obj
+[160/311] Building CXX object src\CMakeFiles\llama.dir\models\mellum.cpp.obj
+[161/311] Building CXX object src\CMakeFiles\llama.dir\models\mimo2.cpp.obj
+[162/311] Building CXX object src\CMakeFiles\llama.dir\models\minicpm.cpp.obj
+[163/311] Building CXX object src\CMakeFiles\llama.dir\models\minicpm3.cpp.obj
+[164/311] Building CXX object src\CMakeFiles\llama.dir\models\minimax-m2.cpp.obj
+[165/311] Building CXX object src\CMakeFiles\llama.dir\models\mistral3.cpp.obj
+[166/311] Building CXX object src\CMakeFiles\llama.dir\models\mistral4.cpp.obj
+[167/311] Building CXX object src\CMakeFiles\llama.dir\models\modern-bert.cpp.obj
+[168/311] Building CXX object src\CMakeFiles\llama.dir\models\mpt.cpp.obj
+[169/311] Building CXX object src\CMakeFiles\llama.dir\models\nemotron-h-moe.cpp.obj
+[170/311] Building CXX object src\CMakeFiles\llama.dir\models\nemotron-h.cpp.obj
+[171/311] Building CXX object src\CMakeFiles\llama.dir\models\nemotron.cpp.obj
+[172/311] Building CXX object src\CMakeFiles\llama.dir\models\neo-bert.cpp.obj
+[173/311] Building CXX object src\CMakeFiles\llama.dir\models\nomic-bert-moe.cpp.obj
+[174/311] Building CXX object src\CMakeFiles\llama.dir\models\nomic-bert.cpp.obj
+[175/311] Building CXX object src\CMakeFiles\llama.dir\models\olmo.cpp.obj
+[176/311] Building CXX object src\CMakeFiles\llama.dir\models\olmo2.cpp.obj
+[177/311] Building CXX object src\CMakeFiles\llama.dir\models\olmoe.cpp.obj
+[178/311] Building CXX object src\CMakeFiles\llama.dir\models\openai-moe.cpp.obj
+[179/311] Building CXX object src\CMakeFiles\llama.dir\models\openelm.cpp.obj
+[180/311] Building CXX object src\CMakeFiles\llama.dir\models\orion.cpp.obj
+[181/311] Building CXX object src\CMakeFiles\llama.dir\models\paddleocr.cpp.obj
+[182/311] Building CXX object src\CMakeFiles\llama.dir\models\pangu-embed.cpp.obj
+[183/311] Building CXX object src\CMakeFiles\llama.dir\models\phi2.cpp.obj
+[184/311] Building CXX object src\CMakeFiles\llama.dir\models\phi3.cpp.obj
+[185/311] Building CXX object src\CMakeFiles\llama.dir\models\phimoe.cpp.obj
+[186/311] Building CXX object src\CMakeFiles\llama.dir\models\plamo.cpp.obj
+[187/311] Building CXX object src\CMakeFiles\llama.dir\models\plamo2.cpp.obj
+[188/311] Building CXX object src\CMakeFiles\llama.dir\models\plamo3.cpp.obj
+[189/311] Building CXX object src\CMakeFiles\llama.dir\models\plm.cpp.obj
+[190/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen.cpp.obj
+[191/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen2.cpp.obj
+[192/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen2moe.cpp.obj
+[193/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen2vl.cpp.obj
+[194/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen3.cpp.obj
+[195/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen35.cpp.obj
+[196/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen35moe.cpp.obj
+[197/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen3moe.cpp.obj
+[198/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen3next.cpp.obj
+[199/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen3vl.cpp.obj
+[200/311] Building CXX object src\CMakeFiles\llama.dir\models\qwen3vlmoe.cpp.obj
+[201/311] Building CXX object src\CMakeFiles\llama.dir\models\refact.cpp.obj
+[202/311] Building CXX object src\CMakeFiles\llama.dir\models\rnd1.cpp.obj
+[203/311] Building CXX object src\CMakeFiles\llama.dir\models\rwkv6-base.cpp.obj
+[204/311] Building CXX object src\CMakeFiles\llama.dir\models\rwkv6.cpp.obj
+[205/311] Building CXX object src\CMakeFiles\llama.dir\models\rwkv6qwen2.cpp.obj
+[206/311] Building CXX object src\CMakeFiles\llama.dir\models\rwkv7-base.cpp.obj
+[207/311] Building CXX object src\CMakeFiles\llama.dir\models\rwkv7.cpp.obj
+[208/311] Building CXX object src\CMakeFiles\llama.dir\models\seed-oss.cpp.obj
+[209/311] Building CXX object src\CMakeFiles\llama.dir\models\smallthinker.cpp.obj
+[210/311] Building CXX object src\CMakeFiles\llama.dir\models\smollm3.cpp.obj
+[211/311] Building CXX object src\CMakeFiles\llama.dir\models\stablelm.cpp.obj
+[212/311] Building CXX object src\CMakeFiles\llama.dir\models\starcoder.cpp.obj
+[213/311] Building CXX object src\CMakeFiles\llama.dir\models\starcoder2.cpp.obj
+[214/311] Building CXX object src\CMakeFiles\llama.dir\models\step35.cpp.obj
+[215/311] Building CXX object src\CMakeFiles\llama.dir\models\t5.cpp.obj
+[216/311] Building CXX object src\CMakeFiles\llama.dir\models\t5encoder.cpp.obj
+[217/311] Building CXX object src\CMakeFiles\llama.dir\models\talkie.cpp.obj
+[218/311] Building CXX object src\CMakeFiles\llama.dir\models\wavtokenizer-dec.cpp.obj
+[219/311] Building CXX object src\CMakeFiles\llama.dir\models\xverse.cpp.obj
+[220/311] Building CXX object common\CMakeFiles\llama-common-base.dir\build-info.cpp.obj
+[221/311] Building CXX object vendor\cpp-httplib\CMakeFiles\cpp-httplib.dir\httplib.cpp.obj
+[222/311] Building CXX object common\CMakeFiles\llama-common.dir\arg.cpp.obj
+[223/311] Building CXX object common\CMakeFiles\llama-common.dir\chat-auto-parser-generator.cpp.obj
+[224/311] Building CXX object common\CMakeFiles\llama-common.dir\chat-auto-parser-helpers.cpp.obj
+[225/311] Building CXX object common\CMakeFiles\llama-common.dir\chat-diff-analyzer.cpp.obj
+[226/311] Building CXX object common\CMakeFiles\llama-common.dir\chat-peg-parser.cpp.obj
+[227/311] Building CXX object common\CMakeFiles\llama-common.dir\chat.cpp.obj
+[228/311] Building CXX object common\CMakeFiles\llama-common.dir\common.cpp.obj
+[229/311] Building CXX object common\CMakeFiles\llama-common.dir\console.cpp.obj
+[230/311] Building CXX object common\CMakeFiles\llama-common.dir\debug.cpp.obj
+[231/311] Building CXX object common\CMakeFiles\llama-common.dir\download.cpp.obj
+[232/311] Building CXX object common\CMakeFiles\llama-common.dir\fit.cpp.obj
+[233/311] Building CXX object common\CMakeFiles\llama-common.dir\hf-cache.cpp.obj
+[234/311] Building CXX object common\CMakeFiles\llama-common.dir\json-partial.cpp.obj
+[235/311] Building CXX object common\CMakeFiles\llama-common.dir\json-schema-to-grammar.cpp.obj
+[236/311] Building CXX object common\CMakeFiles\llama-common.dir\llguidance.cpp.obj
+[237/311] Building CXX object common\CMakeFiles\llama-common.dir\log.cpp.obj
+[238/311] Building CXX object common\CMakeFiles\llama-common.dir\ngram-cache.cpp.obj
+[239/311] Building CXX object common\CMakeFiles\llama-common.dir\ngram-map.cpp.obj
+[240/311] Building CXX object common\CMakeFiles\llama-common.dir\peg-parser.cpp.obj
+[241/311] Building CXX object common\CMakeFiles\llama-common.dir\preset.cpp.obj
+[242/311] Building CXX object common\CMakeFiles\llama-common.dir\regex-partial.cpp.obj
+[243/311] Building CXX object common\CMakeFiles\llama-common.dir\reasoning-budget.cpp.obj
+[244/311] Building CXX object common\CMakeFiles\llama-common.dir\sampling.cpp.obj
+[245/311] Building CXX object common\CMakeFiles\llama-common.dir\speculative.cpp.obj
+[246/311] Building CXX object common\CMakeFiles\llama-common.dir\jinja\lexer.cpp.obj
+[247/311] Building CXX object common\CMakeFiles\llama-common.dir\jinja\parser.cpp.obj
+[248/311] Building CXX object common\CMakeFiles\llama-common.dir\jinja\runtime.cpp.obj
+[249/311] Building CXX object common\CMakeFiles\llama-common.dir\jinja\value.cpp.obj
+[250/311] Building CXX object common\CMakeFiles\llama-common.dir\jinja\caps.cpp.obj
+[251/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\mtmd.cpp.obj
+[252/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\mtmd-audio.cpp.obj
+[253/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\mtmd-image.cpp.obj
+[254/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\mtmd-helper.cpp.obj
+[255/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\clip.cpp.obj
+[256/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\cogvlm.cpp.obj
+[257/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\conformer.cpp.obj
+[258/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\dotsocr.cpp.obj
+[259/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\exaone4_5.cpp.obj
+[260/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\gemma4a.cpp.obj
+[261/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\gemma4v.cpp.obj
+[262/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\gemma4ua.cpp.obj
+[263/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\gemma4uv.cpp.obj
+[264/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\glm4v.cpp.obj
+[265/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\granite-speech.cpp.obj
+[266/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\hunyuanvl.cpp.obj
+[267/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\internvl.cpp.obj
+[268/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\kimivl.cpp.obj
+[269/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\kimik25.cpp.obj
+[270/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\nemotron-v2-vl.cpp.obj
+[271/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\llama4.cpp.obj
+[272/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\llava.cpp.obj
+[273/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\minicpmv.cpp.obj
+[274/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\paddleocr.cpp.obj
+[275/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\pixtral.cpp.obj
+[276/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\qwen2vl.cpp.obj
+[277/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\qwen3vl.cpp.obj
+[278/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\mimovl.cpp.obj
+[279/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\qwen3a.cpp.obj
+[280/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\step3vl.cpp.obj
+[281/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\siglip.cpp.obj
+[282/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\whisper-enc.cpp.obj
+[283/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\deepseekocr.cpp.obj
+[284/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\deepseekocr2.cpp.obj
+[285/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\mobilenetv5.cpp.obj
+[286/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\youtuvl.cpp.obj
+[287/311] Building CXX object tools\mtmd\CMakeFiles\mtmd.dir\models\yasa2.cpp.obj
+[288/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-chat.cpp.obj
+[289/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-task.cpp.obj
+[290/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-queue.cpp.obj
+[291/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-common.cpp.obj
+[292/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-context.cpp.obj
+[293/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-loop-guard.cpp.obj
+[294/311] Building CXX object tools\server\CMakeFiles\server-context.dir\server-tools.cpp.obj
+[295/311] Linking CUDA shared library bin\ggml-cuda.dll
+[296/311] Linking CXX executable tools\ui\llama-ui-embed.exe
+[297/311] Linking CXX static library common\llama-common-base.lib
+[298/311] Linking CXX static library vendor\cpp-httplib\cpp-httplib.lib
+[299/311] Linking CXX shared library bin\ggml.dll
+[300/311] Provisioning UI assets
+[301/311] Linking CXX shared library bin\llama.dll
+[302/311] Building CXX object tools\ui\CMakeFiles\llama-ui.dir\ui.cpp.obj
+[303/311] Building CXX object tools\server\CMakeFiles\llama-server-impl.dir\server.cpp.obj
+[304/311] Building CXX object tools\server\CMakeFiles\llama-server-impl.dir\server-http.cpp.obj
+[305/311] Building CXX object tools\server\CMakeFiles\llama-server-impl.dir\server-models.cpp.obj
+[306/311] Linking CXX shared library bin\llama-common.dll
+[307/311] Linking CXX shared library bin\mtmd.dll
+[308/311] Linking CXX static library tools\ui\llama-ui.lib
+[309/311] Linking CXX static library tools\server\server-context.lib
+[310/311] Linking CXX shared library bin\llama-server-impl.dll
+[311/311] Linking CXX executable bin\llama-server.exe
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-q6_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600319268404 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-q6_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600430292876 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600111157333 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-q6_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600192242281 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-q6_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600360985365 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600253591581 vs 8059291007830370)
+ninja explain: stored deps info out of date for 'ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q8_0.cu.obj' (8057600121018209 vs 8060329208182057)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q6_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600627046202 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q6_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600893256628 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q5_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600065233040 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600554281220 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q4_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600157801774 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600453410514 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q6_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601075540570 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q6_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601361478861 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q5_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600778686548 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601169107693 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q4_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057600754175419 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601149655258 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q6_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602053838259 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q5_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601337556823 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601644425087 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q4_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601177446268 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601481548600 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q5_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601286137219 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601624969465 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q4_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601303790429 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601501950763 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q3_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601566705896 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q3_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601894159353 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q5_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602219263222 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q4_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601744827605 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602072340708 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q3_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602207703500 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q3_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602677186231 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q4_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057601964479296 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602129754137 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q3_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602218914224 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q3_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602578699889 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q2_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602102805728 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q2_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602307297832 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q4_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602510119839 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q3_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602450637972 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q3_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602861766947 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q2_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602422534883 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q2_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602678938710 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q3_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602805719016 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q3_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603332028679 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q2_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057602878686989 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q2_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603176783049 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_0-q3_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603557532093 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_0-q2_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603130869429 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_0-q2_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603373501911 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q2_1-q2_1.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603002904043 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q2_1-q2_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603254849367 vs 8059291007830370)
+ninja explain: output ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q2_0-q2_0.cu.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-cuda/vecdotq.cuh (8057603299318812 vs 8059291007830370)
+ninja explain: output ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/ggml/src/ggml-backend-reg.cpp (8057602363565977 vs 8059291006997755)
+ninja explain: recorded mtime of bin/ggml-cpu.dll older than most recent input ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.obj (8057602367516399 vs 8060319620665706)
+ninja explain: output tools/ui/CMakeFiles/llama-ui-embed.dir/embed.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/tools/ui/embed.cpp (8057602379220407 vs 8059291011341949)
+ninja explain: output src/CMakeFiles/llama.dir/llama.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/llama.cpp (8057602401262184 vs 8059291009655466)
+ninja explain: output src/CMakeFiles/llama.dir/llama-adapter.cpp.obj older than most recent input ../src/llama-vocab.h (8057602438856708 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-arch.cpp.obj older than most recent input ../src/llama-impl.h (8057602457820653 vs 8059291009454682)
+ninja explain: output src/CMakeFiles/llama.dir/llama-batch.cpp.obj older than most recent input ../src/llama-vocab.h (8057602472511397 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-chat.cpp.obj older than most recent input ../include/llama.h (8057602480523105 vs 8059291009295919)
+ninja explain: output src/CMakeFiles/llama.dir/llama-context.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/llama-context.cpp (8057602521363668 vs 8060329512102993)
+ninja explain: output src/CMakeFiles/llama.dir/llama-cparams.cpp.obj older than most recent input ../src/llama-cparams.h (8057602478186945 vs 8059291009407083)
+ninja explain: output src/CMakeFiles/llama.dir/llama-grammar.cpp.obj older than most recent input ../src/llama-vocab.h (8057602524793631 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-graph.cpp.obj older than most recent input ../src/llama-vocab.h (8057602542895824 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-hparams.cpp.obj older than most recent input ../src/llama-hparams.h (8057602516641545 vs 8059291009449394)
+ninja explain: output src/CMakeFiles/llama.dir/llama-impl.cpp.obj older than most recent input ../src/llama-impl.h (8057602528474492 vs 8059291009454682)
+ninja explain: output src/CMakeFiles/llama.dir/llama-kvarn.cpp.obj older than most recent input ../include/llama.h (8057602533135590 vs 8059291009295919)
+ninja explain: output src/CMakeFiles/llama.dir/llama-kv-cache.cpp.obj older than most recent input ../src/llama-vocab.h (8057602594358014 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-kv-cache-kvarn.cpp.obj older than most recent input ../src/llama-vocab.h (8057602570863612 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-kv-cache-iswa.cpp.obj older than most recent input ../src/llama-vocab.h (8057602555676170 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-kv-cache-dsa.cpp.obj older than most recent input ../src/llama-vocab.h (8057602567391887 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-triattention.cpp.obj older than most recent input ../src/llama-memory.h (8057602612354568 vs 8059291009564540)
+ninja explain: output src/CMakeFiles/llama.dir/llama-memory.cpp.obj older than most recent input ../src/llama-memory.h (8057602589937641 vs 8059291009564540)
+ninja explain: output src/CMakeFiles/llama.dir/llama-memory-hybrid.cpp.obj older than most recent input ../src/llama-vocab.h (8057602611860076 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-memory-hybrid-iswa.cpp.obj older than most recent input ../src/llama-vocab.h (8057602613288667 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-memory-recurrent.cpp.obj older than most recent input ../src/llama-vocab.h (8057602617682661 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-mmap.cpp.obj older than most recent input ../src/llama-impl.h (8057602606863182 vs 8059291009454682)
+ninja explain: output src/CMakeFiles/llama.dir/llama-model-loader.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/llama-model-loader.cpp (8057602669032245 vs 8059291009574523)
+ninja explain: output src/CMakeFiles/llama.dir/llama-model-saver.cpp.obj older than most recent input ../src/llama-vocab.h (8057602638743371 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-model.cpp.obj older than most recent input ../src/models/models.h (8057602709989746 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/llama-quant.cpp.obj older than most recent input ../src/llama-vocab.h (8057602693481681 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-sampler.cpp.obj older than most recent input ../src/llama-vocab.h (8057602667333358 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/llama-vocab.cpp.obj older than most recent input ../src/llama-vocab.h (8057602696822287 vs 8059291009650242)
+ninja explain: output src/CMakeFiles/llama.dir/models/afmoe.cpp.obj older than most recent input ../src/models/models.h (8057602692871791 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/apertus.cpp.obj older than most recent input ../src/models/models.h (8057602706577514 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/arcee.cpp.obj older than most recent input ../src/models/models.h (8057602706585932 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/arctic.cpp.obj older than most recent input ../src/models/models.h (8057602708358767 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/arwkv7.cpp.obj older than most recent input ../src/models/models.h (8057602715095085 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/baichuan.cpp.obj older than most recent input ../src/models/models.h (8057602719804692 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/bailingmoe.cpp.obj older than most recent input ../src/models/models.h (8057602730175880 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/bailingmoe2.cpp.obj older than most recent input ../src/models/models.h (8057602733297873 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/bert.cpp.obj older than most recent input ../src/models/models.h (8057602726126831 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/bitnet.cpp.obj older than most recent input ../src/models/models.h (8057602730857069 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/bloom.cpp.obj older than most recent input ../src/models/models.h (8057602733537237 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/chameleon.cpp.obj older than most recent input ../src/models/models.h (8057602739844531 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/chatglm.cpp.obj older than most recent input ../src/models/models.h (8057602744485441 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/codeshell.cpp.obj older than most recent input ../src/models/models.h (8057602744307852 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/cogvlm.cpp.obj older than most recent input ../src/models/models.h (8057602745600570 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/cohere2.cpp.obj older than most recent input ../src/models/models.h (8057602749699011 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/command-r.cpp.obj older than most recent input ../src/models/models.h (8057602749704060 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/dbrx.cpp.obj older than most recent input ../src/models/models.h (8057602760543462 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/deci.cpp.obj older than most recent input ../src/models/models.h (8057602759876064 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/deepseek.cpp.obj older than most recent input ../src/models/models.h (8057602759477523 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/deepseek2.cpp.obj older than most recent input ../src/models/models.h (8057602759796029 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/deepseek2ocr.cpp.obj older than most recent input ../src/models/models.h (8057602771474928 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/deepseek32.cpp.obj older than most recent input ../src/models/models.h (8057602767298207 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/delta-net-base.cpp.obj older than most recent input ../src/models/models.h (8057602773989950 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/dflash_draft.cpp.obj older than most recent input ../src/models/models.h (8057602789455742 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/dots1.cpp.obj older than most recent input ../src/models/models.h (8057602776494917 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/dream.cpp.obj older than most recent input ../src/models/models.h (8057602784455933 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/ernie4-5-moe.cpp.obj older than most recent input ../src/models/models.h (8057602780914414 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/ernie4-5.cpp.obj older than most recent input ../src/models/models.h (8057602797910383 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/eurobert.cpp.obj older than most recent input ../src/models/models.h (8057602788055509 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/exaone-moe.cpp.obj older than most recent input ../src/models/models.h (8057602791242432 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/exaone.cpp.obj older than most recent input ../src/models/models.h (8057602795864903 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/exaone4.cpp.obj older than most recent input ../src/models/models.h (8057602805326830 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/falcon-h1.cpp.obj older than most recent input ../src/models/models.h (8057602813870816 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/falcon.cpp.obj older than most recent input ../src/models/models.h (8057602805590793 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gemma-embedding.cpp.obj older than most recent input ../src/models/models.h (8057602808804317 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gemma.cpp.obj older than most recent input ../src/models/models.h (8057602816338367 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gemma2.cpp.obj older than most recent input ../src/models/models.h (8057602811904726 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gemma3.cpp.obj older than most recent input ../src/models/models.h (8057602822045077 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gemma3n.cpp.obj older than most recent input ../src/models/models.h (8057602823505919 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gemma4.cpp.obj older than most recent input ../src/models/models.h (8057602832451102 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/glm-dsa.cpp.obj older than most recent input ../src/models/models.h (8057602829323616 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/glm4-moe.cpp.obj older than most recent input ../src/models/models.h (8057602826766914 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/glm4.cpp.obj older than most recent input ../src/models/models.h (8057602831910023 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gpt2.cpp.obj older than most recent input ../src/models/models.h (8057602829162031 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/gptneox.cpp.obj older than most recent input ../src/models/models.h (8057602835030616 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/granite-hybrid.cpp.obj older than most recent input ../src/models/models.h (8057602836941060 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/granite-moe.cpp.obj older than most recent input ../src/models/models.h (8057602841246445 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/granite.cpp.obj older than most recent input ../src/models/models.h (8057602859955071 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/grok.cpp.obj older than most recent input ../src/models/models.h (8057602844368559 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/grovemoe.cpp.obj older than most recent input ../src/models/models.h (8057602846169420 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/hunyuan-dense.cpp.obj older than most recent input ../src/models/models.h (8057602845892239 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/hunyuan-moe.cpp.obj older than most recent input ../src/models/models.h (8057602855317187 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/hunyuan-vl.cpp.obj older than most recent input ../src/models/models.h (8057602850762602 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/internlm2.cpp.obj older than most recent input ../src/models/models.h (8057602879370833 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/jais.cpp.obj older than most recent input ../src/models/models.h (8057602857770695 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/jais2.cpp.obj older than most recent input ../src/models/models.h (8057602859397575 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/jamba.cpp.obj older than most recent input ../src/models/models.h (8057602869220736 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/jina-bert-v2.cpp.obj older than most recent input ../src/models/models.h (8057602866434944 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/jina-bert-v3.cpp.obj older than most recent input ../src/models/models.h (8057602876136772 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/kimi-linear.cpp.obj older than most recent input ../src/models/models.h (8057602881274408 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/lfm2.cpp.obj older than most recent input ../src/models/models.h (8057602879350754 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/lfm2moe.cpp.obj older than most recent input ../src/models/models.h (8057602878605269 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/llada-moe.cpp.obj older than most recent input ../src/models/models.h (8057602879455613 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/llada.cpp.obj older than most recent input ../src/models/models.h (8057602888825721 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/llama-embed.cpp.obj older than most recent input ../src/models/models.h (8057602890193449 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/llama.cpp.obj older than most recent input ../src/models/models.h (8057602890948244 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/llama4.cpp.obj older than most recent input ../src/models/models.h (8057602897791528 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/maincoder.cpp.obj older than most recent input ../src/models/models.h (8057602895878566 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mamba-base.cpp.obj older than most recent input ../src/models/models.h (8057602900819798 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mamba.cpp.obj older than most recent input ../src/models/models.h (8057602895853500 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mamba2.cpp.obj older than most recent input ../src/models/models.h (8057602896549891 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mellum.cpp.obj older than most recent input ../src/models/models.h (8057602905622379 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mimo2.cpp.obj older than most recent input ../src/models/models.h (8057602908204104 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/minicpm.cpp.obj older than most recent input ../src/models/models.h (8057602910038935 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/minicpm3.cpp.obj older than most recent input ../src/models/models.h (8057602904844919 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/minimax-m2.cpp.obj older than most recent input ../src/models/models.h (8057602910347418 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mistral3.cpp.obj older than most recent input ../src/models/models.h (8057602912647549 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/mistral4.cpp.obj older than most recent input ../src/models/models.h (8057602913354356 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/modern-bert.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/modern-bert.cpp (8057602915277746 vs 8059291010146964)
+ninja explain: output src/CMakeFiles/llama.dir/models/mpt.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/mpt.cpp (8057602924438273 vs 8059291010152335)
+ninja explain: output src/CMakeFiles/llama.dir/models/nemotron-h-moe.cpp.obj older than most recent input ../src/models/models.h (8057602917846037 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/nemotron-h.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/nemotron-h.cpp (8057602928115273 vs 8059291010159210)
+ninja explain: output src/CMakeFiles/llama.dir/models/nemotron.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/nemotron.cpp (8057602930271039 vs 8059291010164454)
+ninja explain: output src/CMakeFiles/llama.dir/models/neo-bert.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/neo-bert.cpp (8057602933414530 vs 8059291010174999)
+ninja explain: output src/CMakeFiles/llama.dir/models/nomic-bert-moe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/nomic-bert-moe.cpp (8057602939012803 vs 8059291010180256)
+ninja explain: output src/CMakeFiles/llama.dir/models/nomic-bert.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/nomic-bert.cpp (8057602926527554 vs 8059291010185514)
+ninja explain: output src/CMakeFiles/llama.dir/models/olmo.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/olmo.cpp (8057602926753399 vs 8059291010190710)
+ninja explain: output src/CMakeFiles/llama.dir/models/olmo2.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/olmo2.cpp (8057602931642748 vs 8059291010201313)
+ninja explain: output src/CMakeFiles/llama.dir/models/olmoe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/olmoe.cpp (8057602932114921 vs 8059291010208044)
+ninja explain: output src/CMakeFiles/llama.dir/models/openai-moe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/openai-moe.cpp (8057602952610685 vs 8059291010213298)
+ninja explain: output src/CMakeFiles/llama.dir/models/openelm.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/openelm.cpp (8057602947464223 vs 8059291010218525)
+ninja explain: output src/CMakeFiles/llama.dir/models/orion.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/orion.cpp (8057602953363053 vs 8059291010229153)
+ninja explain: output src/CMakeFiles/llama.dir/models/paddleocr.cpp.obj older than most recent input ../src/models/models.h (8057602942701312 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/pangu-embed.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/pangu-embed.cpp (8057602944168611 vs 8059291010234489)
+ninja explain: output src/CMakeFiles/llama.dir/models/phi2.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/phi2.cpp (8057602944176170 vs 8059291010239835)
+ninja explain: output src/CMakeFiles/llama.dir/models/phi3.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/phi3.cpp (8057602955577519 vs 8059291010245126)
+ninja explain: output src/CMakeFiles/llama.dir/models/phimoe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/phimoe.cpp (8057602946949567 vs 8059291010250442)
+ninja explain: output src/CMakeFiles/llama.dir/models/plamo.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/plamo.cpp (8057602952290853 vs 8059291010255816)
+ninja explain: output src/CMakeFiles/llama.dir/models/plamo2.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/plamo2.cpp (8057602955899673 vs 8059291010266594)
+ninja explain: output src/CMakeFiles/llama.dir/models/plamo3.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/plamo3.cpp (8057602964612749 vs 8059291010271933)
+ninja explain: output src/CMakeFiles/llama.dir/models/plm.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/plm.cpp (8057602965388359 vs 8059291010277176)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen.cpp (8057602966052012 vs 8059291010282367)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen2.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen2.cpp (8057602981385897 vs 8059291010287710)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen2moe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen2moe.cpp (8057602964383638 vs 8059291010293010)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen2vl.cpp.obj older than most recent input ../src/models/models.h (8057602969992607 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen3.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen3.cpp (8057602970427656 vs 8059291010298267)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen35.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen35.cpp (8057602983937483 vs 8060329512092991)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen35moe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen35moe.cpp (8057602987307398 vs 8060329512092991)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen3moe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen3moe.cpp (8057602981556984 vs 8059291010324703)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen3next.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen3next.cpp (8057602987380784 vs 8059291010330006)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen3vl.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen3vl.cpp (8057602979091696 vs 8059291010335358)
+ninja explain: output src/CMakeFiles/llama.dir/models/qwen3vlmoe.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/qwen3vlmoe.cpp (8057602978930828 vs 8059291010340681)
+ninja explain: output src/CMakeFiles/llama.dir/models/refact.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/refact.cpp (8057602979277733 vs 8059291010345853)
+ninja explain: output src/CMakeFiles/llama.dir/models/rnd1.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/rnd1.cpp (8057602983988853 vs 8059291010357577)
+ninja explain: output src/CMakeFiles/llama.dir/models/rwkv6-base.cpp.obj older than most recent input ../src/models/models.h (8057603008212176 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/rwkv6.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/rwkv6.cpp (8057602992507051 vs 8059291010357577)
+ninja explain: output src/CMakeFiles/llama.dir/models/rwkv6qwen2.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/rwkv6qwen2.cpp (8057603006828294 vs 8059291010357577)
+ninja explain: output src/CMakeFiles/llama.dir/models/rwkv7-base.cpp.obj older than most recent input ../src/models/models.h (8057603008940237 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/rwkv7.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/rwkv7.cpp (8057602995121448 vs 8059291010372757)
+ninja explain: output src/CMakeFiles/llama.dir/models/seed-oss.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/seed-oss.cpp (8057602994691742 vs 8059291010382817)
+ninja explain: output src/CMakeFiles/llama.dir/models/smallthinker.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/smallthinker.cpp (8057602999206876 vs 8059291010382817)
+ninja explain: output src/CMakeFiles/llama.dir/models/smollm3.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/smollm3.cpp (8057602997179588 vs 8059291010392818)
+ninja explain: output src/CMakeFiles/llama.dir/models/stablelm.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/stablelm.cpp (8057603008970689 vs 8059291010392818)
+ninja explain: output src/CMakeFiles/llama.dir/models/starcoder.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/starcoder.cpp (8057603007280390 vs 8059291010402843)
+ninja explain: output src/CMakeFiles/llama.dir/models/starcoder2.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/starcoder2.cpp (8057603024673617 vs 8059291010402843)
+ninja explain: output src/CMakeFiles/llama.dir/models/step35.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/step35.cpp (8057603009237303 vs 8059291010402843)
+ninja explain: output src/CMakeFiles/llama.dir/models/t5.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/t5.cpp (8057603011573888 vs 8059291010417886)
+ninja explain: output src/CMakeFiles/llama.dir/models/t5encoder.cpp.obj older than most recent input ../src/models/models.h (8057603016308846 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/talkie.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/talkie.cpp (8057603023275610 vs 8059291010417886)
+ninja explain: output src/CMakeFiles/llama.dir/models/wavtokenizer-dec.cpp.obj older than most recent input ../src/models/models.h (8057603018572611 vs 8059291010136305)
+ninja explain: output src/CMakeFiles/llama.dir/models/xverse.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/src/models/xverse.cpp (8057603024196590 vs 8059291010429494)
+ninja explain: output common/CMakeFiles/llama-common-base.dir/build-info.cpp.obj older than most recent input ../ggml/include/ggml.h (8057603015835491 vs 8059291006966396)
+ninja explain: output vendor/cpp-httplib/CMakeFiles/cpp-httplib.dir/httplib.cpp.obj older than most recent input ../vendor/cpp-httplib/httplib.h (8057603248888022 vs 8059291012655627)
+ninja explain: output common/CMakeFiles/llama-common.dir/arg.cpp.obj older than most recent input ../include/llama.h (8057603350615326 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/chat-auto-parser-generator.cpp.obj older than most recent input ../include/llama.h (8057603098498021 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/chat-auto-parser-helpers.cpp.obj older than most recent input ../include/llama.h (8057603081479313 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/chat-diff-analyzer.cpp.obj older than most recent input ../include/llama.h (8057603138059260 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/chat-peg-parser.cpp.obj older than most recent input ../include/llama.h (8057603148747611 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/chat.cpp.obj older than most recent input ../include/llama.h (8057603203638436 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/common.cpp.obj older than most recent input ../src/llama-ext.h (8057603069577056 vs 8059291009417710)
+ninja explain: output common/CMakeFiles/llama-common.dir/console.cpp.obj older than most recent input ../include/llama.h (8057603065291809 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/debug.cpp.obj older than most recent input ../include/llama.h (8057603062790329 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/download.cpp.obj older than most recent input ../vendor/cpp-httplib/httplib.h (8057603226827807 vs 8059291012655627)
+ninja explain: output common/CMakeFiles/llama-common.dir/fit.cpp.obj older than most recent input ../src/llama-ext.h (8057603142088552 vs 8059291009417710)
+ninja explain: output common/CMakeFiles/llama-common.dir/hf-cache.cpp.obj older than most recent input ../vendor/cpp-httplib/httplib.h (8057603247664035 vs 8059291012655627)
+ninja explain: output common/CMakeFiles/llama-common.dir/json-partial.cpp.obj older than most recent input ../ggml/include/ggml.h (8057603215869820 vs 8059291006966396)
+ninja explain: output common/CMakeFiles/llama-common.dir/json-schema-to-grammar.cpp.obj older than most recent input ../include/llama.h (8057603322672105 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/llguidance.cpp.obj older than most recent input ../include/llama.h (8057603111071553 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/log.cpp.obj older than most recent input ../include/llama.h (8057603137248775 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/ngram-cache.cpp.obj older than most recent input ../include/llama.h (8057603194322106 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/ngram-map.cpp.obj older than most recent input ../include/llama.h (8057603193303221 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/peg-parser.cpp.obj older than most recent input ../include/llama.h (8057603357038004 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/preset.cpp.obj older than most recent input ../include/llama.h (8057603258229149 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/regex-partial.cpp.obj older than most recent input ../include/llama.h (8057603283583172 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/reasoning-budget.cpp.obj older than most recent input ../include/llama.h (8057603202376077 vs 8059291009295919)
+ninja explain: output common/CMakeFiles/llama-common.dir/sampling.cpp.obj older than most recent input ../src/llama-ext.h (8057603284197070 vs 8059291009417710)
+ninja explain: output common/CMakeFiles/llama-common.dir/speculative.cpp.obj older than most recent input ../src/llama-ext.h (8057603270409020 vs 8059291009417710)
+ninja explain: output common/CMakeFiles/llama-common.dir/jinja/lexer.cpp.obj older than most recent input ../common/jinja/runtime.h (8057603297357393 vs 8059291006376300)
+ninja explain: output common/CMakeFiles/llama-common.dir/jinja/parser.cpp.obj older than most recent input ../common/jinja/runtime.h (8057603288441011 vs 8059291006376300)
+ninja explain: output common/CMakeFiles/llama-common.dir/jinja/runtime.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/common/jinja/runtime.cpp (8057603301220696 vs 8059291006376300)
+ninja explain: output common/CMakeFiles/llama-common.dir/jinja/value.cpp.obj older than most recent input J:/LLM/engines/godzilla-llama.cpp/common/jinja/value.cpp (8057603333546252 vs 8059291006386346)
+ninja explain: output common/CMakeFiles/llama-common.dir/jinja/caps.cpp.obj older than most recent input ../common/jinja/runtime.h (8057603360638981 vs 8059291006376300)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/mtmd.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603361210454 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/mtmd-audio.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603357188346 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/mtmd-image.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603354971747 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/mtmd-helper.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603370662092 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/clip.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603370427107 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/cogvlm.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603357344668 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/conformer.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603347517494 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/dotsocr.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603322737696 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/exaone4_5.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603325253828 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4a.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603348551535 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4v.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603366195901 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4ua.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603352548715 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4uv.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603366975563 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/glm4v.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603361028269 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/granite-speech.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603369455306 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/hunyuanvl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603394315037 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/internvl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603369585975 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/kimivl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603372246856 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/kimik25.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603382383426 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/nemotron-v2-vl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603388137060 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/llama4.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603374510638 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/llava.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603391034485 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/minicpmv.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603397412534 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/paddleocr.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603395226344 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/pixtral.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603394530116 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/qwen2vl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603387576021 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3vl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603387651161 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/mimovl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603391346900 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3a.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603391099869 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/step3vl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603398574749 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/siglip.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603400903820 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/whisper-enc.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603400172891 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/deepseekocr.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603394232594 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/deepseekocr2.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603389865393 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/mobilenetv5.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603410012596 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/youtuvl.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603403522058 vs 8059291010962622)
+ninja explain: output tools/mtmd/CMakeFiles/mtmd.dir/models/yasa2.cpp.obj older than most recent input ../tools/mtmd/mtmd.h (8057603403318726 vs 8059291010962622)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-chat.cpp.obj older than most recent input ../tools/server/server-http.h (8057603461572003 vs 8059291011151494)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-task.cpp.obj older than most recent input ../tools/server/server-task.h (8057603527834505 vs 8059291011204133)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-queue.cpp.obj older than most recent input ../tools/server/server-task.h (8057603443636279 vs 8059291011204133)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-common.cpp.obj older than most recent input ../tools/server/server-common.h (8057603466852976 vs 8059291011090515)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-context.cpp.obj older than most recent input ../tools/server/server-task.h (8057603572552011 vs 8059291011204133)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-loop-guard.cpp.obj older than most recent input ../include/llama.h (8057603410159550 vs 8059291009295919)
+ninja explain: output tools/server/CMakeFiles/server-context.dir/server-tools.cpp.obj older than most recent input ../tools/server/server-tools.h (8057603508588139 vs 8059291011220008)
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-q6_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-q6_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-q6_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-q6_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q8_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q6_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q6_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q5_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q4_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q6_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q6_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q5_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q4_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_1-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q6_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q5_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q4_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q6_0-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q5_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q4_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q3_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_1-q3_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q5_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q4_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q3_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q5_0-q3_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q4_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q3_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q3_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q2_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_1-q2_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q4_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q3_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q3_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q2_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q2_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q3_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q3_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q2_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_1-q2_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_0-q3_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_0-q2_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q3_0-q2_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q2_1-q2_1.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q2_1-q2_0.cu.obj is dirty
+ninja explain: ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q2_0-q2_0.cu.obj is dirty
+ninja explain: tools/ui/CMakeFiles/llama-ui-embed.dir/embed.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common-base.dir/build-info.cpp.obj is dirty
+ninja explain: vendor/cpp-httplib/CMakeFiles/cpp-httplib.dir/httplib.cpp.obj is dirty
+ninja explain: ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.obj is dirty
+ninja explain: ggml/src/ggml-cpu.lib is dirty
+ninja explain: ggml/src/ggml-cuda/ggml-cuda.lib is dirty
+ninja explain: output tools/ui/CMakeFiles/llama-ui-assets doesn't exist
+ninja explain: src/CMakeFiles/llama.dir/llama.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-adapter.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-arch.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-batch.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-chat.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-context.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-cparams.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-grammar.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-graph.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-hparams.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-impl.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-kvarn.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-kv-cache.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-kv-cache-kvarn.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-kv-cache-iswa.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-kv-cache-dsa.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-triattention.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-memory.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-memory-hybrid.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-memory-hybrid-iswa.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-memory-recurrent.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-mmap.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-model-loader.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-model-saver.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-model.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-quant.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-sampler.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/llama-vocab.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/afmoe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/apertus.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/arcee.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/arctic.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/arwkv7.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/baichuan.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/bailingmoe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/bailingmoe2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/bert.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/bitnet.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/bloom.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/chameleon.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/chatglm.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/codeshell.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/cogvlm.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/cohere2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/command-r.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/dbrx.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/deci.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/deepseek.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/deepseek2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/deepseek2ocr.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/deepseek32.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/delta-net-base.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/dflash_draft.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/dots1.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/dream.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/ernie4-5-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/ernie4-5.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/eurobert.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/exaone-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/exaone.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/exaone4.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/falcon-h1.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/falcon.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gemma-embedding.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gemma.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gemma2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gemma3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gemma3n.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gemma4.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/glm-dsa.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/glm4-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/glm4.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gpt2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/gptneox.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/granite-hybrid.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/granite-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/granite.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/grok.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/grovemoe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/hunyuan-dense.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/hunyuan-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/hunyuan-vl.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/internlm2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/jais.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/jais2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/jamba.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/jina-bert-v2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/jina-bert-v3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/kimi-linear.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/lfm2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/lfm2moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/llada-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/llada.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/llama-embed.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/llama.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/llama4.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/maincoder.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mamba-base.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mamba.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mamba2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mellum.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mimo2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/minicpm.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/minicpm3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/minimax-m2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mistral3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mistral4.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/modern-bert.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/mpt.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/nemotron-h-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/nemotron-h.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/nemotron.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/neo-bert.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/nomic-bert-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/nomic-bert.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/olmo.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/olmo2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/olmoe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/openai-moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/openelm.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/orion.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/paddleocr.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/pangu-embed.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/phi2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/phi3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/phimoe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/plamo.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/plamo2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/plamo3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/plm.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen2moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen2vl.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen35.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen35moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen3moe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen3next.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen3vl.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/qwen3vlmoe.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/refact.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/rnd1.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/rwkv6-base.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/rwkv6.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/rwkv6qwen2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/rwkv7-base.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/rwkv7.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/seed-oss.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/smallthinker.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/smollm3.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/stablelm.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/starcoder.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/starcoder2.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/step35.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/t5.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/t5encoder.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/talkie.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/wavtokenizer-dec.cpp.obj is dirty
+ninja explain: src/CMakeFiles/llama.dir/models/xverse.cpp.obj is dirty
+ninja explain: ggml/src/ggml.lib is dirty
+ninja explain: ggml/src/ggml-cpu.lib is dirty
+ninja explain: ggml/src/ggml-cuda/ggml-cuda.lib is dirty
+ninja explain: J:/LLM/engines/godzilla-llama.cpp/build-king/tools/ui/ui.cpp is dirty
+ninja explain: tools/ui/ui.h is dirty
+ninja explain: output tools/server/CMakeFiles/llama-server-impl.dir/server.cpp.obj older than most recent input ../vendor/cpp-httplib/httplib.h (8057603538439076 vs 8059291012655627)
+ninja explain: tools/ui/ui.h is dirty
+ninja explain: output tools/server/CMakeFiles/llama-server-impl.dir/server-models.cpp.obj older than most recent input ../vendor/cpp-httplib/httplib.h (8057603556991011 vs 8059291012655627)
+ninja explain: common/CMakeFiles/llama-common.dir/arg.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/chat-auto-parser-generator.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/chat-auto-parser-helpers.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/chat-diff-analyzer.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/chat-peg-parser.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/chat.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/common.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/console.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/debug.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/download.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/fit.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/hf-cache.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/json-partial.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/json-schema-to-grammar.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/llguidance.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/log.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/ngram-cache.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/ngram-map.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/peg-parser.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/preset.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/regex-partial.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/reasoning-budget.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/sampling.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/speculative.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/jinja/lexer.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/jinja/parser.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/jinja/runtime.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/jinja/value.cpp.obj is dirty
+ninja explain: common/CMakeFiles/llama-common.dir/jinja/caps.cpp.obj is dirty
+ninja explain: common/llama-common-base.lib is dirty
+ninja explain: vendor/cpp-httplib/cpp-httplib.lib is dirty
+ninja explain: src/llama.lib is dirty
+ninja explain: ggml/src/ggml.lib is dirty
+ninja explain: ggml/src/ggml-cpu.lib is dirty
+ninja explain: ggml/src/ggml-cuda/ggml-cuda.lib is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/mtmd.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/mtmd-audio.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/mtmd-image.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/mtmd-helper.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/clip.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/cogvlm.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/conformer.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/dotsocr.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/exaone4_5.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4a.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4v.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4ua.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4uv.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/glm4v.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/granite-speech.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/hunyuanvl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/internvl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/kimivl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/kimik25.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/nemotron-v2-vl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/llama4.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/llava.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/minicpmv.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/paddleocr.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/pixtral.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/qwen2vl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3vl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/mimovl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3a.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/step3vl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/siglip.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/whisper-enc.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/deepseekocr.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/deepseekocr2.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/mobilenetv5.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/youtuvl.cpp.obj is dirty
+ninja explain: tools/mtmd/CMakeFiles/mtmd.dir/models/yasa2.cpp.obj is dirty
+ninja explain: src/llama.lib is dirty
+ninja explain: ggml/src/ggml.lib is dirty
+ninja explain: ggml/src/ggml-cpu.lib is dirty
+ninja explain: ggml/src/ggml-cuda/ggml-cuda.lib is dirty
+ninja explain: tools/ui/CMakeFiles/llama-ui.dir/ui.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-chat.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-task.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-queue.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-common.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-context.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-loop-guard.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/server-context.dir/server-tools.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/llama-server-impl.dir/server.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/llama-server-impl.dir/server-http.cpp.obj is dirty
+ninja explain: tools/server/CMakeFiles/llama-server-impl.dir/server-models.cpp.obj is dirty
+ninja explain: tools/server/server-context.lib is dirty
+ninja explain: tools/ui/llama-ui.lib is dirty
+ninja explain: vendor/cpp-httplib/cpp-httplib.lib is dirty
+ninja explain: common/llama-common.lib is dirty
+ninja explain: common/llama-common-base.lib is dirty
+ninja explain: tools/mtmd/mtmd.lib is dirty
+ninja explain: src/llama.lib is dirty
+ninja explain: ggml/src/ggml.lib is dirty
+ninja explain: ggml/src/ggml-cpu.lib is dirty
+ninja explain: ggml/src/ggml-cuda/ggml-cuda.lib is dirty
+ninja explain: tools/server/llama-server-impl.lib is dirty
+ninja explain: tools/server/server-context.lib is dirty
+ninja explain: common/llama-common.lib is dirty
+ninja explain: common/llama-common-base.lib is dirty
+ninja explain: tools/mtmd/mtmd.lib is dirty
+ninja explain: src/llama.lib is dirty
+ninja explain: ggml/src/ggml.lib is dirty
+ninja explain: ggml/src/ggml-cpu.lib is dirty
+ninja explain: ggml/src/ggml-cuda/ggml-cuda.lib is dirty
+ninja explain: tools/ui/llama-ui.lib is dirty
+ninja explain: vendor/cpp-httplib/cpp-httplib.lib is dirty
